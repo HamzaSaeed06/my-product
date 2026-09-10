@@ -27,12 +27,12 @@ alongside Phase 4/5 once Phase 0/2/3 are done).
 
 ## Current focus
 
-**Phase 0 — Foundation, in progress (~85% of backend API surface).**
-Auth/session/audit/permission-check substrate, plus Users, Roles &
-Permissions, Approvals, Documents, and Notifications APIs are all built and
-wired (see `PROJECT_STATUS.md` for exactly what "built" means and what's
-still unverified). Still missing: any test coverage for the new service
-logic, real email delivery, and `product/web` doesn't exist yet. See
+**Phase 0 — Foundation, backend built and its core lifecycle verified live
+against a real database** (login → session → refresh rotation → logout →
+audit trail, all confirmed against a real Postgres — see `PROJECT_STATUS.md`
+§1a). Still missing: automated test coverage for users/roles/approvals/
+documents/notifications (verified by hand this session, not by a suite),
+real email delivery, and `product/web` doesn't exist yet. See
 `PROJECT_STATUS.md` §3 for the concrete next action.
 
 ## Notes on dependency ordering
