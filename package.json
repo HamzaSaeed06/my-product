@@ -1,0 +1,28 @@
+{
+  "name": "education-platform",
+  "private": true,
+  "version": "0.0.0",
+  "description": "White-label, single-tenant education institution management platform. See docs/PRODUCT_SPEC.md.",
+  "workspaces": [
+    "product/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev:api": "npm run dev --workspace=product/api",
+    "build:api": "npm run build --workspace=product/api",
+    "test:api": "npm run test --workspace=product/api",
+    "prisma:generate": "npm run prisma:generate --workspace=product/api",
+    "prisma:migrate": "npm run prisma:migrate --workspace=product/api"
+  },
+  "overrides": {
+    "qs": "6.16.0"
+  },
+  "allowScripts": {
+    "@prisma/client@5.22.0": true,
+    "@prisma/engines@5.22.0": true,
+    "argon2@0.41.1": true,
+    "prisma@5.22.0": true,
+    "esbuild@0.28.2": true,
+    "esbuild@0.21.5": true
+  }
+}

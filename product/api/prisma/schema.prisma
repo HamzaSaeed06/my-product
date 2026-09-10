@@ -1,0 +1,250 @@
+// Phase 0 — Foundation models only.
+// See docs/PRODUCT_SPEC.md → "PHASE 0: FOUNDATION" and "MODEL OWNERSHIP TABLE".
+//
+// DEVIATION FROM SPEC (recorded per docs/README.md convention):
+// PRODUCT_SPEC.md's Model Ownership Table lists 10 Phase 0 models but never
+// explicitly lists a `User` model, even though UserRole, Session, AuditLog,
+// ApprovalRequest, Document, and Notification all reference a user. This is
+// clearly required and implied — Phase 0 cannot ship login without it — so
+// `User` is added here as an 11th Phase 0 model. Logged in
+// docs/PROJECT_STATUS.md.
+//
+// Campus/Institute scoping (e.g. on UserRole) is deferred to Phase 1 per the
+// spec's own InchargeScope migration precedent — Phase 1 owns Campus,
+// AcademicYear, Class, Section. UserRole.campusId is a plain string for now
+// (no FK) and will gain a real relation when Campus lands in Phase 1.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// Identity
+// ─────────────────────────────────────────────────────────────────────────
+
+model User {
+  id           String   @id @default(uuid())
+  email        String   @unique
+  passwordHash String
+  fullName     String
+  isActive     Boolean  @default(true)
+  mfaEnabled   Boolean  @default(false)
+  mfaSecret    String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  userRoles                 UserRole[]
+  sessions                  Session[]
+  notifications             Notification[]
+  notificationPreference    NotificationPreference?
+  documentsUploaded         Document[]        @relation("DocumentUploadedBy")
+  auditLogsAsActor          AuditLog[]        @relation("AuditActor")
+  approvalRequestsRequested ApprovalRequest[] @relation("ApprovalRequestedBy")
+  approvalRequestsDecided   ApprovalRequest[] @relation("ApprovalDecidedBy")
+
+  @@map("users")
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// Authorization: Role + Permission + Scope (spec §5)
+// ─────────────────────────────────────────────────────────────────────────
+
+model Permission {
+  id          String   @id @default(uuid())
+  key         String   @unique // "resource.action", e.g. "student.edit"
+  description String?
+  createdAt   DateTime @default(now())
+
+  rolePermissions RolePermission[]
+
+  @@map("permissions")
+}
+
+model Role {
+  id          String   @id @default(uuid())
+  name        String   @unique // SUPER_ADMIN | PRINCIPAL | INCHARGE | OFFICE | TEACHER | PARENT | STUDENT | custom
+  description String?
+  isSystem    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  rolePermissions RolePermission[]
+  userRoles       UserRole[]
+
+  @@map("roles")
+}
+
+model RolePermission {
+  id           String   @id @default(uuid())
+  roleId       String
+  permissionId String
+  createdAt    DateTime @default(now())
+
+  role       Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permission Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@unique([roleId, permissionId])
+  @@map("role_permissions")
+}
+
+model UserRole {
+  id        String   @id @default(uuid())
+  userId    String
+  roleId    String
+  // Campus scope hook — Campus model itself arrives in Phase 1.
+  // No FK yet on purpose; will be replaced by a real relation then.
+  campusId  String?
+  createdAt DateTime @default(now())
+  createdBy String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role Role @relation(fields: [roleId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, roleId, campusId])
+  @@map("user_roles")
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// Sessions (spec §8 "Authentication Architecture" — httpOnly cookies + CSRF,
+// refresh token rotation via this table, never store raw tokens)
+// ─────────────────────────────────────────────────────────────────────────
+
+model Session {
+  id               String    @id @default(uuid())
+  userId           String
+  refreshTokenHash String
+  deviceInfo       String?
+  ipAddress        String?
+  createdAt        DateTime  @default(now())
+  expiresAt        DateTime
+  lastUsedAt       DateTime  @default(now())
+  revokedAt        DateTime?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("sessions")
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// Audit (spec §7/§8 — immutable, never edited/deleted, never holds secrets)
+// ─────────────────────────────────────────────────────────────────────────
+
+model AuditLog {
+  id         String   @id @default(uuid())
+  actorId    String?
+  action     String // e.g. CREATE | UPDATE | APPROVE | REVERSE | VOID
+  resource   String // e.g. "Result", "Payment", "UserRole"
+  recordId   String?
+  oldValue   Json?
+  newValue   Json?
+  reason     String?
+  approvedBy String?
+  ipAddress  String?
+  userAgent  String?
+  createdAt  DateTime @default(now())
+
+  actor User? @relation("AuditActor", fields: [actorId], references: [id])
+
+  @@index([resource, recordId])
+  @@index([actorId])
+  @@map("audit_logs")
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// Approval workflow (spec §5/§7 — critical actions require approval + audit)
+// ─────────────────────────────────────────────────────────────────────────
+
+enum ApprovalStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+model ApprovalRequest {
+  id            String         @id @default(uuid())
+  type          String // e.g. "RESULT_CORRECTION", "FEE_WAIVER", "SCOPE_CHANGE"
+  resource      String
+  recordId      String?
+  requestedById String
+  approverRole  String? // role expected to decide, when not a specific user
+  decidedById   String?
+  status        ApprovalStatus @default(PENDING)
+  payload       Json? // old/new values, reason, supporting context
+  decisionNote  String?
+  createdAt     DateTime       @default(now())
+  decidedAt     DateTime?
+
+  requestedBy User  @relation("ApprovalRequestedBy", fields: [requestedById], references: [id])
+  decidedBy   User? @relation("ApprovalDecidedBy", fields: [decidedById], references: [id])
+
+  @@index([status])
+  @@map("approval_requests")
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// Documents (spec §Phase 0 — universal document storage, used by Phases 2/3/6)
+// ─────────────────────────────────────────────────────────────────────────
+
+model Document {
+  id           String   @id @default(uuid())
+  fileName     String // random stored filename, never user-provided
+  originalName String
+  mimeType     String
+  sizeBytes    Int
+  storagePath  String
+  category     String?
+  isSensitive  Boolean  @default(false)
+  // Polymorphic owner link — formalized with real relations once Phase 2
+  // (Student, Teacher, ...) entities exist.
+  ownerType    String?
+  ownerId      String?
+  uploadedById String
+  createdAt    DateTime @default(now())
+
+  uploadedBy User @relation("DocumentUploadedBy", fields: [uploadedById], references: [id])
+
+  @@index([ownerType, ownerId])
+  @@map("documents")
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// Notifications (spec §Phase 0 — in-app + email; SMS explicitly out of scope)
+// ─────────────────────────────────────────────────────────────────────────
+
+enum NotificationChannel {
+  IN_APP
+  EMAIL
+}
+
+model Notification {
+  id        String              @id @default(uuid())
+  userId    String
+  title     String
+  body      String
+  channel   NotificationChannel @default(IN_APP)
+  readAt    DateTime?
+  createdAt DateTime            @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, readAt])
+  @@map("notifications")
+}
+
+model NotificationPreference {
+  id           String   @id @default(uuid())
+  userId       String   @unique
+  emailEnabled Boolean  @default(true)
+  inAppEnabled Boolean  @default(true)
+  updatedAt    DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("notification_preferences")
+}
