@@ -1,9 +1,10 @@
 # Project Status
 
 **Last updated:** 2026-09-10
-**Current phase:** Phase 0 — Foundation (backend functionally verified
-end-to-end against a real database; automated test coverage for the newer
-modules and `product/web` are what's left — see §1)
+**Current phase:** Phase 0 — Foundation, backend complete: built, live-
+verified, and now covered by an automated integration suite against a real
+database. `product/web` (no frontend exists yet) is what's left before
+Phase 0 is fully done — see §1.
 **Repo state:** Monorepo scaffolded. `product/api` has a working Express +
 TypeScript + Prisma backend implementing all of Phase 0's API surface (auth,
 users, roles/permissions, approvals, documents, notifications, audit).
@@ -85,20 +86,34 @@ verified" below):
   permission set, grants all of them to `SUPER_ADMIN`.
 - **Bootstrap script** (`scripts/create-super-admin.ts`) — creates the first
   Super Admin user (no self-registration, by design).
-- **Tests** (`tests/*.test.ts`) — 16 passing: password hashing round-trip +
-  policy, token sign/verify/tamper-detection, refresh token hashing, CSRF
-  token uniqueness, and one supertest hit on `/health`. These do **not**
-  require a database (Prisma client is never called in them). No tests yet
-  for the DB-touching service logic in users/roles/approvals/documents/
-  notifications — see "Not built yet" below.
+- **Tests** — two separate suites, deliberately not run together:
+  - `npm test` (`tests/unit/**`, `vitest.config.ts`) — 16 tests, no database
+    needed: password hashing round-trip + policy, token sign/verify/tamper-
+    detection, refresh token hashing, CSRF token uniqueness, `/health`.
+    Safe to run anywhere, including CI without Postgres.
+  - `npm run test:integration` (`tests/integration/**`,
+    `vitest.integration.config.ts`) — **30 tests, run for real against the
+    live Neon database**: Users (create/duplicate-rejection/weak-password-
+    rejection/edit/role-assign-revokes-sessions/role-remove/disable-revokes-
+    sessions/audit-trail), Roles & Permissions (create/duplicate-rejection/
+    set-permissions-diffed-and-audited/unknown-permission-rejection/system-
+    role-archive-refused/archive/edit-after-archive-refused), Approvals
+    (audit-on-create/list-pending/decide/double-decide-refused/approvedBy-
+    recorded), Documents (unsupported-type-rejected/upload/download-exact-
+    bytes/sensitive-doc-hidden-without-document.manage/download-denied-
+    without-permission/audit-on-upload), Notifications (list-own/mark-read/
+    cant-mark-others-as-read/preferences-get-and-set/email-suppressed-when-
+    opted-out). All 30 passed on first run. Verified test cleanup leaves
+    zero residue (checked actual row counts after the run: 1 user, 7 roles,
+    0 leftover documents/approvals/notifications/test-users/test-roles).
+  - Integration tests log in **once** via a Vitest `globalSetup`
+    (`tests/integration/globalSetup.ts`) that persists the session to a
+    gitignored temp file — this is deliberate, to stay under the login
+    endpoint's 5-req/min rate limit across ~5 test files.
 
 **Not built yet within Phase 0:**
-- Automated tests (unit-with-mocked-Prisma or integration) for users/roles/
-  approvals/documents/notifications service logic. Manually verified live
-  (see §1a) for the auth path only — the rest is implemented but only
-  exercised by hand, not by an automated suite. Add these before trusting
-  the code to not regress silently.
-- Real email delivery (notification service has a stub only).
+- Real email delivery (notification service has a stub only — see
+  `src/modules/notifications/service.ts`).
 - `product/web` — no frontend exists at all yet.
 
 ### 1a. Database — provisioned and verified (Neon Postgres)
@@ -205,17 +220,18 @@ docs/
 
 ## 3. Immediate next action
 
-Phase 0's backend is built and its core lifecycle (auth/session/audit) is
-verified live against a real database (§1a). What's left, in order:
+Phase 0's backend is complete: built, live-verified, and covered by a
+passing 30-test integration suite against the real database (§1, §1a).
+What's left:
 
-1. **Add automated test coverage** for users/roles/approvals/documents/
-   notifications — these were verified by hand this session but have no
-   regression tests. A real Postgres is now available (§1a), so these can
-   be real integration tests, not just mocked-Prisma unit tests.
-2. **Then either**: start `product/web` (Next.js + shadcn/ui — load the
-   `impeccable` skill before any UI work), or move on to Phase 1 (Institute/
-   Campus/AcademicYear/Class/Section + InchargeScope) once Phase 0 is
-   considered done.
+1. **Start `product/web`** (Next.js + shadcn/ui) — load the `impeccable`
+   skill before any UI/design work. Reasonable first screen: login, since
+   the backend auth flow is fully working and verified.
+2. **Or move on to Phase 1** (Institute/Campus/AcademicYear/Class/Section +
+   InchargeScope) if backend-first is preferred over having a UI to look at
+   sooner.
+3. **Minor cleanup, low priority**: wire real email delivery when a provider
+   is chosen.
 
 `product/web` (Next.js + shadcn/ui) has not been started — reasonable to
 begin once there's something real to log into (i.e. after item 1 above), or
@@ -273,6 +289,29 @@ in parallel by a different session.
 Append a dated entry every session. Keep entries short — what changed, what's
 left, anything the next session needs to know that isn't obvious from the
 code/docs themselves.
+
+### 2026-09-10 (f) — Automated integration test suite added, all passing
+
+- Split tests into `tests/unit/` (no DB, default `npm test`) and
+  `tests/integration/` (real DB, explicit `npm run test:integration`) with
+  separate Vitest configs — kept the fast/safe default suite fast and safe.
+- Found and fixed a real gap while doing this: `tsconfig.json` excluded
+  `tests/` entirely, so `tsc --noEmit` was never actually typechecking any
+  test file, and Vitest's esbuild transpilation doesn't typecheck either.
+  Added `tsconfig.typecheck.json` (includes both `src/` and `tests/`) and
+  pointed the `typecheck` script at it.
+- Wrote 30 integration tests covering Users, Roles/Permissions, Approvals,
+  Documents, and Notifications against the live Neon database — see §1 for
+  the full list. All 30 passed on the first run. Verified afterward (real
+  row counts, not assumed) that test cleanup left zero residue: exactly 1
+  user (the bootstrapped Super Admin) and 7 roles (the seed) remain, 0
+  leftover test data anywhere.
+- Login-rate-limit-safe by design: a Vitest `globalSetup` logs in once for
+  the whole run and shares that session across all integration test files
+  via a gitignored temp file, rather than each file logging in separately.
+- **Phase 0 backend is now considered functionally complete** — built,
+  live-verified by hand, and covered by an automated suite. See §3 for
+  what's next.
 
 ### 2026-09-10 (e) — Real database provisioned, full auth flow verified live
 

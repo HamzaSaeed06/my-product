@@ -27,13 +27,12 @@ alongside Phase 4/5 once Phase 0/2/3 are done).
 
 ## Current focus
 
-**Phase 0 — Foundation, backend built and its core lifecycle verified live
-against a real database** (login → session → refresh rotation → logout →
-audit trail, all confirmed against a real Postgres — see `PROJECT_STATUS.md`
-§1a). Still missing: automated test coverage for users/roles/approvals/
-documents/notifications (verified by hand this session, not by a suite),
-real email delivery, and `product/web` doesn't exist yet. See
-`PROJECT_STATUS.md` §3 for the concrete next action.
+**Phase 0 — Foundation, backend functionally complete.** Built, live-verified
+against a real Postgres database, and covered by a passing 30-test
+integration suite (Users, Roles/Permissions, Approvals, Documents,
+Notifications) plus 16 unit tests. See `PROJECT_STATUS.md` §1/§1a. Still
+missing: real email delivery, and `product/web` doesn't exist yet — that's
+the next concrete step (§3).
 
 ## Notes on dependency ordering
 

@@ -5,7 +5,7 @@ import {
   generateRefreshToken,
   hashRefreshToken,
   generateCsrfToken,
-} from "../src/lib/tokens.js";
+} from "../../src/lib/tokens.js";
 
 describe("access tokens", () => {
   it("round-trips payload through sign/verify", () => {

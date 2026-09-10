@@ -23,6 +23,9 @@ product/api/prisma/migrations/dev.db
 # Uploaded documents (local disk storage in dev)
 product/api/storage/
 
+# Integration test shared session (written by globalSetup, read by test files)
+product/api/tests/integration/.session.json
+
 # Editor
 .vscode/*
 !.vscode/extensions.json
