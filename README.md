@@ -11,7 +11,7 @@ roadmap: [`docs/PHASE_TRACKER.md`](docs/PHASE_TRACKER.md).
 
 ```
 product/api/      Express + TypeScript + Prisma backend
-product/web/       Next.js frontend (not scaffolded yet)
+product/web/       Next.js 16 + shadcn/ui frontend (login + dashboard shell so far)
 packages/shared/   Shared types/schemas (empty until 2+ apps need something in common)
 docs/              Spec, status, phase tracker
 ```
@@ -38,16 +38,29 @@ npm run create-super-admin --workspace=product/api -- --email you@school.com --p
 npm run dev:api                                # start the API on :4000
 ```
 
+Then, in another terminal, the frontend:
+
+```bash
+cp product/web/.env.example product/web/.env.local   # API_URL defaults to http://localhost:4000
+cd product/web && npm run dev                         # start the web app on :3000
+```
+
+Open `http://localhost:3000/login` and sign in with the Super Admin you
+created above.
+
 ## Testing
 
 ```bash
-npm run test:api
+npm run test:api                # unit tests, no DB needed
+npm run test:api:integration    # 30 integration tests against a REAL database — writes/reads real rows
 ```
 
-Runs unit tests (password hashing, tokens) and one integration test
-(`/health`) that don't require a database. Full DB-backed auth flow tests
-(login → session → refresh → logout against a real Postgres) are pending —
-see `docs/PROJECT_STATUS.md`.
+`test:api:integration` requires `product/api/.env`'s `DATABASE_URL` to point
+at a real, reachable Postgres — it is not safe to run against a database you
+care about without reading what it does first (see
+`product/api/tests/integration/`). `product/web` has no automated tests yet;
+its login/dashboard flow was verified manually via curl — see
+`docs/PROJECT_STATUS.md` §1b.
 
 ## Conventions
 

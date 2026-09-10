@@ -172,3 +172,8 @@ export async function confirmMfa(userId: string, token: string): Promise<void> {
 export function extractIp(req: Request): string | null {
   return req.ip ?? null;
 }
+
+export async function getPublicUserById(userId: string): Promise<PublicUser> {
+  const user = await prisma.user.findUniqueOrThrow({ where: { id: userId } });
+  return toPublicUser(user);
+}

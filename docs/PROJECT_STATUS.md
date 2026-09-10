@@ -1,17 +1,19 @@
 # Project Status
 
 **Last updated:** 2026-09-10
-**Current phase:** Phase 0 — Foundation, backend complete: built, live-
-verified, and now covered by an automated integration suite against a real
-database. `product/web` (no frontend exists yet) is what's left before
-Phase 0 is fully done — see §1.
+**Current phase:** Phase 0 — Foundation, essentially complete. Backend built,
+live-verified, and covered by an automated integration suite. `product/web`
+now exists with a working login page and a protected dashboard shell, both
+verified end-to-end against the real backend. See §1.
 **Repo state:** Monorepo scaffolded. `product/api` has a working Express +
 TypeScript + Prisma backend implementing all of Phase 0's API surface (auth,
 users, roles/permissions, approvals, documents, notifications, audit).
 **A real PostgreSQL database is provisioned (Neon) and the full auth
 lifecycle has been exercised against it live: login → session created →
 refresh (rotation) → logout → session revoked, all confirmed via curl, with
-matching entries in the audit log.** `product/web` does not exist yet.
+matching entries in the audit log.** `product/web` (Next.js 16 + shadcn/ui)
+now has a working login page and protected dashboard shell, both verified
+end-to-end against the real backend and real database — see §1b.
 
 ---
 
@@ -114,7 +116,9 @@ verified" below):
 **Not built yet within Phase 0:**
 - Real email delivery (notification service has a stub only — see
   `src/modules/notifications/service.ts`).
-- `product/web` — no frontend exists at all yet.
+- Everything in `product/web` beyond login + dashboard shell (see §1b) —
+  which is all of it, since no other screens exist in the spec's Phase 0
+  scope anyway.
 
 ### 1a. Database — provisioned and verified (Neon Postgres)
 
@@ -153,10 +157,91 @@ verified" below):
   container or WSL workload running for another project, it was stopped.**
   Restart Docker Desktop if you need that back.
 
-### `product/web` — does not exist yet
+### 1b. `product/web` (Next.js 16 + shadcn/ui) — VERIFIED WORKING
 
-No Next.js app has been scaffolded. This is next after Phase 0's backend is
-further along, or can be started in parallel — see §3.
+Scaffolded via `create-next-app` (App Router, TypeScript, Tailwind, src dir)
+then `shadcn init` (style `nova`, base **Base UI** — not Radix; see the
+gotcha below). Two screens exist, matching the exact scope agreed with the
+user (nothing else was in scope):
+
+- **Login** (`src/app/login/`) — email/password form. Uses React 19's
+  `useActionState` + a Server Action, not client-side fetch.
+- **Dashboard shell** (`src/app/dashboard/`) — shows the logged-in user's
+  name/email, a logout control. No other content (nothing else exists to
+  show yet — this is intentionally not padded with placeholder widgets).
+
+**Architecture decision — backend-for-frontend via Server Actions, not
+direct browser→API calls:** The browser never talks to `product/api`
+directly. `src/app/login/actions.ts` and `src/app/dashboard/actions.ts` are
+Server Actions that `fetch()` the real Express API **server-to-server**,
+read the `Set-Cookie` values Express returns, and re-issue them as this
+app's *own* cookies via Next's `cookies()` API (`src/lib/api.ts`'s
+`parseCookiePairs()` extracts just the name=value pairs; Next sets its own
+httpOnly/sameSite/secure attributes rather than parsing Express's). Reasons:
+avoids all cross-origin cookie complexity in the browser, matches how this
+will actually deploy (web + api behind one reverse-proxied origin per
+PRODUCT_SPEC.md §2), and is the officially-recommended Next 16 pattern per
+its own bundled docs (`node_modules/next/dist/docs/.../authentication.md`).
+`src/lib/session.ts`'s `getCurrentUser()` is the authoritative server-side
+auth check (forwards this app's cookies to `GET /auth/me`); the dashboard
+and login pages both call it (login redirects away if already authenticated;
+dashboard redirects to `/login` if not). **No client-side auth state, no
+token refresh-on-expiry yet** — an expired access token just bounces the
+user back to `/login` rather than silently refreshing. Add that when it
+becomes annoying enough to matter.
+
+**Design system** — see `product/web/PRODUCT.md` and `DESIGN.md` for the
+full rationale. Summary: brand personality "confident, modern, efficient"
+(user-confirmed), deep green primary (`oklch(0.32 0.13 142)`) on pure
+white/near-black surfaces — deliberately NOT the generic "forest-green-on-
+cream" AI default — with a sparing warm-gold second accent reserved for
+future badges/highlights, never wired into structural hover states. Geist
+Sans (shadcn's default). Radius tightened to 8px. No formal WCAG target at
+this stage (explicit user decision).
+
+**Gotcha worth knowing**: this `shadcn init` run picked **Base UI**
+(`@base-ui/react`), not Radix, as the underlying primitive library —
+different from most shadcn examples/training data. Composable components
+use a `render={<Element />}` prop, not Radix's `asChild` + child-element
+pattern. Using `asChild` (the Radix convention) produces a real TypeScript
+error, not a silent no-op — caught this while building the dashboard's
+dropdown menu. Verified the actual prop contract by reading
+`node_modules/@base-ui/react/internals/types.d.ts` and
+`.../merge-props.js`'s bundled docs rather than assuming.
+
+**Verified live, real end-to-end** (curl simulating the exact multipart
+POST a no-JS browser form submission produces — action IDs pulled from the
+real rendered HTML / build's `server-reference-manifest.json`, not
+guessed): login with valid credentials → 303 to `/dashboard` with
+`accessToken`/`refreshToken`/`csrfToken` cookies set **on the Next.js app's
+own origin** (proving the BFF proxy works); dashboard renders the real
+`fullName`/`email` from the database; unauthenticated `/dashboard` → 307 to
+`/login`; already-authenticated `/login` → 307 to `/dashboard`; wrong
+password → 200 with "Invalid email or password" rendered in the form;
+logout → 303 to `/login`, all three cookies cleared, **and the session
+verified truly revoked server-side** (a direct call to the API with the old
+cookie afterward returns `SESSION_INVALID`, not just "cookie gone").
+
+**Not verified**: actual visual appearance in a real browser (no browser
+automation tool was connected in this environment — `claude-in-chrome` is
+listed as available but has no working backend here). Everything above is
+proven at the HTTP/data level; nobody has looked at it render yet. Do that
+before considering this screen "done" in any visual-polish sense —
+`npm run dev:api` (root) and `cd product/web && npm run dev`, then open
+`http://localhost:3000/login`.
+
+**Environment gotchas hit while building this** (see session log entry (g)
+for full detail): Turbopack builds and even `tsc`/npm install itself were
+crashing with what looked like out-of-memory errors; the real cause was the
+machine's `C:` drive being nearly full (page file can't grow when the disk
+is full, which presents as OOM). Fixed by the user freeing space on `C:`.
+Also worked around a separate, real memory issue where `next build`'s
+*internal* typecheck step is far more memory-hungry than running `tsc
+--noEmit` standalone — `next.config.ts` now sets
+`typescript.ignoreBuildErrors: true` with a comment explaining why, and
+`npm run typecheck` (plain `tsc --noEmit`) is the actual authoritative type
+gate. **A green `npm run build` alone does not prove types are correct** —
+always run `npm run typecheck` too.
 
 ### How this was verified (not just "should work")
 
@@ -190,9 +275,15 @@ otplib (TOTP/MFA), helmet, cors, cookie-parser, express-rate-limit, zod,
 vitest 5 + supertest, tsx, typescript 5.6. Exact versions in
 `product/api/package.json`.
 
-**Not yet installed:** anything for `product/web` (Next.js, shadcn/ui, React
-Hook Form, TanStack Table, Recharts, Sonner) — that app doesn't exist yet.
-
+**Installed and verified in `product/web`:** Next.js 16.3.4 (App Router,
+Turbopack — newer than the spec's "14+" floor; see the Next-16-specific
+notes in §1b, this version has real breaking changes from what most
+training data assumes), React 19.2, TypeScript 5, Tailwind CSS 4,
+shadcn/ui (`nova` style, **Base UI** primitives — not Radix), Lucide icons,
+Zod, `server-only`. **Not yet added:** React Hook Form, TanStack Table,
+Recharts, Sonner (sonner is installed as a shadcn component but not wired
+up) — none were needed for a 2-field login form and a static dashboard
+shell; add them when a screen actually needs them.
 
 **Frontend:** Next.js 14+ (App Router), React 18+, TypeScript 5+, Tailwind
 CSS 3+, shadcn/ui, Lucide icons, React Hook Form + Zod, TanStack Table,
@@ -220,22 +311,23 @@ docs/
 
 ## 3. Immediate next action
 
-Phase 0's backend is complete: built, live-verified, and covered by a
-passing 30-test integration suite against the real database (§1, §1a).
-What's left:
+Phase 0 is now essentially complete: backend built and integration-tested
+(§1), login + dashboard shell built and verified end-to-end (§1b). What's
+left, in order:
 
-1. **Start `product/web`** (Next.js + shadcn/ui) — load the `impeccable`
-   skill before any UI/design work. Reasonable first screen: login, since
-   the backend auth flow is fully working and verified.
-2. **Or move on to Phase 1** (Institute/Campus/AcademicYear/Class/Section +
-   InchargeScope) if backend-first is preferred over having a UI to look at
-   sooner.
-3. **Minor cleanup, low priority**: wire real email delivery when a provider
-   is chosen.
-
-`product/web` (Next.js + shadcn/ui) has not been started — reasonable to
-begin once there's something real to log into (i.e. after item 1 above), or
-in parallel by a different session.
+1. **Look at it in an actual browser.** Nobody has visually verified
+   `product/web` yet (§1b's "Not verified" note) — no browser automation
+   tool was available in this environment. Run `npm run dev:api` and
+   `cd product/web && npm run dev`, open `http://localhost:3000/login`,
+   sign in as `admin@myproduct.local`, confirm it actually looks right
+   before trusting the design-system decisions in DESIGN.md.
+2. **Then either**: move on to Phase 1 (Institute/Campus/AcademicYear/
+   Class/Section + InchargeScope) — there's a real login to build the next
+   screens behind now — or add automated tests for the new API modules
+   listed in §3 of the previous entries if that feels like the bigger gap.
+3. **Minor cleanup, low priority**: wire real email delivery when a
+   provider is chosen; consider a session-refresh-on-expiry flow for
+   `product/web` once 20-minute re-logins become annoying.
 
 ## 3a. Deviations from PRODUCT_SPEC.md (and why)
 
@@ -289,6 +381,54 @@ in parallel by a different session.
 Append a dated entry every session. Keep entries short — what changed, what's
 left, anything the next session needs to know that isn't obvious from the
 code/docs themselves.
+
+### 2026-09-10 (g) — product/web built: login + dashboard, verified end-to-end
+
+- Scaffolded `product/web` (create-next-app → Next.js 16.3.4, Turbopack,
+  Tailwind 4) then `shadcn init`, which picked **Base UI** primitives
+  (not Radix) — a real API difference from most shadcn examples (`render`
+  prop, not `asChild`); caught via a genuine TS error, fixed by reading the
+  actual bundled type/doc files rather than assuming.
+- Ran the `impeccable` skill's init flow: wrote `PRODUCT.md` (confirmed with
+  the user: brand personality "confident, modern, efficient", no formal
+  WCAG target yet) and `DESIGN.md` (composed a deliberate OKLCH palette from
+  a random seed — deep green primary + pure white/near-black, explicitly
+  avoiding the generic "forest-green-on-cream" AI default; gold accent
+  reserved for later, not wired into structural UI).
+- Built login (Server Action, `useActionState`, inline field/form errors)
+  and a protected dashboard shell (name/email + logout), both backed by a
+  backend-for-frontend pattern: Server Actions call `product/api`
+  server-to-server and re-issue its cookies as this app's own — the
+  officially-recommended Next 16 pattern (verified against its own bundled
+  docs), and it sidesteps cross-origin cookie complexity entirely.
+- Improved `GET /auth/me` (`product/api`) to return the full public user
+  object instead of a bare `userId` — the dashboard needed it; no test
+  depended on the old shape.
+- Hit real environment trouble and diagnosed it rather than working around
+  it blindly: builds were crashing with apparent OOM errors; root cause was
+  `C:` almost completely full (0.2 GB free), which breaks Windows' page
+  file growth and presents as memory errors. Investigated what was
+  consuming space (found a 6+ GB Docker WSL disk, several GB of Windows
+  Update cache, among others) and reported findings before the user did
+  their own cleanup. Separately found and worked around `next build`'s
+  internal typecheck step being far more memory-hungry than a standalone
+  `tsc --noEmit` — see §1b for the `ignoreBuildErrors` + `npm run
+  typecheck` split this led to.
+- **Verified for real** (curl reproducing the exact multipart POST a no-JS
+  browser form submit sends, using real action IDs from rendered HTML and
+  the build's server-reference-manifest — not a guess): full login → BFF
+  cookie re-issue → dashboard render with real user data → logout →
+  server-side session revocation confirmed via a direct API call
+  afterward. See §1b for the complete list.
+- **Not done**: nobody has looked at this in an actual browser — no
+  browser automation tool was connected in this environment despite
+  `claude-in-chrome` being listed as available. Visual/interaction QA
+  (does it actually look right, is it responsive, keyboard nav) is
+  unverified. Session-refresh-on-access-token-expiry is not implemented
+  (expired token just bounces to `/login`).
+- **Next session should**: open it in a real browser first (§3 item 1),
+  then move to Phase 1 or add integration tests for the API modules that
+  still lack them.
 
 ### 2026-09-10 (f) — Automated integration test suite added, all passing
 

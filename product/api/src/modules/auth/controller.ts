@@ -48,7 +48,8 @@ export async function logoutHandler(req: Request, res: Response): Promise<void> 
 
 export async function meHandler(req: Request, res: Response): Promise<void> {
   // req.user is guaranteed by the `authenticate` middleware mounted on this route.
-  res.status(200).json({ userId: req.user!.id });
+  const user = await authService.getPublicUserById(req.user!.id);
+  res.status(200).json({ user });
 }
 
 export async function setupMfaHandler(req: Request, res: Response): Promise<void> {
