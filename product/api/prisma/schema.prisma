@@ -66,12 +66,13 @@ model Permission {
 }
 
 model Role {
-  id          String   @id @default(uuid())
-  name        String   @unique // SUPER_ADMIN | PRINCIPAL | INCHARGE | OFFICE | TEACHER | PARENT | STUDENT | custom
+  id          String    @id @default(uuid())
+  name        String    @unique // SUPER_ADMIN | PRINCIPAL | INCHARGE | OFFICE | TEACHER | PARENT | STUDENT | custom
   description String?
-  isSystem    Boolean  @default(true)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  isSystem    Boolean   @default(true) // the 7 core roles; system roles cannot be archived
+  archivedAt  DateTime? // no-hard-delete policy — archive instead of deleting a role
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
 
   rolePermissions RolePermission[]
   userRoles       UserRole[]

@@ -27,11 +27,13 @@ alongside Phase 4/5 once Phase 0/2/3 are done).
 
 ## Current focus
 
-**Phase 0 — Foundation, in progress.** Auth/session/audit/permission-check
-substrate is built and verified (see `PROJECT_STATUS.md` for exactly what
-that means). Still missing: Role/Permission management API, Approval
-decision API, Document upload API, Notification dispatch API, and DB-backed
-integration tests. See `PROJECT_STATUS.md` for the concrete next action.
+**Phase 0 — Foundation, in progress (~85% of backend API surface).**
+Auth/session/audit/permission-check substrate, plus Users, Roles &
+Permissions, Approvals, Documents, and Notifications APIs are all built and
+wired (see `PROJECT_STATUS.md` for exactly what "built" means and what's
+still unverified). Still missing: any test coverage for the new service
+logic, real email delivery, and `product/web` doesn't exist yet. See
+`PROJECT_STATUS.md` §3 for the concrete next action.
 
 ## Notes on dependency ordering
 

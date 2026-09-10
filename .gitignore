@@ -20,6 +20,9 @@ Thumbs.db
 # Prisma
 product/api/prisma/migrations/dev.db
 
+# Uploaded documents (local disk storage in dev)
+product/api/storage/
+
 # Editor
 .vscode/*
 !.vscode/extensions.json

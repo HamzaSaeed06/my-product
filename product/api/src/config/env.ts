@@ -11,6 +11,8 @@ const envSchema = z.object({
   ACCESS_TOKEN_TTL_MINUTES: z.coerce.number().int().positive().default(20),
   REFRESH_TOKEN_TTL_DAYS: z.coerce.number().int().positive().default(7),
   WEB_APP_ORIGIN: z.string().url().default("http://localhost:3000"),
+  DOCUMENT_STORAGE_DIR: z.string().default("storage/documents"),
+  MAX_UPLOAD_SIZE_MB: z.coerce.number().int().positive().default(10),
 });
 
 const parsed = envSchema.safeParse(process.env);
