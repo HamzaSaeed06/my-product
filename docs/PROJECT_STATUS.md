@@ -2024,6 +2024,60 @@ Append a dated entry every session. Keep entries short — what changed, what's
 left, anything the next session needs to know that isn't obvious from the
 code/docs themselves.
 
+### 2026-09-11 (z) — Fixed a real, long-deferred gap: silent access-token refresh via Next.js Proxy
+
+- The user reported it directly: sign in, come back to the app later
+  (or after the API server restarts), and it demands login again —
+  "what are refresh tokens even for, then?" A fair question. This was a
+  known, explicitly logged gap ("consider a session-refresh-on-expiry
+  flow ... once 20-minute re-logins become annoying") that had sat
+  deferred across the whole session; now fixed for real on both
+  `product/web` and `provider/web`.
+- **Root cause, not a mystery**: the access token cookie's Max-Age is
+  set to match `ACCESS_TOKEN_TTL_MINUTES` (20 min) exactly, so the
+  browser deletes it on its own the moment it "expires" — nothing was
+  ever wrong with the tokens themselves. The 7-day refresh token was
+  sitting there the whole time, just never used, because nothing in
+  either frontend ever called `/api/v1/auth/refresh` automatically.
+- **Where the fix had to live, and why**: Next.js only allows setting
+  cookies from a Server Action, a Route Handler, or Proxy — never
+  mid-render inside a Server Component, which is what every protected
+  page already is. So the refresh has to happen *before* the page
+  renders, not inside it. Added `src/proxy.ts` to both `product/web`
+  and `provider/web`: if the access-token cookie is missing but a
+  refresh-token cookie is present, it calls `/auth/refresh`, mirrors
+  the new cookies onto both the outgoing response *and* the current
+  request (so the same request's own page render sees the live
+  session immediately, not one navigation later), and lets the request
+  continue. A fully logged-out request (neither cookie) still redirects
+  to `/login` exactly as before — nothing about the "real" logout path
+  changed.
+- **A real naming trap avoided by reading the bundled docs first, not
+  training data**: Next.js 16 deprecated `middleware.ts` and renamed it
+  to `proxy.ts` (exported function renamed `middleware` → `proxy` too)
+  — confirmed via `node_modules/next/dist/docs/.../file-conventions/
+  proxy.md`, exactly the kind of breaking change this repo's own
+  `AGENTS.md` warns every session to check for before writing Next.js
+  code. Writing `middleware.ts` from memory would have silently done
+  nothing in this Next.js version.
+- **Verified live, for real, on both apps** — not just "the code looks
+  right": logged into each app for real via its own rendered `/login`
+  form (the same no-JS Server Action POST technique from §1v), then
+  requested a protected page with *only* the refresh-token cookie
+  attached (accessToken cookie deliberately omitted, simulating true
+  20-minute expiry). Both apps returned `200 OK` with real page content
+  (dashboard stats, not an error page) and silently issued fresh
+  access/refresh/csrf cookies in the response — confirmed by inspecting
+  the actual `Set-Cookie` headers, not assumed. Re-confirmed the
+  negative case too: a request with *neither* cookie still gets a `307`
+  to `/login` on both apps, unchanged. `npx tsc --noEmit` and
+  `npm run build` both clean on both apps (`ƒ Proxy (Middleware)`
+  appears in both build outputs, confirming it's registered).
+- **Next session should:** same standing item as ever — click through
+  every phase's dialog-driven forms in a real browser. The user
+  mentioned they'll now do their own hands-on testing on development,
+  with real production-style scenarios in mind.
+
 ### 2026-09-11 (y) — product/api: one-command customer onboarding script, plus a real Prisma+pooler bug found and fixed
 
 - The user asked a genuinely important operational question: when a new
