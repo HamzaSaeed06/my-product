@@ -156,12 +156,42 @@ const PHASE_4_PERMISSIONS = [
   ["promotion.approve", "Approve class-jump promotion decisions"],
 ] as const;
 
+// Phase 5: Finance Module. Per spec's permission list verbatim.
+const PHASE_5_PERMISSIONS = [
+  ["fee_structure.view", "View fee structures"],
+  ["fee_structure.create", "Create fee structures"],
+  ["fee_structure.edit", "Edit/archive fee structures"],
+  ["fee_assignment.view", "View student fee assignments"],
+  ["fee_assignment.create", "Assign a fee structure to a student"],
+  ["fee_assignment.edit", "Edit/archive a student fee assignment"],
+  ["invoice.view", "View invoices"],
+  ["invoice.create", "Generate invoices"],
+  ["invoice.void", "Void invoices"],
+  ["invoice.export", "Export invoice/financial reports"],
+  ["payment.view", "View payments"],
+  ["payment.record", "Record payments"],
+  ["payment.reverse", "Request/decide payment reversals"],
+  ["refund.view", "View refunds"],
+  ["refund.create", "Request refunds"],
+  ["refund.approve", "Approve/reject refunds"],
+  ["discount.view", "View discounts"],
+  ["discount.create", "Request discounts"],
+  ["discount.approve", "Approve/reject discounts"],
+  ["waiver.view", "View waivers"],
+  ["waiver.create", "Request waivers"],
+  ["waiver.approve", "Approve/reject waivers"],
+  ["cash_closing.view", "View cash closings"],
+  ["cash_closing.create", "Create a cash closing"],
+  ["cash_closing.approve", "Approve a cash closing"],
+] as const;
+
 const ALL_PERMISSIONS = [
   ...PHASE_0_PERMISSIONS,
   ...PHASE_1_PERMISSIONS,
   ...PHASE_2_PERMISSIONS,
   ...PHASE_3_PERMISSIONS,
   ...PHASE_4_PERMISSIONS,
+  ...PHASE_5_PERMISSIONS,
 ];
 
 async function main(): Promise<void> {

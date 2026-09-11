@@ -35,6 +35,15 @@ import { examSchedulesRouter } from "./modules/exam-schedules/routes.js";
 import { resultsRouter } from "./modules/results/routes.js";
 import { reportCardsRouter } from "./modules/report-cards/routes.js";
 import { promotionsRouter } from "./modules/promotions/routes.js";
+import { feeCategoriesRouter } from "./modules/fee-categories/routes.js";
+import { feeStructuresRouter } from "./modules/fee-structures/routes.js";
+import { studentFeesRouter } from "./modules/student-fees/routes.js";
+import { invoicesRouter } from "./modules/invoices/routes.js";
+import { paymentsRouter } from "./modules/payments/routes.js";
+import { refundsRouter } from "./modules/refunds/routes.js";
+import { discountsRouter } from "./modules/discounts/routes.js";
+import { waiversRouter } from "./modules/waivers/routes.js";
+import { cashClosingRouter } from "./modules/cash-closing/routes.js";
 import { errorHandler, notFoundHandler } from "./middleware/errorHandler.js";
 import { readRateLimiter } from "./middleware/rateLimiter.js";
 
@@ -89,6 +98,15 @@ export function createApp(): Express {
   app.use("/api/v1/results", resultsRouter);
   app.use("/api/v1/report-cards", reportCardsRouter);
   app.use("/api/v1/promotions", promotionsRouter);
+  app.use("/api/v1/fee-categories", feeCategoriesRouter);
+  app.use("/api/v1/fee-structures", feeStructuresRouter);
+  app.use("/api/v1/student-fees", studentFeesRouter);
+  app.use("/api/v1/invoices", invoicesRouter);
+  app.use("/api/v1/payments", paymentsRouter);
+  app.use("/api/v1/refunds", refundsRouter);
+  app.use("/api/v1/discounts", discountsRouter);
+  app.use("/api/v1/waivers", waiversRouter);
+  app.use("/api/v1/cash-closing", cashClosingRouter);
 
   app.use(notFoundHandler);
   app.use(errorHandler);

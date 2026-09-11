@@ -14,7 +14,7 @@ phase's state changes — this table is what a new agent scans first.
 | 2 | Academic Structure | Students, Parents, Teachers, Subjects, Admission → Enrollment workflow | 1 | 3-4 wk | 🟡 |
 | 3 | Academic Operations | Timetable, Attendance (student+teacher), Substitution, Curriculum, Homework, Assessments | 2 | 4-5 wk | 🟡 |
 | 4 | Results & Promotion | Exams, Result workflow (Draft→Submitted→Reviewed→Finalized→Published), Report cards, Promotion/Class jump | 3 | 3-4 wk | 🟡 |
-| 5 | Finance Module | Fee structures, Invoicing, Payments (cash+gateway), Receipts, Refunds, Reconciliation, Cash closing | 2 | 4-5 wk | 🔴 |
+| 5 | Finance Module | Fee structures, Invoicing, Payments (cash+gateway), Receipts, Refunds, Reconciliation, Cash closing | 2 | 4-5 wk | 🟡 |
 | 6 | Operations | Leave management, Complaints | 0, 2, 3 | 2-3 wk | 🔴 |
 | 7 | Portals & Role-Based Experiences | Principal / Incharge / Office / Teacher / Parent / Student UIs on top of the above | all prior | 4-5 wk | 🔴 |
 | 8 | Reports & Analytics | Cross-module reporting (academic, attendance, finance, staff) | all prior | 3-4 wk | 🔴 |
@@ -50,10 +50,19 @@ protocol via curl hit real complexity — React Flight's multipart argument
 encoding, not just field names — documented as a known gap rather than
 pursued further). Incharge scope checks (`checkInchargeScope`) still have
 no route consumer — Phase 3/4's routes are gated by plain permission
-checks only. An intermittent Neon connection drop (P1001) during long
-test runs was investigated and confirmed to be external flakiness, not a
-code defect — see `PROJECT_STATUS.md` §5a. See also §1c/§1d/§1e/§1f/§1g/
-§1h/§1i/§1j for full detail.
+checks only. **Phase 5 — backend built**: Fee Structures, Invoicing,
+Payments (cash + a manual-trigger online-gateway state machine, +reversal
+approval workflow), Refunds, Discounts, Waivers, Cash Closing,
+Reconciliation Exceptions — 60 new integration tests, no frontend yet.
+Confirmed via a fully clean **39-file, 269-test** run spanning Phase 0-5
+together — the first such clean full-suite run since Phase 3 was added.
+Getting there surfaced and fixed 3 real bugs (2 Zod-validation-ordering
+issues, a Prisma transaction-timeout fix, plus a session auto-refresh
+added to the test harness itself) — see `PROJECT_STATUS.md` §1k. An
+intermittent Neon connection drop (P1001) during long test runs was
+separately investigated and confirmed to be external flakiness, not a
+code defect — see §5a. See also §1c/§1d/§1e/§1f/§1g/§1h/§1i/§1j/§1k for
+full detail.
 
 ## Notes on dependency ordering
 

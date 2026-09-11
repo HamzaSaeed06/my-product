@@ -13,5 +13,12 @@ export default defineConfig({
     fileParallelism: false,
     pool: "forks",
     testTimeout: 20000,
+    // Vitest's default hookTimeout (10s) is too tight for this session's
+    // observed Neon connectivity — a plain findFirstOrThrow() has timed
+    // out at exactly 10s multiple times, purely from network latency, with
+    // zero logic involved. Widening this doesn't hide real bugs (a broken
+    // beforeAll still fails, just after a fairer wait) — see
+    // docs/PROJECT_STATUS.md §5a for the full investigation.
+    hookTimeout: 30000,
   },
 });

@@ -62,6 +62,19 @@ model User {
   reportCardsGenerated ReportCard[]
   promotionsDecided  Promotion[]
 
+  paymentsRecorded          Payment[]                 @relation("PaymentRecordedBy")
+  paymentsReversed          Payment[]                 @relation("PaymentReversedBy")
+  paymentAdjustmentsCreated PaymentAdjustment[]
+  refundsRequested          Refund[]                  @relation("RefundRequestedBy")
+  refundsApproved           Refund[]                  @relation("RefundApprovedBy")
+  discountsRequested        Discount[]                @relation("DiscountRequestedBy")
+  discountsApproved         Discount[]                @relation("DiscountApprovedBy")
+  waiversRequested          Waiver[]                  @relation("WaiverRequestedBy")
+  waiversApproved           Waiver[]                  @relation("WaiverApprovedBy")
+  cashClosingsClosed        CashClosing[]             @relation("CashClosingClosedBy")
+  cashClosingsApproved      CashClosing[]             @relation("CashClosingApprovedBy")
+  reconciliationExceptionsResolved ReconciliationException[]
+
   @@map("users")
 }
 
@@ -306,6 +319,9 @@ model Institute {
   classes  Class[]
   subjects Subject[]
 
+  feeCategories FeeCategory[]
+  feeStructures FeeStructure[]
+
   @@map("institutes")
 }
 
@@ -346,6 +362,7 @@ model Campus {
   sections       Section[]
   inchargeScopes InchargeScope[]
   admissions     Admission[]
+  cashClosings   CashClosing[]
 
   @@map("campuses")
 }
@@ -410,6 +427,7 @@ model Class {
   assessments Assessment[]
   examSchedules       ExamSchedule[]
   promotionsAsTarget  Promotion[]
+  feeStructures       FeeStructure[]
 
   @@unique([instituteId, name])
   @@map("classes")
@@ -548,6 +566,11 @@ model Student {
   assessmentResults AssessmentResult[]
   results           Result[]
   promotions        Promotion[]
+  studentFees       StudentFee[]
+  invoices          Invoice[]
+  payments          Payment[]
+  creditTransactions CreditTransaction[]
+  discounts         Discount[]
 
   @@map("students")
 }
@@ -1218,4 +1241,439 @@ model Promotion {
   decidedBy      User         @relation(fields: [decidedById], references: [id])
 
   @@map("promotions")
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// Phase 5 — Finance Module. See docs/PRODUCT_SPEC.md → "PHASE 5: FINANCE
+// MODULE". All monetary amounts use Decimal(12,2), never Float — spec's own
+// worked examples (5,000 / 10,000 / partial-payment arithmetic) demand
+// exact decimal math, not floating-point.
+//
+// CRITICAL invariant from spec: Invoice != Payment != PaymentAllocation !=
+// Receipt. Four separate models, never merged, matching the spec's own
+// worked example verbatim. No hard deletes anywhere in this block — void/
+// reverse/cancel fields only, per spec's explicit "NEVER DELETE FINANCIAL
+// RECORDS" rule.
+//
+// Payment reversal reuses Phase 0's ApprovalRequest engine (type
+// "PAYMENT_REVERSAL"), the same "correcting an already-settled record"
+// shape as Phase 3/4's corrections. Refund/Discount/Waiver/CashClosing
+// instead carry their own PENDING/APPROVED/REJECTED status field with
+// dedicated approve/reject routes — they are new records awaiting a first
+// decision, not corrections to something already locked, matching
+// Phase 2's Admission precedent rather than the correction pattern.
+//
+// Real payment-gateway integration (calling an actual gateway API,
+// handling its callback) is explicitly Phase 9's job per the roadmap
+// ("Online Payment Integration", depends on Phase 5). This phase builds
+// the full data model and business rules for it (PaymentAttempt states,
+// idempotency-by-gateway-txn-id, ReconciliationException safety net) plus
+// a manual "simulate gateway callback" endpoint exercising that exact
+// state machine — the real HTTP call to a provider is deferred, same
+// category of deferral as Phase 0's email stub and Phase 4's PDF stub.
+// ─────────────────────────────────────────────────────────────────────────
+
+model FeeCategory {
+  id          String    @id @default(uuid())
+  instituteId String
+  name        String
+  archivedAt  DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  institute     Institute      @relation(fields: [instituteId], references: [id], onDelete: Cascade)
+  feeStructures FeeStructure[]
+  invoiceItems  InvoiceItem[]
+
+  @@unique([instituteId, name])
+  @@map("fee_categories")
+}
+
+enum FeeFrequency {
+  MONTHLY
+  ANNUAL
+  ONE_TIME
+}
+
+// A template ("Class 5 Tuition — Monthly — 5,000") — StudentFee is the
+// actual per-student assignment of one of these.
+model FeeStructure {
+  id            String       @id @default(uuid())
+  instituteId   String
+  classId       String
+  feeCategoryId String
+  name          String
+  amount        Decimal      @db.Decimal(12, 2)
+  frequency     FeeFrequency
+  effectiveFrom DateTime
+  effectiveTo   DateTime?
+  archivedAt    DateTime?
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+
+  institute   Institute    @relation(fields: [instituteId], references: [id], onDelete: Cascade)
+  klass       Class        @relation(fields: [classId], references: [id])
+  feeCategory FeeCategory  @relation(fields: [feeCategoryId], references: [id])
+  studentFees StudentFee[]
+  discounts   Discount[]
+
+  @@map("fee_structures")
+}
+
+model StudentFee {
+  id             String    @id @default(uuid())
+  studentId      String
+  feeStructureId String
+  overrideAmount Decimal?  @db.Decimal(12, 2)
+  effectiveFrom  DateTime  @default(now())
+  archivedAt     DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  student      Student      @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  feeStructure FeeStructure @relation(fields: [feeStructureId], references: [id])
+
+  @@unique([studentId, feeStructureId])
+  @@map("student_fees")
+}
+
+enum InvoiceStatus {
+  UNPAID
+  PARTIALLY_PAID
+  PAID
+  VOID
+}
+
+model Invoice {
+  id            String        @id @default(uuid())
+  invoiceNumber String        @unique
+  studentId     String
+  totalAmount   Decimal       @db.Decimal(12, 2)
+  dueDate       DateTime
+  status        InvoiceStatus @default(UNPAID)
+  voidedAt      DateTime?
+  voidReason    String?
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  student     Student             @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  items       InvoiceItem[]
+  allocations PaymentAllocation[]
+  attempts    PaymentAttempt[]
+  adjustments PaymentAdjustment[]
+  waivers     Waiver[]
+  creditsUsed CreditTransaction[] @relation("CreditUsedOnInvoice")
+
+  @@map("invoices")
+}
+
+model InvoiceItem {
+  id            String   @id @default(uuid())
+  invoiceId     String
+  feeCategoryId String
+  description   String
+  amount        Decimal  @db.Decimal(12, 2)
+  createdAt     DateTime @default(now())
+
+  invoice     Invoice     @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  feeCategory FeeCategory @relation(fields: [feeCategoryId], references: [id])
+
+  @@map("invoice_items")
+}
+
+enum PaymentMethod {
+  CASH
+  ONLINE
+}
+
+enum PaymentStatus {
+  SUCCESS
+  REVERSED
+}
+
+model Payment {
+  id               String        @id @default(uuid())
+  paymentNumber    String        @unique
+  studentId        String
+  amount           Decimal       @db.Decimal(12, 2)
+  method           PaymentMethod
+  status           PaymentStatus @default(SUCCESS)
+  paymentAttemptId String?       @unique
+  recordedById     String
+  reversedById     String?
+  reversedAt       DateTime?
+  reversalReason   String?
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
+
+  student        Student             @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  recordedBy     User                @relation("PaymentRecordedBy", fields: [recordedById], references: [id])
+  reversedBy     User?               @relation("PaymentReversedBy", fields: [reversedById], references: [id])
+  paymentAttempt PaymentAttempt?     @relation(fields: [paymentAttemptId], references: [id])
+  allocations    PaymentAllocation[]
+  receipt        Receipt?
+  refunds        Refund[]
+  creditsSourced CreditTransaction[] @relation("CreditSourcePayment")
+
+  @@map("payments")
+}
+
+enum AllocationStatus {
+  ACTIVE
+  REVERSED
+}
+
+// Links a Payment to an Invoice — the mechanism that makes partial and
+// multi-invoice payments possible (spec rule #5) without conflating
+// Payment and Invoice into one record.
+model PaymentAllocation {
+  id               String            @id @default(uuid())
+  allocationNumber String            @unique
+  paymentId        String
+  invoiceId        String
+  amount           Decimal           @db.Decimal(12, 2)
+  status           AllocationStatus  @default(ACTIVE)
+  createdAt        DateTime          @default(now())
+
+  payment Payment @relation(fields: [paymentId], references: [id], onDelete: Cascade)
+  invoice Invoice @relation(fields: [invoiceId], references: [id])
+
+  @@map("payment_allocations")
+}
+
+enum PaymentAttemptStatus {
+  INITIATED
+  PENDING
+  SUCCESS
+  FAILED
+}
+
+// Tracks an online payment attempt independently of Payment — a gateway
+// call can fail/retry without ever producing a Payment row. gatewayTxnId
+// is the idempotency key preventing a duplicate Payment from a replayed
+// webhook (spec rule #9).
+model PaymentAttempt {
+  id            String                @id @default(uuid())
+  attemptNumber String                @unique
+  invoiceId     String
+  amount        Decimal               @db.Decimal(12, 2)
+  status        PaymentAttemptStatus  @default(INITIATED)
+  gatewayTxnId  String?               @unique
+  failureReason String?
+  createdAt     DateTime              @default(now())
+  updatedAt     DateTime              @updatedAt
+
+  invoice Invoice  @relation(fields: [invoiceId], references: [id])
+  payment Payment?
+
+  @@map("payment_attempts")
+}
+
+enum CreditStatus {
+  AVAILABLE
+  USED
+}
+
+// Overpayment handling (spec rule #6) — never refunded automatically,
+// held as a credit balance a future invoice can draw down.
+model CreditTransaction {
+  id                String       @id @default(uuid())
+  transactionNumber String       @unique
+  studentId         String
+  amount            Decimal      @db.Decimal(12, 2)
+  sourcePaymentId   String
+  status            CreditStatus @default(AVAILABLE)
+  usedOnInvoiceId   String?
+  usedAt            DateTime?
+  createdAt         DateTime     @default(now())
+  updatedAt         DateTime     @updatedAt
+
+  student       Student  @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  sourcePayment Payment  @relation("CreditSourcePayment", fields: [sourcePaymentId], references: [id])
+  usedOnInvoice Invoice? @relation("CreditUsedOnInvoice", fields: [usedOnInvoiceId], references: [id])
+
+  @@map("credit_transactions")
+}
+
+enum ReceiptStatus {
+  ACTIVE
+  CANCELLED
+}
+
+model Receipt {
+  id            String        @id @default(uuid())
+  receiptNumber String        @unique
+  paymentId     String        @unique
+  status        ReceiptStatus @default(ACTIVE)
+  generatedAt   DateTime      @default(now())
+  cancelledAt   DateTime?
+
+  payment Payment @relation(fields: [paymentId], references: [id], onDelete: Cascade)
+
+  @@map("receipts")
+}
+
+// Generic correction to an invoice's effective total (spec: "corrections/
+// adjustments") — always audited, always additive history, never an
+// in-place edit of Invoice.totalAmount itself.
+model PaymentAdjustment {
+  id          String   @id @default(uuid())
+  invoiceId   String
+  amount      Decimal  @db.Decimal(12, 2)
+  reason      String
+  createdById String
+  createdAt   DateTime @default(now())
+
+  invoice   Invoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  createdBy User    @relation(fields: [createdById], references: [id])
+
+  @@map("payment_adjustments")
+}
+
+enum RefundStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  COMPLETED
+}
+
+model Refund {
+  id            String       @id @default(uuid())
+  refundNumber  String       @unique
+  paymentId     String
+  amount        Decimal      @db.Decimal(12, 2)
+  reason        String
+  method        String?
+  status        RefundStatus @default(PENDING)
+  requestedById String
+  approvedById  String?
+  approvedAt    DateTime?
+  completedAt   DateTime?
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+
+  payment     Payment @relation(fields: [paymentId], references: [id])
+  requestedBy User    @relation("RefundRequestedBy", fields: [requestedById], references: [id])
+  approvedBy  User?   @relation("RefundApprovedBy", fields: [approvedById], references: [id])
+
+  @@map("refunds")
+}
+
+enum DiscountType {
+  SIBLING
+  MERIT
+  STAFF
+  OTHER
+}
+
+enum DiscountStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+// Exactly one of amount/percentage is set — validated in
+// discounts/service.ts, not expressible as a DB constraint.
+model Discount {
+  id             String         @id @default(uuid())
+  studentId      String
+  feeStructureId String?
+  type           DiscountType
+  amount         Decimal?       @db.Decimal(12, 2)
+  percentage     Decimal?       @db.Decimal(5, 2)
+  reason         String
+  status         DiscountStatus @default(PENDING)
+  requestedById  String
+  approvedById   String?
+  approvedAt     DateTime?
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+
+  student      Student       @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  feeStructure FeeStructure? @relation(fields: [feeStructureId], references: [id])
+  requestedBy  User          @relation("DiscountRequestedBy", fields: [requestedById], references: [id])
+  approvedBy   User?         @relation("DiscountApprovedBy", fields: [approvedById], references: [id])
+
+  @@map("discounts")
+}
+
+enum WaiverStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+model Waiver {
+  id            String       @id @default(uuid())
+  invoiceId     String
+  amount        Decimal      @db.Decimal(12, 2)
+  reason        String
+  status        WaiverStatus @default(PENDING)
+  requestedById String
+  approvedById  String?
+  approvedAt    DateTime?
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+
+  invoice     Invoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  requestedBy User    @relation("WaiverRequestedBy", fields: [requestedById], references: [id])
+  approvedBy  User?   @relation("WaiverApprovedBy", fields: [approvedById], references: [id])
+
+  @@map("waivers")
+}
+
+enum CashClosingStatus {
+  PENDING
+  APPROVED
+}
+
+model CashClosing {
+  id              String            @id @default(uuid())
+  campusId        String
+  date            DateTime
+  openingBalance  Decimal           @db.Decimal(12, 2)
+  collections     Decimal           @db.Decimal(12, 2)
+  refundsPaidOut  Decimal           @db.Decimal(12, 2) @default(0)
+  expectedBalance Decimal           @db.Decimal(12, 2)
+  actualBalance   Decimal           @db.Decimal(12, 2)
+  variance        Decimal           @db.Decimal(12, 2)
+  status          CashClosingStatus @default(PENDING)
+  closedById      String
+  approvedById    String?
+  approvedAt      DateTime?
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+
+  campus     Campus @relation(fields: [campusId], references: [id])
+  closedBy   User   @relation("CashClosingClosedBy", fields: [closedById], references: [id])
+  approvedBy User?  @relation("CashClosingApprovedBy", fields: [approvedById], references: [id])
+
+  @@unique([campusId, date])
+  @@map("cash_closings")
+}
+
+enum ReconciliationStatus {
+  PENDING
+  RESOLVED
+  REJECTED
+}
+
+// Spec's "Reconciliation Safety Rule": an incoming gateway transaction with
+// no matching PaymentAttempt NEVER auto-creates a Payment — it lands here
+// for manual review instead.
+model ReconciliationException {
+  id             String               @id @default(uuid())
+  gatewayTxnId   String
+  amount         Decimal              @db.Decimal(12, 2)
+  rawData        Json
+  status         ReconciliationStatus @default(PENDING)
+  resolvedById   String?
+  resolvedAt     DateTime?
+  resolutionNote String?
+  createdAt      DateTime             @default(now())
+  updatedAt      DateTime             @updatedAt
+
+  resolvedBy User? @relation(fields: [resolvedById], references: [id])
+
+  @@map("reconciliation_exceptions")
 }
