@@ -56,6 +56,12 @@ model User {
   substitutionsCreated        Substitution[]
   curriculumProgressCompleted CurriculumProgress[]
 
+  resultsReviewed    Result[]     @relation("ResultReviewedBy")
+  resultsFinalized   Result[]     @relation("ResultFinalizedBy")
+  resultsPublished   Result[]     @relation("ResultPublishedBy")
+  reportCardsGenerated ReportCard[]
+  promotionsDecided  Promotion[]
+
   @@map("users")
 }
 
@@ -373,6 +379,8 @@ model AcademicYear {
   timetables  Timetable[]
   curricula   Curriculum[]
   assessments Assessment[]
+  exams       Exam[]
+  promotions  Promotion[]
 
   @@unique([instituteId, name])
   @@map("academic_years")
@@ -400,6 +408,8 @@ model Class {
   curricula   Curriculum[]
   homework    Homework[]
   assessments Assessment[]
+  examSchedules       ExamSchedule[]
+  promotionsAsTarget  Promotion[]
 
   @@unique([instituteId, name])
   @@map("classes")
@@ -432,6 +442,9 @@ model Section {
   curriculumProgress  CurriculumProgress[]
   homework            Homework[]
   assessments         Assessment[]
+  examSchedules       ExamSchedule[]
+  results             Result[]
+  promotionsAsTargetSection Promotion[]
 
   @@unique([classId, campusId, academicYearId, name])
   @@map("sections")
@@ -533,6 +546,8 @@ model Student {
   documents         StudentDocument[]
   attendance        Attendance[]
   assessmentResults AssessmentResult[]
+  results           Result[]
+  promotions        Promotion[]
 
   @@map("students")
 }
@@ -620,6 +635,8 @@ model Subject {
   curricula        Curriculum[]
   homework         Homework[]
   assessments      Assessment[]
+  examSchedules    ExamSchedule[]
+  resultItems      ResultItem[]
 
   @@unique([instituteId, name])
   @@map("subjects")
@@ -683,6 +700,9 @@ model Enrollment {
   academicYear AcademicYear @relation(fields: [academicYearId], references: [id])
   klass        Class        @relation(fields: [classId], references: [id])
   section      Section      @relation(fields: [sectionId], references: [id])
+
+  promotionsFrom Promotion[] @relation("PromotionFromEnrollment")
+  promotionAsNew Promotion?  @relation("PromotionNewEnrollment")
 
   // Roll numbers are unique within a section when assigned — NOT enforced
   // globally (spec: "Roll Number is CONTEXTUAL", repeats across sections/
@@ -1014,4 +1034,188 @@ model AssessmentResult {
 
   @@unique([assessmentId, studentId])
   @@map("assessment_results")
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// Phase 4 — Results & Promotion (Exam, ExamSchedule, Result, ResultItem,
+// ReportCard, Promotion). See docs/PRODUCT_SPEC.md → "PHASE 4: RESULTS &
+// PROMOTION".
+//
+// Result correction reuses Phase 0's ApprovalRequest engine (type
+// "RESULT_CORRECTION"), same pattern as Phase 3's attendance/assessment
+// corrections — the actual ResultItem update is applied by a dedicated
+// decide function in results/service.ts, not the generic approvals module.
+//
+// DEVIATION: ReportCard stores a JSON snapshot of the result at generation
+// time, not a rendered PDF file — no PDF-generation library is chosen yet
+// (same category of deferral as Phase 0's email-delivery stub). Print/
+// export is a `product/web` concern (render the snapshot), not a backend
+// one, once this lands.
+// ─────────────────────────────────────────────────────────────────────────
+
+enum ExamStatus {
+  DRAFT
+  PUBLISHED
+}
+
+// A named exam series for one academic year (e.g. "Midterm", "Final Term").
+// ExamSchedule entries carry the actual per-subject/section dates.
+model Exam {
+  id             String     @id @default(uuid())
+  academicYearId String
+  name           String
+  status         ExamStatus @default(DRAFT)
+  publishedAt    DateTime?
+  createdAt      DateTime   @default(now())
+  updatedAt      DateTime   @updatedAt
+
+  academicYear AcademicYear   @relation(fields: [academicYearId], references: [id])
+  schedules    ExamSchedule[]
+  results      Result[]
+
+  @@unique([academicYearId, name])
+  @@map("exams")
+}
+
+// One paper: a subject, for one section, on one date/time. Conflict
+// detection (a section can't sit two papers at once) is a service-layer
+// overlap check across a section's schedules for the same exam, not a DB
+// constraint — start/end are free-text "HH:MM" like TimetableEntry's, for
+// the same reason (schools vary too much on exact timing conventions).
+model ExamSchedule {
+  id        String   @id @default(uuid())
+  examId    String
+  subjectId String
+  classId   String
+  sectionId String
+  date      DateTime
+  startTime String
+  endTime   String
+  room      String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  exam    Exam    @relation(fields: [examId], references: [id], onDelete: Cascade)
+  subject Subject @relation(fields: [subjectId], references: [id])
+  klass   Class   @relation(fields: [classId], references: [id])
+  section Section @relation(fields: [sectionId], references: [id])
+
+  @@unique([examId, sectionId, subjectId])
+  @@map("exam_schedules")
+}
+
+enum ResultStatus {
+  DRAFT
+  SUBMITTED
+  REVIEWED
+  FINALIZED
+  PUBLISHED
+}
+
+// One row per student per exam — the workflow container (spec: Draft ->
+// Submitted -> Reviewed -> Finalized -> Published, sequential, never
+// backward except through the correction workflow). Subject-wise marks
+// live on ResultItem, not here, mirroring Result vs ResultItem in the spec.
+model Result {
+  id            String       @id @default(uuid())
+  studentId     String
+  examId        String
+  sectionId     String
+  status        ResultStatus @default(DRAFT)
+  submittedAt   DateTime?
+  reviewedById  String?
+  reviewedAt    DateTime?
+  finalizedById String?
+  finalizedAt   DateTime?
+  publishedById String?
+  publishedAt   DateTime?
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+
+  student    Student     @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  exam       Exam        @relation(fields: [examId], references: [id])
+  section    Section     @relation(fields: [sectionId], references: [id])
+  reviewedBy User?       @relation("ResultReviewedBy", fields: [reviewedById], references: [id])
+  finalizedBy User?      @relation("ResultFinalizedBy", fields: [finalizedById], references: [id])
+  publishedBy User?      @relation("ResultPublishedBy", fields: [publishedById], references: [id])
+  items      ResultItem[]
+  reportCard ReportCard?
+
+  @@unique([studentId, examId])
+  @@map("results")
+}
+
+// Editable only while the parent Result is DRAFT — enforced in
+// results/service.ts, not here. Once FINALIZED/PUBLISHED, changes require
+// the RESULT_CORRECTION approval workflow.
+model ResultItem {
+  id            String   @id @default(uuid())
+  resultId      String
+  subjectId     String
+  marksObtained Float
+  totalMarks    Float
+  grade         String?
+  remarks       String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  result  Result  @relation(fields: [resultId], references: [id], onDelete: Cascade)
+  subject Subject @relation(fields: [subjectId], references: [id])
+
+  @@unique([resultId, subjectId])
+  @@map("result_items")
+}
+
+model ReportCard {
+  id            String   @id @default(uuid())
+  resultId      String   @unique
+  snapshot      Json
+  generatedById String
+  generatedAt   DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  result      Result @relation(fields: [resultId], references: [id], onDelete: Cascade)
+  generatedBy User   @relation(fields: [generatedById], references: [id])
+
+  @@map("report_cards")
+}
+
+enum PromotionDecisionType {
+  PROMOTE
+  REPEAT
+  PENDING
+  CLASS_JUMP
+}
+
+// PROMOTE/REPEAT execute immediately (a new Enrollment is created in the
+// same transaction as this row). CLASS_JUMP requires approval first —
+// executedAt/newEnrollmentId stay null until decidePromotionClassJump()
+// approves it. PENDING (re-exam) never executes — no new enrollment, the
+// student stays as-is until a fresh decision is made later. Reuses
+// enrollments/service.ts's createEnrollment() for the actual enrollment
+// creation, rather than duplicating its validation.
+model Promotion {
+  id               String                @id @default(uuid())
+  studentId        String
+  fromEnrollmentId String
+  academicYearId   String
+  targetClassId    String
+  targetSectionId  String
+  decision         PromotionDecisionType
+  reason           String?
+  newEnrollmentId  String?               @unique
+  decidedById      String
+  executedAt       DateTime?
+  createdAt        DateTime              @default(now())
+  updatedAt        DateTime              @updatedAt
+
+  student        Student      @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  fromEnrollment Enrollment   @relation("PromotionFromEnrollment", fields: [fromEnrollmentId], references: [id])
+  academicYear   AcademicYear @relation(fields: [academicYearId], references: [id])
+  targetClass    Class        @relation(fields: [targetClassId], references: [id])
+  targetSection  Section      @relation(fields: [targetSectionId], references: [id])
+  newEnrollment  Enrollment?  @relation("PromotionNewEnrollment", fields: [newEnrollmentId], references: [id])
+  decidedBy      User         @relation(fields: [decidedById], references: [id])
+
+  @@map("promotions")
 }

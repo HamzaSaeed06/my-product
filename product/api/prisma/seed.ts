@@ -130,11 +130,38 @@ const PHASE_3_PERMISSIONS = [
   ["assessment.correct", "Decide assessment marks correction requests"],
 ] as const;
 
+// Phase 4: Exams, Result workflow, Report cards, Promotion. `result.correct`
+// gates DECIDING a result correction request, separate from the `.edit`
+// permission that gates REQUESTING one — same split as Phase 3's
+// `*.correct` permissions.
+const PHASE_4_PERMISSIONS = [
+  ["exam.view", "View exams"],
+  ["exam.create", "Create exams"],
+  ["exam.edit", "Edit exams and exam schedules"],
+  ["exam.publish", "Publish an exam schedule"],
+  ["exam_schedule.view", "View exam schedules"],
+  ["exam_schedule.create", "Create exam schedule entries"],
+  ["exam_schedule.edit", "Edit exam schedule entries"],
+  ["result.view", "View results"],
+  ["result.create", "Create/enter results"],
+  ["result.edit", "Edit results (draft) and submit for review"],
+  ["result.review", "Review submitted results"],
+  ["result.finalize", "Finalize (lock) reviewed results"],
+  ["result.publish", "Publish finalized results"],
+  ["result.correct", "Decide result correction requests"],
+  ["report_card.view", "View report cards"],
+  ["report_card.generate", "Generate report cards"],
+  ["promotion.view", "View promotion decisions"],
+  ["promotion.create", "Create promotion decisions"],
+  ["promotion.approve", "Approve class-jump promotion decisions"],
+] as const;
+
 const ALL_PERMISSIONS = [
   ...PHASE_0_PERMISSIONS,
   ...PHASE_1_PERMISSIONS,
   ...PHASE_2_PERMISSIONS,
   ...PHASE_3_PERMISSIONS,
+  ...PHASE_4_PERMISSIONS,
 ];
 
 async function main(): Promise<void> {

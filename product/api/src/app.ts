@@ -30,6 +30,11 @@ import { substitutionsRouter } from "./modules/substitutions/routes.js";
 import { curriculumRouter } from "./modules/curriculum/routes.js";
 import { homeworkRouter } from "./modules/homework/routes.js";
 import { assessmentsRouter } from "./modules/assessments/routes.js";
+import { examsRouter } from "./modules/exams/routes.js";
+import { examSchedulesRouter } from "./modules/exam-schedules/routes.js";
+import { resultsRouter } from "./modules/results/routes.js";
+import { reportCardsRouter } from "./modules/report-cards/routes.js";
+import { promotionsRouter } from "./modules/promotions/routes.js";
 import { errorHandler, notFoundHandler } from "./middleware/errorHandler.js";
 import { readRateLimiter } from "./middleware/rateLimiter.js";
 
@@ -79,6 +84,11 @@ export function createApp(): Express {
   app.use("/api/v1/curriculum", curriculumRouter);
   app.use("/api/v1/homework", homeworkRouter);
   app.use("/api/v1/assessments", assessmentsRouter);
+  app.use("/api/v1/exams", examsRouter);
+  app.use("/api/v1/exam-schedules", examSchedulesRouter);
+  app.use("/api/v1/results", resultsRouter);
+  app.use("/api/v1/report-cards", reportCardsRouter);
+  app.use("/api/v1/promotions", promotionsRouter);
 
   app.use(notFoundHandler);
   app.use(errorHandler);

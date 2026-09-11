@@ -4,13 +4,14 @@
 **Current phase:** Phase 0 complete. Phase 1 backend+frontend complete
 (interactive dialogs unverified in-browser — see §1d). Phase 2 backend and
 frontend both complete (116 passing integration tests, 18 pages — see
-§1e/§1f). **Phase 3 backend and frontend both complete**: Timetable
-(+conflict detection), Attendance (+correction workflow), Teacher
-Attendance, Substitution, Curriculum/Progress, Homework, Assessments
-(+marks lock and correction workflow) — 168 integration tests (52 new, all
-confirmed passing in a real watched run), 25 pages total, typecheck+build
-clean, all 7 new pages smoke-tested authenticated-200. Interactive dialogs
-unverified in-browser, same caveat as Phase 1/2. See §1g/§1h.
+§1e/§1f). Phase 3 backend and frontend both complete (168 integration
+tests, 25 pages — see §1g/§1h). **Phase 4 backend now built and passing**:
+Exams (+schedule conflict detection), Result workflow (Draft→Submitted→
+Reviewed→Finalized→Published, with a correction-approval workflow),
+Report Cards (JSON snapshot, PDF rendering deferred), Promotion
+(Promote/Repeat/Pending immediate, Class Jump requires approval) — 207
+integration tests total (39 new), all confirmed passing in a real watched
+run. No Phase 4 frontend yet. See §1i.
 **Repo state:** Monorepo scaffolded. `product/api` has a working Express +
 TypeScript + Prisma backend implementing all of Phase 0's API surface (auth,
 users, roles/permissions, approvals, documents, notifications, audit).
@@ -632,6 +633,85 @@ table) are the highest-value candidates to click through first, since they
 have the most client-side state/interaction logic that a server-rendered
 smoke test can't exercise.
 
+### 1i. Phase 4 backend (`product/api`) — VERIFIED WORKING
+
+Results & Promotion per PRODUCT_SPEC.md's "PHASE 4" section — Exam,
+ExamSchedule, Result, ResultItem, ReportCard, Promotion. 39 new integration
+tests (207 total with Phase 0-3's 168), all passing against the real
+database.
+
+- **Schema**: `Exam` (named series per academic year, e.g. "Midterm",
+  DRAFT/PUBLISHED envelope) + `ExamSchedule` (one paper: subject+section+
+  date/time+room). `Result` (one row per student per exam — the workflow
+  container: DRAFT→SUBMITTED→REVIEWED→FINALIZED→PUBLISHED) + `ResultItem`
+  (subject-wise marks, editable only while the parent Result is DRAFT).
+  `ReportCard` (one per Result). `Promotion` (one row per promotion
+  decision, carrying the target class/section and whether/when it
+  executed).
+- **Sequential result workflow actually enforced, not just documented**:
+  each transition function (`submitResult`, `reviewResult`,
+  `finalizeResult`, `publishResult`) checks the exact expected prior status
+  and throws `INVALID_STATE_TRANSITION` otherwise — skipping a state (e.g.
+  DRAFT straight to FINALIZED) or going backward is refused, per spec's
+  "Result States Are Sequential" rule. Once FINALIZED or PUBLISHED, direct
+  edits to a `ResultItem` are refused (`RESULT_NOT_DRAFT` before submit,
+  correction-workflow-only after) — the same reuse of Phase 0's
+  `ApprovalRequest` engine (type `RESULT_CORRECTION`) as Phase 3's
+  attendance/assessment corrections, with the actual row update applied by
+  a dedicated decide function in `results/service.ts`, not the generic
+  approvals module.
+- **Exam schedule conflict detection**: a section can't sit two papers at
+  overlapping times on the same date — checked as a real time-range
+  overlap (not just an exact-match), across all of a section's schedules
+  for any exam, not just the one being edited.
+- **Promotion reuses `enrollments/service.ts`'s `createEnrollment()`**
+  directly rather than duplicating its validation — `PROMOTE`/`REPEAT`
+  execute immediately (a new Enrollment is created in the same request);
+  `CLASS_JUMP` requires a reason and creates a `PROMOTION_CLASS_JUMP`
+  approval request first, only executing (creating the new Enrollment) on
+  approval; `PENDING` (re-exam) never executes on its own. Per spec: the
+  old Enrollment is never touched, the student's identity is unchanged,
+  only a new Enrollment row appears — verified directly by asserting the
+  prior year's Enrollment row is untouched after a promotion.
+- **DEVIATION from spec**: `ReportCard` stores a JSON snapshot of the
+  result at generation time (student/exam/subject-wise marks), not a
+  rendered PDF file — no PDF-generation library has been chosen yet, same
+  category of deferral as Phase 0's email-delivery stub. Regenerating (e.g.
+  after an approved correction) overwrites the existing snapshot rather
+  than creating a duplicate row. Actual PDF rendering/printing is deferred
+  to whenever `product/web` needs it and a library is picked.
+- **Known limitation, accepted deliberately**: executing a promotion calls
+  `createEnrollment()` (which uses the shared `prisma` client) after
+  creating the `Promotion` row — the two writes are NOT wrapped in one DB
+  transaction, because `createEnrollment` doesn't accept an injected
+  transaction client. If the second write failed, the new Enrollment would
+  still exist correctly but the Promotion row would show `executedAt: null`
+  until retried. Documented in `promotions/service.ts`; not treated as a
+  blocker since a real Enrollment is the load-bearing side effect and this
+  mirrors an existing pattern (Substitution's notification call is also
+  outside its main transaction).
+- **Verified for real**: all 207 integration tests pass, covering (per
+  module) — Exams: closed-year-refused/create/duplicate-refused/list/
+  publish/publish-twice-refused. Exam Schedules: create/overlap-refused/
+  non-overlapping-allowed/duplicate-subject-refused/list/update. Results:
+  get-or-create-drafts/marks-out-of-range-refused/enter-item/skip-review-
+  refused/submit/edit-after-submit-refused/skip-to-finalize-refused/review/
+  finalize/publish/no-change-correction-refused/request-correction/
+  approve-correction-updates-locked-item/re-decide-refused. Report Cards:
+  refused-before-finalized/generate/regenerate-overwrites/list/get.
+  Promotions: wrong-student-enrollment-refused/promote-executes-immediately
+  -old-enrollment-untouched/class-jump-without-reason-refused/class-jump-
+  creates-pending-approval/pending-never-executes/approve-class-jump-
+  executes/re-decide-refused/list. Confirmed via a real, watched full-suite
+  run (30 files, 207 tests, ~15 minutes — the multi-minute duration is real
+  network round-trips to Neon plus verbose Prisma query logging, the same
+  characteristic already seen and diagnosed in Phase 3's entry, not a
+  regression).
+- **Not done**: no `product/web` screens for any of Phase 4 yet (Exam
+  Management, Exam Schedule, Result Entry/Review/Finalization/Publication,
+  Result Correction, Report Card Generator, Promotion — all unbuilt, per
+  PRODUCT_SPEC.md's Phase 4 "Screens" list).
+
 ### How this was verified (not just "should work")
 
 In this session, with dependencies actually installed against a real npm
@@ -701,18 +781,25 @@ docs/
 ## 3. Immediate next action
 
 Phase 0: fully done. Phase 1: backend + frontend built (§1c/§1d). Phase 2:
-backend + frontend built (§1e/§1f). Phase 3: **backend + frontend both
-built** (§1g/§1h) — 168 tests passing, 25 pages, all smoke-tested. What's
-left, in order:
+backend + frontend built (§1e/§1f). Phase 3: backend + frontend both built
+(§1g/§1h) — 168 tests, 25 pages. Phase 4: **backend built and passing 207
+tests (§1i), no frontend yet.** What's left, in order:
 
-1. **Click through Phase 1, 2, and 3's screens in a real browser** — every
-   "+ Add", "Edit", "Archive", "Approve/Reject", "Transfer", "Withdraw",
-   "Publish", "Submit", and document-upload control. This is the one open
-   item standing between "built" and "actually done" for all three phases.
-   Phase 3's Timetable grid, Substitution's dependent dropdown, and
-   Assessment's marks table are the highest-value ones to check first.
-2. **Then Phase 4** (Exams, Result workflow, Report cards, Promotion).
-3. **Minor cleanup, low priority**: wire real email delivery when a
+1. **Build Phase 4's frontend** (Exam Management, Exam Schedule, Result
+   Entry/Review/Finalization/Publication, Result Correction, Report Card
+   Generator, Promotion) — matches the "finish a phase fully before the
+   next" approach used for Phases 1-3.
+2. **Click through Phase 1, 2, 3, and 4's screens in a real browser** —
+   every "+ Add", "Edit", "Archive", "Approve/Reject", "Transfer",
+   "Withdraw", "Publish", "Submit", and document-upload control. This is
+   the one open item standing between "built" and "actually done" across
+   the whole product so far. Phase 3's Timetable grid, Substitution's
+   dependent dropdown, and Assessment's marks table remain the
+   highest-value ones to check first.
+3. **Then Phase 5** (Finance Module) or **Phase 6** (Operations) — either
+   is unblocked (both only depend on Phase 2), so this is a free choice
+   when the time comes, not a fixed order.
+4. **Minor cleanup, low priority**: wire real email delivery when a
    provider is chosen; consider a session-refresh-on-expiry flow for
    `product/web` once 20-minute re-logins become annoying; rename the
    placeholder "Demo Institute" to something real before any actual use.
@@ -769,6 +856,42 @@ left, in order:
 Append a dated entry every session. Keep entries short — what changed, what's
 left, anything the next session needs to know that isn't obvious from the
 code/docs themselves.
+
+### 2026-09-11 (n) — Phase 4 backend built: Results & Promotion
+
+- User said to start whatever's next, best judgment — chose Phase 4
+  (Results & Promotion) per the roadmap's dependency order, since Phase 3
+  was fully complete (backend+frontend) and Phase 4 only depends on it.
+- Added Phase 4's schema (6 models — see §1i), 19 new permissions, and ran
+  the migration + seed against the live database.
+- Built and wired 5 new API modules: exams, exam-schedules, results,
+  report-cards, promotions.
+- Implemented the sequential result workflow for real: DRAFT→SUBMITTED→
+  REVIEWED→FINALIZED→PUBLISHED, each transition checking the exact prior
+  status (no skipping, no going backward), with `RESULT_CORRECTION`
+  reusing Phase 0's ApprovalRequest engine for post-lock changes — same
+  pattern as Phase 3's attendance/assessment corrections.
+- Implemented Promotion by reusing `enrollments/service.ts`'s
+  `createEnrollment()` directly (not duplicating its validation):
+  PROMOTE/REPEAT execute immediately, CLASS_JUMP requires a reason and an
+  approval before executing, PENDING never executes on its own. Verified
+  directly that promoting never touches the prior year's Enrollment row.
+- **Deviation**: ReportCard stores a JSON snapshot, not a rendered PDF —
+  no PDF library chosen yet, same category as the Phase 0 email stub.
+- Wrote 39 new integration tests (207 total). This time recognized the
+  "silent output for a long time" pattern immediately as verbose Prisma
+  query logging plus real network latency (correctly diagnosed and
+  documented in Phase 3's entry) rather than re-investigating it as a
+  possible hang — confirmed via a real, watched full-suite run: **30
+  files, 207 tests, all passing**, ~15 minutes.
+- **Not done**: no `product/web` screens for Phase 4 yet. Phase 1-3's
+  interactive dialogs are still not click-tested in a browser (carried
+  over).
+- **Next session should**: build Phase 4's frontend (Exam Management,
+  Exam Schedule, Result Entry/Review/Finalization/Publication, Result
+  Correction, Report Card Generator, Promotion screens) to bring Phase 4
+  to the same complete state as Phases 1-3, then Phase 5 or 6 (either is
+  unblocked).
 
 ### 2026-09-11 (m) — Phase 3 frontend built: Timetable, Attendance, Substitutions, Curriculum, Homework, Assessments
 
