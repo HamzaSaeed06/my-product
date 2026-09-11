@@ -72,8 +72,14 @@ cannot-close-without-resolution rule) — 26 new integration tests, all
 passing against the real database. Closes a deferral logged back in
 Phase 3: an approved Leave now auto-overrides a teacher's ABSENT mark to
 LEAVE in `markAttendance`, verified by a dedicated cross-module test.
-Phase 6 frontend not yet built. See also
-§1c/§1d/§1e/§1f/§1g/§1h/§1i/§1j/§1k/§1l/§1m for full detail.
+**Phase 6 frontend built**: Leaves (single list page) and Complaints
+(list + per-complaint detail page driving its lifecycle) under a new
+"Operations" sidebar group — 39 pages total, smoke-tested
+authenticated-200 against live dev servers via the established curl
+login technique. All Phase 0-6 backends and frontends are now built;
+interactive dialogs across all six phases remain the one standing item
+not yet click-tested in a real browser. See also
+§1c/§1d/§1e/§1f/§1g/§1h/§1i/§1j/§1k/§1l/§1m/§1n for full detail.
 
 ## Notes on dependency ordering
 

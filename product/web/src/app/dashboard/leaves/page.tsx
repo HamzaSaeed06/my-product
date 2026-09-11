@@ -1,0 +1,104 @@
+import { apiRequest } from "@/lib/apiClient";
+import { PageHeader } from "@/components/page-header";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Badge } from "@/components/ui/badge";
+import { CreateLeaveDialog } from "./create-dialog";
+import { LeaveActionButtons } from "./decide-buttons";
+
+interface Student {
+  id: string;
+  fullName: string;
+  studentCode: string;
+}
+
+interface Teacher {
+  id: string;
+  user: { fullName: string };
+}
+
+interface Leave {
+  id: string;
+  subjectType: "STUDENT" | "TEACHER";
+  fromDate: string;
+  toDate: string;
+  reason: string;
+  isRetrospective: boolean;
+  status: "PENDING" | "APPROVED" | "REJECTED" | "CANCELLED";
+  student: { fullName: string; studentCode: string } | null;
+  teacher: { user: { fullName: string } } | null;
+}
+
+const STATUS_VARIANT: Record<string, "default" | "secondary" | "destructive"> = {
+  PENDING: "secondary",
+  APPROVED: "default",
+  REJECTED: "destructive",
+  CANCELLED: "secondary",
+};
+
+export default async function LeavesPage() {
+  const [leaves, students, teachers] = await Promise.all([
+    apiRequest<Leave[]>("/api/v1/leaves"),
+    apiRequest<Student[]>("/api/v1/students"),
+    apiRequest<Teacher[]>("/api/v1/teachers"),
+  ]);
+
+  const studentOptions = students.map((s) => ({ id: s.id, label: `${s.fullName} (${s.studentCode})` }));
+  const teacherOptions = teachers.map((t) => ({ id: t.id, label: t.user.fullName }));
+
+  return (
+    <div>
+      <PageHeader
+        title="Leaves"
+        description="Student and teacher leave requests. An approved student leave auto-marks attendance as LEAVE for its covered dates."
+        action={<CreateLeaveDialog students={studentOptions} teachers={teacherOptions} />}
+      />
+
+      {leaves.length === 0 ? (
+        <p className="text-sm text-muted-foreground">No leave requests yet.</p>
+      ) : (
+        <div className="overflow-x-auto rounded-lg border border-border">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Subject</TableHead>
+                <TableHead>Dates</TableHead>
+                <TableHead>Reason</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead className="text-right">Actions</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {leaves.map((leave) => (
+                <TableRow key={leave.id}>
+                  <TableCell>
+                    <p className="font-medium text-foreground">
+                      {leave.subjectType === "STUDENT" ? leave.student?.fullName : leave.teacher?.user.fullName}
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      {leave.subjectType === "STUDENT" ? `Student · ${leave.student?.studentCode}` : "Teacher"}
+                    </p>
+                  </TableCell>
+                  <TableCell className="text-muted-foreground">
+                    {leave.fromDate.slice(0, 10)} → {leave.toDate.slice(0, 10)}
+                    {leave.isRetrospective ? (
+                      <Badge variant="secondary" className="ml-2">
+                        Retrospective
+                      </Badge>
+                    ) : null}
+                  </TableCell>
+                  <TableCell className="text-muted-foreground">{leave.reason}</TableCell>
+                  <TableCell>
+                    <Badge variant={STATUS_VARIANT[leave.status]}>{leave.status}</Badge>
+                  </TableCell>
+                  <TableCell className="text-right">
+                    <LeaveActionButtons id={leave.id} status={leave.status} />
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </div>
+      )}
+    </div>
+  );
+}

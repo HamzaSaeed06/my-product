@@ -65,6 +65,13 @@ const NAV_GROUPS = [
       { href: "/dashboard/cash-closing", label: "Cash Closing" },
     ],
   },
+  {
+    label: "Operations",
+    items: [
+      { href: "/dashboard/leaves", label: "Leaves" },
+      { href: "/dashboard/complaints", label: "Complaints" },
+    ],
+  },
 ] as const;
 
 export function DashboardSidebar() {

@@ -16,13 +16,14 @@ authenticated-200. Getting to that clean test run surfaced and fixed 3
 real bugs (not just re-running past flakiness) — see §1k/§1l and §5a for
 the full story, including a global Prisma transaction-timeout fix and a
 session auto-refresh added to the test harness itself. **Phase 6 backend
-complete**: Leave management, Complaints (6-state lifecycle) — 26 new
-tests passing, and the Phase 3→6 deferral (approved leave auto-marks
-attendance as LEAVE) is now closed and tested — see §1m. Verifying
-Phase 6 surfaced one more real bug (a fragile `generateStudentCode()`
-sort order, poisoned by a non-numeric test-fixture student code) —
-root-caused and fixed properly, full 42-file/295-test suite now passes
-cleanly. Phase 6 frontend not yet built.
+and frontend both complete**: Leave management, Complaints (6-state
+lifecycle) — 26 new tests passing, and the Phase 3→6 deferral (approved
+leave auto-marks attendance as LEAVE) is now closed and tested — see
+§1m/§1n. Verifying Phase 6 surfaced one more real bug (a fragile
+`generateStudentCode()` sort order, poisoned by a non-numeric
+test-fixture student code) — root-caused and fixed properly, full
+42-file/295-test suite now passes cleanly. 39 pages total, all
+smoke-tested authenticated-200 against live dev servers.
 **Repo state:** Monorepo scaffolded. `product/api` has a working Express +
 TypeScript + Prisma backend implementing all of Phase 0's API surface (auth,
 users, roles/permissions, approvals, documents, notifications, audit).
@@ -1018,6 +1019,51 @@ cross-module leave↔attendance test).
 - **Not done yet**: no `product/web` screens for Phase 6 — Leave Request,
   Leave Approval, Complaint Submission, Complaint Management. Built next.
 
+### 1n. Phase 6 frontend (`product/web`) — screens built, server-rendering verified
+
+Two new screens under a new "Operations" sidebar group: Leaves (a single
+list page combining request + approve/reject/cancel, same shape as
+Phase 5's Waivers screen), Complaints (a list page + a per-complaint
+detail page driving its 6-state lifecycle).
+
+- `leaves/create-dialog.tsx` reuses the "Select with local state toggles
+  conditional fields" pattern from Phase 4's promotion decision dialog
+  (`decision === "CLASS_JUMP"`) — here a `subjectType` Select
+  (Student/Teacher) swaps which picker (Student vs. Teacher) renders,
+  rather than posting both and letting the server sort it out.
+- Complaints needed a **detail page** (`complaints/[complaintId]/`), not
+  a flat list with inline buttons like Waivers/Leaves — its 6-state
+  lifecycle has state-specific actions that need their own input
+  (`assign` needs an assignee picker, `resolve` needs a resolution note,
+  `reopen` needs a reason) plus a running notes thread, which doesn't fit
+  in a table row. Assign's staff picker filters `/api/v1/users` down to
+  non-student/parent roles (`SUPER_ADMIN`/`PRINCIPAL`/`INCHARGE`/`OFFICE`/
+  `TEACHER`) client-side, same shape as Phase 2's Teacher-eligible-user
+  filter on the Teachers screen.
+- **Verified for real, including a live authenticated render** (not just
+  build/typecheck): reconstructed the established curl no-JS-form-post
+  login technique (real `$ACTION_1:0`/`$ACTION_1:1`/`$ACTION_KEY`/empty
+  `$ACTION_REF_1` fields pulled from the actual rendered `/login` HTML
+  and the dev server's `server-reference-manifest.json`, credentials from
+  `tests/integration/globalSetup.ts`'s known super-admin account) against
+  **both dev servers running live** (`npm run dev` in `product/api` and
+  `product/web`, left running for the user to inspect directly) — got a
+  303 redirect with real `accessToken`/`refreshToken`/`csrfToken`
+  cookies, then confirmed `GET /dashboard`, `/dashboard/leaves`, and
+  `/dashboard/complaints` all return 200 with the correct empty states
+  ("No leave requests yet.", "No complaints yet.") and the new
+  "Operations" sidebar group rendering, and grepped every response for
+  error-boundary text (`TypeError`, `application error`, etc.) — none
+  found. `npx tsc --noEmit` and `npm run build` both clean (39 routes, up
+  from 37, including the dynamic `[complaintId]` route).
+- **Not verified**: the interactive dialogs (create/approve/reject leave,
+  submit/assign/start-progress/resolve/close/reopen/add-note complaint) —
+  same standing caveat as every prior phase's dialogs; per §1e's
+  documented finding, a `startTransition`-invoked Server Action can't be
+  curl-reproduced the way the plain-form-post login can (React Flight's
+  argument encoding for non-trivial args isn't just field names), so this
+  remains the one class of verification that requires an actual browser.
+
 ## 2. Decided tech stack (from PRODUCT_SPEC.md §3)
 
 **Installed and verified in `product/api`:** express, prisma/@prisma/client
@@ -1067,18 +1113,20 @@ Phase 0: fully done. Phase 1: backend + frontend built (§1c/§1d). Phase 2:
 backend + frontend built (§1e/§1f). Phase 3: backend + frontend both built
 (§1g/§1h) — 168 tests, 25 pages. Phase 4: backend + frontend both built
 (§1i/§1j) — 209 tests, 29 pages. Phase 5: backend + frontend both built
-(§1k/§1l) — 269 tests (full clean run), 37 pages. Phase 6: **backend
-built** (§1m) — 26 new tests, frontend next. What's left, in order:
+(§1k/§1l) — 269 tests (full clean run), 37 pages. Phase 6: **backend +
+frontend both built** (§1m/§1n) — 26 new tests, 39 pages total. All ten
+phase roadmap items through Phase 6 are now backend+frontend complete.
+What's left, in order:
 
-1. **Phase 6 frontend** (Leave Request, Leave Approval, Complaint
-   Submission, Complaint Management screens) — in progress.
-2. **Click through Phase 1-6's screens in a real browser** — every
+1. **Click through Phase 1-6's screens in a real browser** — every
    "+ Add", "Edit", "Archive", "Approve/Reject", "Transfer", "Withdraw",
-   "Publish", "Submit", "Record payment", and document-upload control.
-   This is the one open item standing between "built" and "actually done"
-   across the whole product so far — every phase's backend is genuinely
-   verified against the real database, but no phase's UI has been
-   clicked through by a human yet.
+   "Publish", "Submit", "Record payment", "Assign/Resolve/Close/Reopen",
+   and document-upload control. This is the one open item standing
+   between "built" and "actually done" across the whole product so
+   far — every phase's backend is genuinely verified against the real
+   database, but no phase's UI has been clicked through by a human yet.
+2. **Then Phase 7** (Portals & Role-Based Experiences) per the roadmap —
+   the next phase not yet started.
 3. **Minor cleanup, low priority**: wire real email delivery when a
    provider is chosen; consider a session-refresh-on-expiry flow for
    `product/web` once 20-minute re-logins become annoying; rename the
@@ -1194,6 +1242,37 @@ built** (§1m) — 26 new tests, frontend next. What's left, in order:
 Append a dated entry every session. Keep entries short — what changed, what's
 left, anything the next session needs to know that isn't obvious from the
 code/docs themselves.
+
+### 2026-09-11 (s) — Phase 6 frontend built: Leaves, Complaints
+
+- Continued directly from entry (r) once the 295/295 clean full-suite
+  run was confirmed. Built both screens under a new "Operations" sidebar
+  group — see §1n for full detail.
+- Leaves is a single list page (request + approve/reject/cancel inline),
+  same shape as Phase 5's Waivers. Complaints needed a genuinely new
+  shape: a list page plus a per-complaint detail page
+  (`complaints/[complaintId]/`), since its 6-state lifecycle has
+  state-specific actions needing their own input (assignee picker,
+  resolution note, reopen reason) and a running notes thread that
+  doesn't fit a table row.
+- **Verified live against both dev servers running** (started
+  `npm run dev` in `product/api` and `product/web`, left running for the
+  user): reconstructed the established curl login technique from real
+  `$ACTION_1:0`/`$ACTION_1:1`/`$ACTION_KEY`/empty `$ACTION_REF_1` fields
+  in the rendered `/login` HTML — got a real 303 + session cookies, then
+  confirmed `/dashboard`, `/dashboard/leaves`, `/dashboard/complaints`
+  all return 200 with correct empty states and the new sidebar group,
+  grepped for error-boundary text (none found). `npx tsc --noEmit` and
+  `npm run build` both clean — 39 routes total (up from 37).
+- **Not verified**: the interactive dialogs (same standing caveat as
+  every prior phase — a JS-invoked Server Action can't be
+  curl-reproduced, per §1e's documented finding).
+- **All ten Phase 6 roadmap items are done**: backend + frontend, tests
+  passing, docs updated. Phase 7 (Portals & Role-Based Experiences) is
+  next per the roadmap, not yet started.
+- **Next session should**: either click through Phase 1-6's dialogs in a
+  real browser (the single largest standing open item across the whole
+  product), or start Phase 7.
 
 ### 2026-09-11 (r) — Phase 6 backend built: Leave management, Complaints; fixed a real generateStudentCode() bug
 
