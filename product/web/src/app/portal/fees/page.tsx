@@ -2,6 +2,7 @@ import { getCurrentUser } from "@/lib/session";
 import { apiRequest } from "@/lib/apiClient";
 import { ChildSwitcher } from "@/components/child-switcher";
 import { Badge } from "@/components/ui/badge";
+import { PayOnlineButton } from "./pay-online-button";
 
 interface Invoice {
   id: string;
@@ -9,6 +10,8 @@ interface Invoice {
   totalAmount: string;
   dueDate: string;
   status: "UNPAID" | "PARTIALLY_PAID" | "PAID" | "VOID";
+  allocations: { amount: string }[];
+  waivers: { amount: string }[];
 }
 
 interface Student {
@@ -46,6 +49,13 @@ export default async function PortalFeesPage({
 
   const invoices = await apiRequest<Invoice[]>(`/api/v1/invoices?studentId=${studentId}`);
   const outstanding = invoices.filter((i) => i.status === "UNPAID" || i.status === "PARTIALLY_PAID");
+  const canPayOnline = user.roles.includes("PARENT");
+
+  function remainingDue(inv: Invoice): string {
+    const paid = inv.allocations.reduce((sum, a) => sum + Number(a.amount), 0);
+    const waived = inv.waivers.reduce((sum, w) => sum + Number(w.amount), 0);
+    return Math.max(Number(inv.totalAmount) - paid - waived, 0).toFixed(2);
+  }
 
   return (
     <div>
@@ -56,24 +66,33 @@ export default async function PortalFeesPage({
         <p className="mt-4 text-sm text-muted-foreground">No invoices yet.</p>
       ) : (
         <div className="mt-4 flex flex-col gap-2">
-          {invoices.map((inv) => (
-            <div key={inv.id} className="flex items-center justify-between rounded-lg border border-border p-3">
-              <div>
-                <p className="font-mono text-sm text-foreground">{inv.invoiceNumber}</p>
-                <p className="text-xs text-muted-foreground">Due {inv.dueDate.slice(0, 10)}</p>
+          {invoices.map((inv) => {
+            const due = remainingDue(inv);
+            const isOutstanding = inv.status === "UNPAID" || inv.status === "PARTIALLY_PAID";
+            return (
+              <div key={inv.id} className="flex items-center justify-between rounded-lg border border-border p-3">
+                <div>
+                  <p className="font-mono text-sm text-foreground">{inv.invoiceNumber}</p>
+                  <p className="text-xs text-muted-foreground">Due {inv.dueDate.slice(0, 10)}</p>
+                </div>
+                <div className="flex items-center gap-3">
+                  <div className="text-right">
+                    <p className="text-sm font-medium text-foreground">{inv.totalAmount}</p>
+                    <Badge variant={STATUS_VARIANT[inv.status]}>{inv.status.replace("_", " ")}</Badge>
+                  </div>
+                  {canPayOnline && isOutstanding && Number(due) > 0 ? (
+                    <PayOnlineButton invoiceId={inv.id} amount={due} />
+                  ) : null}
+                </div>
               </div>
-              <div className="text-right">
-                <p className="text-sm font-medium text-foreground">{inv.totalAmount}</p>
-                <Badge variant={STATUS_VARIANT[inv.status]}>{inv.status.replace("_", " ")}</Badge>
-              </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
 
-      {outstanding.length > 0 ? (
+      {outstanding.length > 0 && !canPayOnline ? (
         <p className="mt-4 text-xs text-muted-foreground">
-          Online payment isn&apos;t available yet — please pay outstanding invoices through the office.
+          Online payment can be done by a parent — please pay outstanding invoices through the office.
         </p>
       ) : null}
     </div>

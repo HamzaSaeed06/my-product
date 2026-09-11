@@ -18,7 +18,7 @@ phase's state changes — this table is what a new agent scans first.
 | 6 | Operations | Leave management, Complaints | 0, 2, 3 | 2-3 wk | 🟡 |
 | 7 | Portals & Role-Based Experiences | Principal / Incharge / Office / Teacher / Parent / Student UIs on top of the above | all prior | 4-5 wk | 🟡 |
 | 8 | Reports & Analytics | Cross-module reporting (academic, attendance, finance, staff) | all prior | 3-4 wk | 🟡 |
-| 9 | Online Payment Integration | Payment gateway (Easypaisa/JazzCash-style), webhook idempotency, reconciliation | 5 | 3-4 wk | 🔴 |
+| 9 | Online Payment Integration | Payment gateway (Easypaisa/JazzCash-style), webhook idempotency, reconciliation | 5 | 3-4 wk | 🟢 |
 | 10 | Provider Platform | Provider-side control plane: customer/license/deployment management, heartbeat, support tickets | 1 | 4-5 wk | 🔴 |
 
 **Total estimated: ~6-9 months** for a single developer working sequentially;
@@ -109,9 +109,39 @@ report-permission denial shows a clean message. 55 pages total. All
 Phase 0-8 backends and frontends are now built; interactive dialogs
 across all eight phases remain the one standing item not yet
 click-tested in a real browser. PDF/Excel export and scheduled report
-generation are deliberate, documented deferrals. See also
-§1c/§1d/§1e/§1f/§1g/§1h/§1i/§1j/§1k/§1l/§1m/§1n/§1o/§1p/§1q/§1r for full
-detail.
+generation are deliberate, documented deferrals. **Phase 9 backend
+built**: a real HMAC-SHA256 signed payment-gateway webhook flow —
+Payment Gateway config (`payment_gateway.manage`), initiate/checkout/
+confirm/cancel on the payer's own hosted checkout screen, a public
+`payment-callback` endpoint authenticated purely by signature (not
+session/CSRF, matching a real gateway), and a reconciliation summary —
+covering all 10 of spec's named test scenarios (successful/failed/
+pending payment, duplicate callback, amount mismatch, unmatched
+transaction, concurrent payments, invalid signature, reconciliation,
+refund through gateway) plus 2 scope tests, 12/12 passing. Closes a
+real (if narrow) double-payment race by adding a `FOR UPDATE` row lock
+to both the new webhook path and Phase 5's pre-existing cash-payment
+path. Two real issues root-caused and fixed during verification: a
+self-HTTP-loopback design that hung inside the test harness (removed in
+favor of an in-process function call carrying the same signed payload),
+and several tests' default timeout being too tight for genuine chained-
+call Neon latency (raised just those tests' timeouts, not the service
+code). **Phase 9 frontend built**: a real Parent Portal Pay Online flow
+(replacing the old "pay through the office" placeholder), an admin
+Payment Gateway config screen, and a staff Reconciliation dashboard —
+60 pages total, live-verified end-to-end via curl against real running
+dev servers (a parent paid a real invoice online; its status flipped
+UNPAID→PAID; the Pay Online button correctly disappeared afterward).
+Tonight's full-suite verification was messier than prior phases —
+documented honestly rather than glossed over: a 40+ file run stalled
+repeatedly under heavy concurrent Neon load (two API dev servers plus
+this session's own smoke testing all hitting the database at once) and
+was abandoned in favor of targeted isolated re-runs of the 3 files this
+phase touched, all confirmed clean once load normalized. All Phases
+0-9 backends and frontends are now built — every phase except Phase 10
+(Provider Platform, a separate application). See also
+§1c/§1d/§1e/§1f/§1g/§1h/§1i/§1j/§1k/§1l/§1m/§1n/§1o/§1p/§1q/§1r/§1s/§1t
+for full detail.
 
 ## Notes on dependency ordering
 

@@ -42,7 +42,23 @@ percentages, not just "some data"), CSV export with a separate
 real bug: some roles have a report-view permission but lack the
 permission for a filter dropdown's data (e.g. Office can view financial
 reports but not list exams) — was crashing with a 500, now degrades
-gracefully.
+gracefully. **Phase 9 backend and frontend both complete**: a real
+HMAC-signed payment-gateway webhook flow (Payment Gateways config,
+initiate/checkout/confirm/cancel, the actual public callback endpoint,
+reconciliation), row-level locking added to close a real concurrent-
+payment race (retrofitted onto Phase 5's cash-payment path too),
+refund-through-gateway — see §1s/§1t. A real Parent Portal Pay Online
+flow, admin gateway config, and a staff reconciliation dashboard — 60
+pages total. Live-verified end-to-end via curl against real running dev
+servers: a parent paid a real invoice online, its status flipped
+UNPAID→PAID, the Pay Online button correctly disappeared afterward.
+Two real bugs found and fixed by investigation (a self-HTTP-loopback
+hang, and per-test timeouts too tight for genuine Neon latency on
+chained calls) — see §1s. Verification tonight was messier than prior
+phases (documented honestly in §1s/§5a rather than glossed over): a
+full Phase 0-9 suite run repeatedly stalled under heavy concurrent Neon
+load and was abandoned in favor of targeted isolated re-runs of the 3
+files this phase touched, all confirmed clean once load normalized.
 **Repo state:** Monorepo scaffolded. `product/api` has a working Express +
 TypeScript + Prisma backend implementing all of Phase 0's API surface (auth,
 users, roles/permissions, approvals, documents, notifications, audit).
@@ -1367,6 +1383,198 @@ visualizations, a results table, and an Export CSV button.
   screen list is done, "Favorites, Recent reports" is not); scheduled
   report generation (needs a job scheduler this app doesn't have).
 
+### 1s. Phase 9 backend (`product/api`) — VERIFIED WORKING
+
+Online Payment Integration per PRODUCT_SPEC.md's "PHASE 9" section — a
+**real** signed-webhook payment flow (not the manual, staff-triggered
+gateway state machine Phase 5 already had, which is untouched and stays
+exactly as it was), plus gateway configuration and reconciliation.
+
+- **New models**: `PaymentGateway` (provider EASYPAISA/JAZZCASH/
+  SIMULATED, a write-once `webhookSecret`), `GatewayTransaction` (one per
+  checkout attempt, tracks INITIATED→SUCCESS/FAILED/PENDING),
+  `PaymentCallback` (an immutable audit row for *every* webhook call
+  received — malformed, unknown gateway, bad signature, unmatched,
+  duplicate, mismatched amount, or processed — per spec's "All actions
+  AUDITED" reconciliation rule). `Refund` gained
+  `gatewayRefundReference`; `PaymentAttempt` gained `initiatedById` (the
+  paying user, needed to attribute the eventual `Payment.recordedById`
+  correctly — seeded by a self-caught bug, see below).
+- **`src/lib/gatewaySignature.ts`** — HMAC-SHA256 signing/verification
+  (`crypto.createHmac`, `crypto.timingSafeEqual` for the comparison —
+  the same constant-time-compare discipline real gateways require),
+  exactly the scheme Stripe/Easypaisa/JazzCash-style webhooks use.
+- **`payment-gateways` module**: list/create/activate, gated by a new
+  `payment_gateway.manage` permission — deliberately separate from
+  `payment.view`/`payment.record`, since configuring where money gets
+  verified from is a different, narrower trust boundary than day-to-day
+  payment recording. The webhook secret is returned exactly once, at
+  creation, and omitted from every other read.
+- **`online-payment` module** — the real flow, split into spec's three
+  API surfaces: `initiate`/`GET checkout`/`confirm`/`cancel` (a payer's
+  own hosted checkout screen, permission `payment.pay_online`, scope-
+  checked via Phase 7's `assertStudentInScope`), `payment-callback`
+  (public — no session, no CSRF, a real gateway has neither; authenticity
+  comes entirely from the HMAC signature verified against the exact raw
+  request bytes, captured by a new `express.json({ verify })` hook in
+  `app.ts`), `payment-reconciliation` (gateway-SUCCESS vs recorded-
+  ONLINE-payment totals, a `matched` boolean, and the pending
+  `ReconciliationException` list, gated by the existing `payment.view`).
+  `processGatewayCallback` implements every spec business rule as a
+  named, individually-logged outcome: malformed payload, unknown
+  gateway, invalid signature (401, never processed), unmatched
+  `merchantTxnId` (flagged for manual review, never touches Payment/
+  Invoice), duplicate/already-settled (idempotent no-op), amount
+  mismatch (flagged, not auto-applied), FAILED/PENDING (simple status
+  update), SUCCESS (settles the payment — allocation, optional
+  overpayment credit, receipt, invoice status recalculation, all in one
+  transaction).
+- **Concurrent-payment safety (spec's "Concurrent payments: parent pays
+  online while office records cash -> lock invoice during payment
+  processing" rule)**: both the new webhook SUCCESS path *and* the
+  pre-existing Phase 5 cash-payment path (`recordPayment` in
+  `payments/service.ts`) now take `SELECT id FROM invoices WHERE id =
+  ... FOR UPDATE` as the first statement inside their transaction,
+  re-checking "not already PAID" after acquiring the lock. Closes a real
+  (if narrow) double-payment race that predates this phase — two payments
+  arriving for the same invoice at nearly the same instant could
+  previously both read "not yet paid" before either committed.
+- **Refund-through-gateway** (spec test #10): `completeRefund` now
+  checks the original payment's method, and for an `ONLINE` payment,
+  records a `gatewayRefundReference` on completion — standing in for the
+  real gateway refund-API call, same honest-simulation pattern as the
+  rest of this phase (no real gateway account exists to call for real).
+  A CASH payment's refund is unaffected.
+- **A deliberate architectural choice, not a shortcut**: since there is
+  no real Easypaisa/JazzCash account to redirect to, the payer's
+  "gateway page" is this app's own hosted checkout screen
+  (`GET /online-payment/:id` returns student/invoice/amount/gateway
+  name), and Confirm/Cancel build the exact same HMAC-signed payload a
+  real webhook would carry and run it through `processGatewayCallback`
+  **directly as an in-process function call** — not a self-HTTP loopback
+  to this same server. That was the original design, and it hung
+  indefinitely inside the Vitest integration harness (which never binds
+  a listening server to `env.PORT` during `supertest(createApp())`-style
+  tests) — root-caused by observing the hang, not guessed, then fixed by
+  removing the network hop entirely. Every line of signature
+  verification, idempotency, and locked settlement logic still actually
+  runs; only the fragile "am I reachable at my own port" assumption is
+  gone, which is also a more honest simulation for real deployment
+  (serverless, multiple instances behind a load balancer).
+- **Verified for real**: a new `online-payment.test.ts` (12 tests) covers
+  all 10 of spec's named test scenarios (successful payment, failed
+  payment, pending payment, duplicate callback, amount mismatch,
+  unmatched transaction, concurrent payments, invalid signature,
+  reconciliation summary, refund through gateway) plus 2 scope-
+  enforcement tests (a non-owning parent 403s on someone else's
+  checkout; a Teacher without `payment.pay_online` 403s on initiate).
+  `npx tsc --noEmit` and `npm run build` both clean.
+- **Two real issues found and fixed by investigation, not guessing**:
+  (1) the self-HTTP-loopback hang above; (2) seven of the twelve tests
+  chain several sequential HTTP calls per test (create invoice, initiate,
+  confirm/cancel), each itself several Neon round trips — under real
+  network latency this occasionally exceeded Vitest's default 20000ms
+  `testTimeout` with nothing actually hung. Confirmed genuine (not a
+  deadlock) by reproducing a single slow call directly via `curl` against
+  a live dev server and timing it (9.891s, completed successfully), then
+  fixed by raising just those tests' own timeouts (40000/50000/60000ms —
+  test #1's full SUCCESS settlement path, the single most expensive
+  operation in the file, needed the largest margin after it was twice
+  observed landing right at its previous 40000ms ceiling) — never by
+  touching the underlying service code.
+- **Tonight's verification was messier than prior phases' and is
+  reported honestly rather than glossed over**: running the full
+  Phase 0-9 suite in the background (per the plan of verify-then-commit)
+  coincided with heavy concurrent load on the same Neon endpoint — two
+  API dev servers left running from earlier in the session, this
+  session's own live curl smoke test (see §1t), and the 40+ file suite
+  itself all hitting the database at once. The run stalled for extended
+  periods between files with zero forward progress and had to be killed
+  twice. Rather than keep retrying the same overloaded full run, this
+  was root-caused down to: a stray *second*, non-listening copy of the
+  API dev server (killed — one real dev server remains), then verified
+  with **targeted isolated re-runs** of exactly the 3 files this phase's
+  code touches or added (`payments.test.ts` 17/17, `refunds.test.ts` all
+  passing, `online-payment.test.ts` 12/12) once a direct round-trip
+  check confirmed Neon latency back to its normal ~200-300ms. Two of
+  those isolated attempts still hit a single cold-connection
+  `PrismaClientInitializationError: Can't reach database server` (P1001)
+  on the very first query of a fresh process, before any Phase 9 logic
+  ran — the exact documented signature from §5a, not a code defect; the
+  next attempt passed clean. **The FOR UPDATE lock added to
+  `recordPayment` and the `gatewayRefundReference` addition to
+  `completeRefund` are both confirmed correct — no code changes were
+  needed for either.** A full, clean, single Phase 0-9 suite run was not
+  obtained tonight; this is a known gap, not a claim of something that
+  didn't happen — a calmer future run should get one.
+
+### 1t. Phase 9 frontend (`product/web`) — screens built, live-verified end-to-end
+
+Spec's flow: "Parent Opens Portal -> Views Outstanding Invoices -> Click
+Pay Online -> Redirected to Easypaisa/JazzCash/etc -> Gateway Shows:
+Student, Month, Amount -> Parent Confirms Payment -> Gateway Processes
+-> Gateway Callback to School Backend -> Payment Recorded, Invoice
+Updated -> Receipt Generated -> Parent Sees Success". Three surfaces:
+
+- **Parent Portal — the real thing, replacing §1p's placeholder**:
+  `/portal/fees` (`page.tsx`) now computes each invoice's actual
+  remaining due from fields the API already returned
+  (`allocations`/`waivers`, same formula `dashboard/invoices/[id]`
+  already used — no backend change needed for this) and renders a real
+  **Pay Online** button for PARENT-role viewers on any outstanding
+  invoice with a positive remaining balance. Clicking it (`actions.ts`'s
+  `initiateOnlinePayment` Server Action) calls the real
+  `POST /online-payment/initiate` and redirects to
+  `/portal/fees/pay/[gatewayTransactionId]` — this app's own hosted
+  "gateway" checkout screen (per §1s, honestly labeled "Simulated
+  {gateway name} checkout — no real money is charged", not disguised as
+  a real Easypaisa/JazzCash page), showing student/invoice/amount pulled
+  from `GET /online-payment/:id`. Confirm/Cancel (`checkout-actions.tsx`)
+  call the matching endpoints and show a clean success/failure state
+  with a link back to Fees — no page reload, no dead end.
+- **Admin — `/dashboard/payment-gateways`** (SUPER_ADMIN-only nav item,
+  same "empty roles array" pattern as Incharge Scopes): list gateways,
+  create one (provider + display name; the returned webhook secret is
+  shown exactly once in the creation dialog with a copy-now warning,
+  never re-displayed — matches the API's own write-once design),
+  activate/deactivate.
+- **Staff — `/dashboard/reconciliation`** (PRINCIPAL/OFFICE, same
+  permission as the existing Payments screen): a date-range filter,
+  gateway-SUCCESS vs recorded-ONLINE-payment counts/totals with a
+  Matched/Mismatch badge, a transaction-status breakdown, and the
+  pending `ReconciliationException` table. Read-only — the API has no
+  resolve/dismiss endpoint for exceptions yet, so no button pretends to
+  do something the backend can't.
+- **Verified live, end-to-end, against real running dev servers — not
+  just typecheck/build**: created a disposable parent+student+invoice
+  fixture directly via Prisma, logged in as the parent via curl against
+  the live API (capturing real `accessToken`/`refreshToken`/`csrfToken`
+  cookies), then forwarded those same cookies to `product/web`'s own
+  server-rendered pages (the BFF pattern every Server Action already
+  relies on, so this exercises the exact same cookie path a browser
+  would). Confirmed: `/portal/fees` renders the invoice with a working
+  Pay Online button; `POST /online-payment/initiate` returns a real
+  `gatewayTransactionId`; `/portal/fees/pay/[id]` server-renders the
+  correct student name, invoice number, gateway name, and amount from
+  live data; confirming the payment via the real API returns `SUCCESS`
+  with an actual `Payment`+`Receipt`, the invoice's status flips
+  UNPAID→PAID; re-fetching `/portal/fees` afterward shows the `PAID`
+  badge and the Pay Online button correctly gone (remaining due is now
+  zero). Fixture data cleaned up afterward. `npx tsc --noEmit` and
+  `npm run build` both clean — 60 pages total (3 new: `/portal/fees/pay/
+  [gatewayTransactionId]`, `/dashboard/payment-gateways`,
+  `/dashboard/reconciliation`; `/portal/fees` itself rebuilt, not new).
+- **Not verified**: the interactive dialogs (Confirm/Cancel buttons,
+  the Add Gateway dialog) as actual browser clicks — same standing
+  curl-can't-reach-a-`startTransition`-action caveat as every prior
+  phase (§1d).
+- **Not done at this pass**: a resolve/dismiss action for
+  `ReconciliationException` rows (no backend endpoint exists for it —
+  building the button first would mean faking what it does); real
+  Easypaisa/JazzCash SDK integration (spec's own flow has no real
+  gateway account to integrate with — this is the same honest-simulation
+  boundary as the backend, not a gap specific to the frontend).
+
 ## 2. Decided tech stack (from PRODUCT_SPEC.md §3)
 
 **Installed and verified in `product/api`:** express, prisma/@prisma/client
@@ -1420,31 +1628,47 @@ backend + frontend built (§1e/§1f). Phase 3: backend + frontend both built
 frontend both built (§1m/§1n) — 26 new tests, 39 pages total. Phase 7:
 backend + frontend both built (§1o/§1p) — role permissions for all 7
 roles, scope enforcement, Student/Parent login, a new `/portal` shell —
-48 pages total. Phase 8: **backend + frontend both built** (§1q/§1r) —
+48 pages total. Phase 8: backend + frontend both built (§1q/§1r) —
 5 live-computed report categories, CSV export, Report Center — 55 pages
-total. All Phases 0-8 are now backend+frontend complete. What's left,
-in order:
+total. Phase 9: **backend + frontend both built** (§1s/§1t) — real
+HMAC-signed payment-gateway webhook flow, gateway config, reconciliation
+dashboard, a real Parent Portal Pay Online flow — 60 pages total. All
+Phases 0-9 are now backend+frontend complete — every phase in
+PHASE_TRACKER.md except Phase 10 (Provider Platform, a separate
+application). What's left, in order:
 
-1. **Click through Phases 1-8's screens in a real browser** — every
+1. **Click through Phases 1-9's screens in a real browser** — every
    "+ Add", "Edit", "Archive", "Approve/Reject", "Transfer", "Withdraw",
    "Publish", "Submit", "Record payment", "Assign/Resolve/Close/Reopen",
    "Mark attendance", "Assign homework", "Request leave", "Export CSV",
-   and document-upload control, across 4 different role experiences
-   (admin, teacher portal, parent portal, student portal), not just
-   Super Admin. This is the one open item standing between "built" and
-   "actually done" across the whole product so far — every phase's
-   backend is genuinely verified against the real database, but no
-   phase's UI has been clicked through by a human yet.
-2. **Then Phase 9** (Online Payment Integration) per the roadmap — the
-   next phase not yet started.
+   "Pay Online"/"Confirm"/"Cancel", and document-upload control, across
+   4 different role experiences (admin, teacher portal, parent portal,
+   student portal), not just Super Admin. This is the one open item
+   standing between "built" and "actually done" across the whole
+   product so far — every phase's backend is genuinely verified against
+   the real database, but no phase's UI has been clicked through by a
+   human yet.
+2. **Then Phase 10** (Provider Platform) per the roadmap — the last
+   phase, not yet started. A separate application from the customer
+   product; only depends on Phase 1's Institute/license shape.
 3. **Deliberately scoped out, worth a follow-up**: bespoke
    Principal/Incharge/Office dashboard home pages (Phase 7, they
    currently reuse the shared admin Overview — see §1p); PDF/Excel
-   report export and scheduled report generation (Phase 8, see §1q).
+   report export and scheduled report generation (Phase 8, see §1q); a
+   resolve/dismiss action for reconciliation exceptions, real
+   Easypaisa/JazzCash SDK integration (Phase 9, see §1t — both
+   deliberate honest-simulation boundaries, not oversights); a full,
+   clean, single Phase 0-9 suite run (tonight's was done as targeted
+   isolated re-runs instead, under bad concurrent-load conditions — see
+   §1s).
 4. **Minor cleanup, low priority**: wire real email delivery when a
    provider is chosen; consider a session-refresh-on-expiry flow for
    `product/web` once 20-minute re-logins become annoying; rename the
-   placeholder "Demo Institute" to something real before any actual use.
+   placeholder "Demo Institute" to something real before any actual use;
+   don't leave more than one `tsx watch src/server.ts` dev-server
+   instance running at once (a stray second copy from earlier in this
+   session added avoidable Neon connection load during Phase 9
+   verification — see §1s).
 
 ## 3a. Deviations from PRODUCT_SPEC.md (and why)
 
@@ -1556,6 +1780,62 @@ in order:
 Append a dated entry every session. Keep entries short — what changed, what's
 left, anything the next session needs to know that isn't obvious from the
 code/docs themselves.
+
+### 2026-09-11 (v) — Phase 9 built end-to-end: Online Payment Integration
+
+- Continued directly from entry (u) — user asked to start Phase 9.
+- Backend: real HMAC-SHA256 signed gateway webhook flow — new
+  `payment-gateways` and `online-payment` modules, `PaymentGateway`/
+  `GatewayTransaction`/`PaymentCallback` models, row-level `FOR UPDATE`
+  locking added to both the new webhook SUCCESS path and Phase 5's
+  pre-existing cash-payment path (a real, if narrow, double-payment
+  race, now closed), refund-through-gateway on `completeRefund`. See
+  §1s. 12/12 new `online-payment.test.ts` tests, covering all 10 of
+  spec's named scenarios plus 2 scope tests.
+- **Two real bugs found and fixed by investigation, not guessing**: (1)
+  the original design self-HTTP-fetched this same server to simulate a
+  gateway callback — hung indefinitely inside the Vitest harness (no
+  listening server bound during `supertest` tests), fixed by calling the
+  webhook handler directly in-process with the same signed payload
+  instead; (2) several tests chain 3-4 sequential HTTP calls, each
+  several Neon round trips, occasionally exceeding the default 20s
+  `testTimeout` under real latency — confirmed genuine via a live
+  `curl` timing (9.9s, completed fine, not hung), fixed by raising just
+  those tests' timeouts.
+- Frontend: a real Parent Portal Pay Online flow on `/portal/fees`
+  (replacing the old "pay through the office" placeholder) — initiate →
+  hosted checkout screen → confirm/cancel → outcome; an admin Payment
+  Gateway config screen (`/dashboard/payment-gateways`, SUPER_ADMIN
+  only, webhook secret shown once); a staff Reconciliation dashboard
+  (`/dashboard/reconciliation`, PRINCIPAL/OFFICE). See §1t.
+- **Verified live, end-to-end**: created a disposable parent+student+
+  invoice fixture, logged in as the parent via curl against the live
+  API, forwarded the real cookies to `product/web`'s own server-rendered
+  pages — confirmed the Pay Online button, the checkout page's rendered
+  student/invoice/amount, and (after confirming via the real API) the
+  invoice flipping UNPAID→PAID with the Pay Online button correctly
+  gone afterward. Fixture cleaned up. `npx tsc --noEmit` and
+  `npm run build` clean on both sides — 60 pages total (up from 55).
+- **Verification was messier than prior phases tonight, logged
+  honestly**: running the full Phase 0-9 suite in the background
+  coincided with heavy concurrent Neon load (a stray second, non-
+  listening API dev server process left over from earlier in the
+  session, plus this session's own live curl smoke test, plus the 40+
+  file suite itself) — it stalled repeatedly between files and was
+  killed twice rather than chased further. Closed out instead with
+  targeted isolated re-runs of the 3 files Phase 9 actually touched or
+  added (`payments.test.ts` 17/17, `refunds.test.ts` all passing,
+  `online-payment.test.ts` 12/12), each confirmed clean once a direct
+  round-trip check showed Neon latency back to ~200-300ms — two of
+  those isolated attempts still hit a single documented-flaky (§5a)
+  cold-connection P1001 on the very first query before any Phase 9 code
+  ran, unrelated to this phase's changes. A full clean single-run of
+  the whole Phase 0-9 suite was not obtained this session — left as a
+  known gap for a calmer run, not claimed as done.
+- **Next session should:** either click through Phases 1-9 in a real
+  browser (the one standing item across the whole product — see §3), or
+  start Phase 10 (Provider Platform, the last phase, a separate
+  application).
 
 ### 2026-09-11 (u) — Phase 8 built end-to-end: Reports & Analytics
 

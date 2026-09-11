@@ -72,6 +72,8 @@ const NAV_GROUPS = [
       { href: "/dashboard/discounts", label: "Discounts", roles: ["PRINCIPAL", "OFFICE"] as StaffRole[] },
       { href: "/dashboard/waivers", label: "Waivers", roles: ["PRINCIPAL", "OFFICE"] as StaffRole[] },
       { href: "/dashboard/cash-closing", label: "Cash Closing", roles: ["PRINCIPAL", "OFFICE"] as StaffRole[] },
+      { href: "/dashboard/reconciliation", label: "Reconciliation", roles: ["PRINCIPAL", "OFFICE"] as StaffRole[] },
+      { href: "/dashboard/payment-gateways", label: "Payment Gateways", roles: [] as StaffRole[] },
     ],
   },
   {
