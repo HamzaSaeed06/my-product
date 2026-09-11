@@ -47,6 +47,8 @@ import { cashClosingRouter } from "./modules/cash-closing/routes.js";
 import { leavesRouter } from "./modules/leaves/routes.js";
 import { complaintsRouter } from "./modules/complaints/routes.js";
 import { reportsRouter } from "./modules/reports/routes.js";
+import { paymentGatewaysRouter } from "./modules/payment-gateways/routes.js";
+import { onlinePaymentRouter, paymentCallbackRouter, paymentReconciliationRouter } from "./modules/online-payment/routes.js";
 import { errorHandler, notFoundHandler } from "./middleware/errorHandler.js";
 import { readRateLimiter } from "./middleware/rateLimiter.js";
 
@@ -61,7 +63,20 @@ export function createApp(): Express {
     })
   );
   app.use(cookieParser());
-  app.use(express.json({ limit: "1mb" }));
+  // The `verify` callback stashes the exact raw bytes on the request
+  // before JSON-parsing them — the payment-callback webhook route needs
+  // these to verify an HMAC signature (which is computed over the raw
+  // body, not a re-serialized JSON.stringify of the parsed object; the
+  // two aren't guaranteed byte-identical, e.g. key ordering). Every
+  // other route ignores req.rawBody entirely — this is a no-op for them.
+  app.use(
+    express.json({
+      limit: "1mb",
+      verify: (req, _res, buf) => {
+        (req as express.Request & { rawBody?: Buffer }).rawBody = buf;
+      },
+    })
+  );
   app.use(readRateLimiter);
 
   app.get("/health", (_req, res) => {
@@ -113,6 +128,10 @@ export function createApp(): Express {
   app.use("/api/v1/leaves", leavesRouter);
   app.use("/api/v1/complaints", complaintsRouter);
   app.use("/api/v1/reports", reportsRouter);
+  app.use("/api/v1/payment-gateways", paymentGatewaysRouter);
+  app.use("/api/v1/online-payment", onlinePaymentRouter);
+  app.use("/api/v1/payment-callback", paymentCallbackRouter);
+  app.use("/api/v1/payment-reconciliation", paymentReconciliationRouter);
 
   app.use(notFoundHandler);
   app.use(errorHandler);

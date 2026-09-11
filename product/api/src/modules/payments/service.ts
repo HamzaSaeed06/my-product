@@ -16,7 +16,10 @@ function paymentInclude() {
   return { allocations: true, receipt: true, paymentAttempt: true } as const;
 }
 
-async function amountAlreadyCovered(tx: Prisma.TransactionClient, invoiceId: string): Promise<Prisma.Decimal> {
+// Exported for reuse by online-payment/service.ts's real-webhook success
+// path, which needs the exact same "how much of this invoice is already
+// covered" check inside its own row-locked transaction.
+export async function amountAlreadyCovered(tx: Prisma.TransactionClient, invoiceId: string): Promise<Prisma.Decimal> {
   const [allocations, waivers, credits] = await Promise.all([
     tx.paymentAllocation.aggregate({ where: { invoiceId, status: "ACTIVE" }, _sum: { amount: true } }),
     tx.waiver.aggregate({ where: { invoiceId, status: "APPROVED" }, _sum: { amount: true } }),
@@ -50,6 +53,15 @@ export async function recordPayment(
   ]);
 
   const result = await prisma.$transaction(async (tx) => {
+    // Row-locks the invoice for the rest of this transaction — Phase 9
+    // spec's "Concurrent payments: parent pays online while office
+    // records cash -> lock invoice during payment processing" rule.
+    // Without this, two concurrent transactions (this cash path and the
+    // online-payment webhook path) could both read "not yet paid" before
+    // either commits, double-paying the invoice. The online-payment
+    // success path takes the same lock — see online-payment/service.ts.
+    await tx.$queryRaw`SELECT id FROM "invoices" WHERE id = ${invoice.id} FOR UPDATE`;
+
     if (input.applyCreditId) {
       const credit = await tx.creditTransaction.findUnique({ where: { id: input.applyCreditId } });
       if (!credit || credit.status !== "AVAILABLE") throw new HttpError(400, "CREDIT_NOT_AVAILABLE", "Credit is not available to apply");

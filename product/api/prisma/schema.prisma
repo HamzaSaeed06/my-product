@@ -84,6 +84,8 @@ model User {
   studentProfile Student?
   parentProfile  Parent?
 
+  paymentAttemptsInitiated PaymentAttempt[]
+
   @@map("users")
 }
 
@@ -1486,13 +1488,111 @@ model PaymentAttempt {
   status        PaymentAttemptStatus  @default(INITIATED)
   gatewayTxnId  String?               @unique
   failureReason String?
+  // Who initiated this attempt — set by Phase 9's online-payment flow
+  // (the paying Parent/Student's own user id, since the eventual
+  // Payment.recordedById needs a real User and a webhook callback has no
+  // session of its own to draw one from). Null for Phase 5's
+  // staff-initiated manual attempts, which already have an actorId at
+  // the call site for their own audit log.
+  initiatedById String?
   createdAt     DateTime              @default(now())
   updatedAt     DateTime              @updatedAt
 
   invoice Invoice  @relation(fields: [invoiceId], references: [id])
+  initiatedBy User? @relation(fields: [initiatedById], references: [id])
   payment Payment?
+  gatewayTransaction GatewayTransaction?
 
   @@map("payment_attempts")
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// Phase 9 — Online Payment Integration. See docs/PRODUCT_SPEC.md →
+// "PHASE 9: ONLINE PAYMENT INTEGRATION".
+//
+// No real gateway account exists (Easypaisa/JazzCash aren't things a dev
+// session can sign up for) — SIMULATED is the only provider actually
+// wired up, using the exact same webhook contract (HMAC-signed callback,
+// idempotency by gatewayTxnId, amount verification) a real integration
+// would use, so swapping in a real provider later is a config change,
+// not an architecture change. Same category of honest stub as Phase 0's
+// email delivery and Phase 4's report-card PDF.
+// ─────────────────────────────────────────────────────────────────────────
+
+enum PaymentGatewayProvider {
+  EASYPAISA
+  JAZZCASH
+  SIMULATED
+}
+
+model PaymentGateway {
+  id            String                 @id @default(uuid())
+  provider      PaymentGatewayProvider
+  name          String
+  isActive      Boolean                @default(true)
+  // HMAC-SHA256 secret used to sign/verify webhook callbacks — generated
+  // server-side (lib/tokens.ts), never a real provider credential.
+  webhookSecret String
+  createdAt     DateTime               @default(now())
+  updatedAt     DateTime               @updatedAt
+
+  transactions GatewayTransaction[]
+
+  @@map("payment_gateways")
+}
+
+enum GatewayTransactionStatus {
+  INITIATED
+  PENDING
+  SUCCESS
+  FAILED
+}
+
+// The gateway-side record of one payment attempt — distinct from
+// PaymentAttempt (our own "intent to pay" row, Phase 5) per spec's
+// explicit 5-model list. One PaymentAttempt has at most one
+// GatewayTransaction (the attempt might never reach the gateway at all,
+// e.g. the parent abandons the checkout page).
+model GatewayTransaction {
+  id           String                    @id @default(uuid())
+  gatewayId    String
+  attemptId    String                    @unique
+  // Assigned once the (simulated) gateway "processes" the checkout —
+  // null while still INITIATED, exactly like a real gateway wouldn't
+  // hand back a transaction id until the payer completes the hosted
+  // checkout flow.
+  gatewayTxnId String?                   @unique
+  amount       Decimal                   @db.Decimal(12, 2)
+  status       GatewayTransactionStatus  @default(INITIATED)
+  createdAt    DateTime                  @default(now())
+  updatedAt    DateTime                  @updatedAt
+
+  gateway   PaymentGateway  @relation(fields: [gatewayId], references: [id])
+  attempt   PaymentAttempt  @relation(fields: [attemptId], references: [id], onDelete: Cascade)
+  callbacks PaymentCallback[]
+
+  @@map("gateway_transactions")
+}
+
+// One row per webhook HTTP call received, regardless of outcome —
+// including invalid-signature and unmatched-transaction calls, which
+// never touch GatewayTransaction/Payment at all. This is the audit trail
+// spec's "All actions AUDITED" reconciliation-safety rule asks for, and
+// what makes "Duplicate callback -> no duplicate payment" and "Invalid
+// callback signature -> rejected" independently verifiable after the
+// fact, not just inferable from side effects.
+model PaymentCallback {
+  id                   String   @id @default(uuid())
+  gatewayTransactionId String?
+  gatewayTxnId         String
+  signatureValid       Boolean
+  rawBody              Json
+  outcome              String
+  createdAt            DateTime @default(now())
+
+  gatewayTransaction GatewayTransaction? @relation(fields: [gatewayTransactionId], references: [id])
+
+  @@map("payment_callbacks")
 }
 
 enum CreditStatus {
@@ -1575,6 +1675,11 @@ model Refund {
   approvedById  String?
   approvedAt    DateTime?
   completedAt   DateTime?
+  // Set when completing a refund whose original Payment came through an
+  // online gateway (Phase 9 spec test #10, "Refund through gateway ->
+  // processed correctly") — the (simulated) gateway's own reference for
+  // the reversing transaction. Null for a cash refund.
+  gatewayRefundReference String?
   createdAt     DateTime     @default(now())
   updatedAt     DateTime     @updatedAt
 

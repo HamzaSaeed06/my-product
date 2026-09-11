@@ -213,6 +213,15 @@ const PHASE_8_PERMISSIONS = [
   ["report.export", "Export report data"],
 ] as const;
 
+// Phase 9: Online Payment Integration. payment_gateway.manage is
+// deliberately separate from payment.view/payment.record — configuring
+// which gateways are active (and generating their webhook secrets) is a
+// sensitive setup action, not a day-to-day finance task.
+const PHASE_9_PERMISSIONS = [
+  ["payment_gateway.manage", "Manage online payment gateway configuration"],
+  ["payment.pay_online", "Initiate an online payment for an invoice"],
+] as const;
+
 const ALL_PERMISSIONS = [
   ...PHASE_0_PERMISSIONS,
   ...PHASE_1_PERMISSIONS,
@@ -222,6 +231,7 @@ const ALL_PERMISSIONS = [
   ...PHASE_5_PERMISSIONS,
   ...PHASE_6_PERMISSIONS,
   ...PHASE_8_PERMISSIONS,
+  ...PHASE_9_PERMISSIONS,
 ];
 
 // Phase 7: every non-SUPER_ADMIN role's permission grant, derived from
@@ -428,6 +438,7 @@ const ROLE_PERMISSIONS: Record<Exclude<(typeof CORE_ROLES)[number], "SUPER_ADMIN
     "report_card.view",
     "invoice.view",
     "payment.view",
+    "payment.pay_online",
     "leave.view",
     "leave.create",
     "leave.cancel",

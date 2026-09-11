@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { Prisma } from "@prisma/client";
 import { prisma } from "../../lib/prisma.js";
 import { writeAuditLog } from "../../lib/audit.js";
@@ -67,14 +68,32 @@ export async function decideRefund(id: string, decision: "APPROVED" | "REJECTED"
 // carried out. Kept as a separate step from approval per spec's workflow
 // (Approval -> Refund Payment -> Create Refund Record already exists, this
 // closes the loop).
+//
+// Phase 9 spec test #10 ("Refund through gateway -> processed
+// correctly"): when the original Payment was made ONLINE, completing its
+// refund also records a gatewayRefundReference — standing in for the
+// gateway's own refund API call, same honest-simulation pattern as the
+// rest of Phase 9 (no real gateway account exists to call for real). A
+// CASH payment's refund has no gateway leg, so this stays null for it.
 export async function completeRefund(id: string, actorId: string) {
-  const refund = await prisma.refund.findUnique({ where: { id } });
+  const refund = await prisma.refund.findUnique({ where: { id }, include: { payment: true } });
   if (!refund) throw new HttpError(404, "REFUND_NOT_FOUND", "Refund not found");
   if (refund.status !== "APPROVED") throw new HttpError(409, "NOT_APPROVED", "Only an approved refund can be marked completed");
 
-  const updated = await prisma.refund.update({ where: { id }, data: { status: "COMPLETED", completedAt: new Date() } });
+  const gatewayRefundReference = refund.payment.method === "ONLINE" ? `GWREFUND-${randomUUID()}` : undefined;
 
-  await writeAuditLog({ actorId, action: "COMPLETE", resource: "Refund", recordId: id, newValue: { status: "COMPLETED" } });
+  const updated = await prisma.refund.update({
+    where: { id },
+    data: { status: "COMPLETED", completedAt: new Date(), gatewayRefundReference },
+  });
+
+  await writeAuditLog({
+    actorId,
+    action: "COMPLETE",
+    resource: "Refund",
+    recordId: id,
+    newValue: { status: "COMPLETED", gatewayRefundReference },
+  });
 
   return updated;
 }
