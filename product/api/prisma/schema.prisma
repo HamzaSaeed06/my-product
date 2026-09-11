@@ -75,6 +75,12 @@ model User {
   cashClosingsApproved      CashClosing[]             @relation("CashClosingApprovedBy")
   reconciliationExceptionsResolved ReconciliationException[]
 
+  leavesRequested       Leave[]          @relation("LeaveRequestedBy")
+  leavesDecided         Leave[]          @relation("LeaveDecidedBy")
+  complaintsSubmitted   Complaint[]      @relation("ComplaintSubmittedBy")
+  complaintsAssigned    Complaint[]      @relation("ComplaintAssignedTo")
+  complaintNotesAuthored ComplaintNote[]
+
   @@map("users")
 }
 
@@ -571,6 +577,8 @@ model Student {
   payments          Payment[]
   creditTransactions CreditTransaction[]
   discounts         Discount[]
+  leaves            Leave[]
+  complaints        Complaint[]
 
   @@map("students")
 }
@@ -637,6 +645,7 @@ model Teacher {
   substitutionsAsSubstitute  Substitution[]      @relation("SubstitutionSubstitute")
   homework                   Homework[]
   assessments                Assessment[]
+  leaves                     Leave[]
 
   @@map("teachers")
 }
@@ -1676,4 +1685,109 @@ model ReconciliationException {
   resolvedBy User? @relation(fields: [resolvedById], references: [id])
 
   @@map("reconciliation_exceptions")
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// Phase 6 — Operations (Leave, Complaint, ComplaintNote). See
+// docs/PRODUCT_SPEC.md → "PHASE 6: OPERATIONS". Document and Notification
+// (Phase 0) are reused here, not re-modeled — complaint attachments use
+// Document's existing polymorphic ownerType/ownerId ("Complaint", id),
+// same mechanism Phase 2 used before StudentDocument formalized a real FK
+// for the higher-volume student-document case; complaint volume doesn't
+// warrant a dedicated join table the same way.
+//
+// This phase also completes a deferral Phase 3 explicitly logged: "Approved
+// leave auto-marks attendance as Leave" (spec's Attendance workflow #2) —
+// implemented in attendance/service.ts's markAttendance, which now checks
+// Leave via a function this module exports, overriding an ABSENT mark to
+// LEAVE when an APPROVED student leave covers that date.
+// ─────────────────────────────────────────────────────────────────────────
+
+enum LeaveSubjectType {
+  STUDENT
+  TEACHER
+}
+
+enum LeaveStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  CANCELLED
+}
+
+// Exactly one of studentId/teacherId is set — validated in
+// leaves/service.ts, not expressible as a DB constraint.
+model Leave {
+  id             String           @id @default(uuid())
+  subjectType    LeaveSubjectType
+  studentId      String?
+  teacherId      String?
+  fromDate       DateTime
+  toDate         DateTime
+  reason         String
+  isRetrospective Boolean         @default(false)
+  status         LeaveStatus      @default(PENDING)
+  requestedById  String
+  decidedById    String?
+  decidedAt      DateTime?
+  decisionNote   String?
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+
+  student     Student? @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  teacher     Teacher? @relation(fields: [teacherId], references: [id], onDelete: Cascade)
+  requestedBy User     @relation("LeaveRequestedBy", fields: [requestedById], references: [id])
+  decidedBy   User?    @relation("LeaveDecidedBy", fields: [decidedById], references: [id])
+
+  @@index([studentId, fromDate, toDate])
+  @@map("leaves")
+}
+
+enum ComplaintStatus {
+  OPEN
+  ASSIGNED
+  IN_PROGRESS
+  RESOLVED
+  CLOSED
+  REOPENED
+}
+
+// Status lifecycle per spec: OPEN -> ASSIGNED -> IN_PROGRESS -> RESOLVED ->
+// CLOSED -> REOPENED (-> ASSIGNED again, fresh investigation) — enforced
+// sequentially in complaints/service.ts, same assertTransition shape as
+// Phase 4's Result workflow. "Cannot close without resolution" means CLOSED
+// is only reachable from RESOLVED, never any other status.
+model Complaint {
+  id             String          @id @default(uuid())
+  studentId      String?
+  category       String
+  description    String
+  status         ComplaintStatus @default(OPEN)
+  submittedById  String
+  assignedToId   String?
+  resolutionNote String?
+  resolvedAt     DateTime?
+  closedAt       DateTime?
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+
+  student     Student?        @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  submittedBy User            @relation("ComplaintSubmittedBy", fields: [submittedById], references: [id])
+  assignedTo  User?           @relation("ComplaintAssignedTo", fields: [assignedToId], references: [id])
+  notes       ComplaintNote[]
+
+  @@map("complaints")
+}
+
+model ComplaintNote {
+  id          String   @id @default(uuid())
+  complaintId String
+  authorId    String
+  note        String
+  createdAt   DateTime @default(now())
+
+  complaint Complaint @relation(fields: [complaintId], references: [id], onDelete: Cascade)
+  author    User      @relation(fields: [authorId], references: [id])
+
+  @@map("complaint_notes")
 }

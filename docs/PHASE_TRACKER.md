@@ -15,7 +15,7 @@ phase's state changes — this table is what a new agent scans first.
 | 3 | Academic Operations | Timetable, Attendance (student+teacher), Substitution, Curriculum, Homework, Assessments | 2 | 4-5 wk | 🟡 |
 | 4 | Results & Promotion | Exams, Result workflow (Draft→Submitted→Reviewed→Finalized→Published), Report cards, Promotion/Class jump | 3 | 3-4 wk | 🟡 |
 | 5 | Finance Module | Fee structures, Invoicing, Payments (cash+gateway), Receipts, Refunds, Reconciliation, Cash closing | 2 | 4-5 wk | 🟡 |
-| 6 | Operations | Leave management, Complaints | 0, 2, 3 | 2-3 wk | 🔴 |
+| 6 | Operations | Leave management, Complaints | 0, 2, 3 | 2-3 wk | 🟡 |
 | 7 | Portals & Role-Based Experiences | Principal / Incharge / Office / Teacher / Parent / Student UIs on top of the above | all prior | 4-5 wk | 🔴 |
 | 8 | Reports & Analytics | Cross-module reporting (academic, attendance, finance, staff) | all prior | 3-4 wk | 🔴 |
 | 9 | Online Payment Integration | Payment gateway (Easypaisa/JazzCash-style), webhook idempotency, reconciliation | 5 | 3-4 wk | 🔴 |
@@ -64,8 +64,16 @@ connection drop (P1001) during long test runs was separately investigated
 and confirmed to be external flakiness, not a code defect — see §5a.
 Interactive dialogs across all five phases remain not individually
 click-tested in a real browser — the one open item standing between
-"built" and "actually done" for the whole product so far. See also
-§1c/§1d/§1e/§1f/§1g/§1h/§1i/§1j/§1k/§1l for full detail.
+"built" and "actually done" for the whole product so far. **Phase 6
+backend built**: Leave management (Student/Teacher, retrospective
+detection, approve/reject/cancel) and Complaints (6-state lifecycle:
+Open→Assigned→In Progress→Resolved→Closed→Reopened, investigation notes,
+cannot-close-without-resolution rule) — 26 new integration tests, all
+passing against the real database. Closes a deferral logged back in
+Phase 3: an approved Leave now auto-overrides a teacher's ABSENT mark to
+LEAVE in `markAttendance`, verified by a dedicated cross-module test.
+Phase 6 frontend not yet built. See also
+§1c/§1d/§1e/§1f/§1g/§1h/§1i/§1j/§1k/§1l/§1m for full detail.
 
 ## Notes on dependency ordering
 

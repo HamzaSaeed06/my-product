@@ -44,6 +44,8 @@ import { refundsRouter } from "./modules/refunds/routes.js";
 import { discountsRouter } from "./modules/discounts/routes.js";
 import { waiversRouter } from "./modules/waivers/routes.js";
 import { cashClosingRouter } from "./modules/cash-closing/routes.js";
+import { leavesRouter } from "./modules/leaves/routes.js";
+import { complaintsRouter } from "./modules/complaints/routes.js";
 import { errorHandler, notFoundHandler } from "./middleware/errorHandler.js";
 import { readRateLimiter } from "./middleware/rateLimiter.js";
 
@@ -107,6 +109,8 @@ export function createApp(): Express {
   app.use("/api/v1/discounts", discountsRouter);
   app.use("/api/v1/waivers", waiversRouter);
   app.use("/api/v1/cash-closing", cashClosingRouter);
+  app.use("/api/v1/leaves", leavesRouter);
+  app.use("/api/v1/complaints", complaintsRouter);
 
   app.use(notFoundHandler);
   app.use(errorHandler);

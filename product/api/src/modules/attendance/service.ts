@@ -3,6 +3,7 @@ import { prisma } from "../../lib/prisma.js";
 import { writeAuditLog } from "../../lib/audit.js";
 import { HttpError } from "../../middleware/errorHandler.js";
 import { createApprovalRequest } from "../approvals/service.js";
+import { hasApprovedLeave } from "../leaves/service.js";
 
 // Spec: "Teacher can only mark attendance for assigned classes." Only
 // enforced when the actor actually has a Teacher profile — Office/
@@ -49,8 +50,22 @@ export async function markAttendance(
     throw new HttpError(400, "STUDENT_NOT_ENROLLED", "One or more students are not actively enrolled in this section");
   }
 
+  // Spec's Attendance workflow #2: a student with an approved leave
+  // covering this date is auto-marked LEAVE, never ABSENT, regardless of
+  // what the teacher submitted — completes the deferral logged in
+  // schema.prisma's Phase 3 header comment (Leave didn't exist until
+  // Phase 6). Only ABSENT is overridden; an explicit PRESENT still counts
+  // (e.g. the student showed up despite the approved leave).
+  const resolvedEntries = await Promise.all(
+    input.entries.map(async (e) => {
+      if (e.status !== "ABSENT") return e;
+      const onLeave = await hasApprovedLeave(e.studentId, date);
+      return onLeave ? { ...e, status: "LEAVE" as const } : e;
+    })
+  );
+
   const created = await prisma.$transaction(
-    input.entries.map((e) =>
+    resolvedEntries.map((e) =>
       prisma.attendance.create({
         data: { studentId: e.studentId, sectionId: input.sectionId, date, status: e.status, markedById: actorId },
       })
@@ -61,7 +76,7 @@ export async function markAttendance(
     actorId,
     action: "CREATE",
     resource: "Attendance",
-    newValue: { sectionId: input.sectionId, date: input.date, entries: input.entries },
+    newValue: { sectionId: input.sectionId, date: input.date, entries: resolvedEntries },
   });
 
   return created;

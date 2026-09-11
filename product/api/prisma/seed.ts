@@ -185,6 +185,21 @@ const PHASE_5_PERMISSIONS = [
   ["cash_closing.approve", "Approve a cash closing"],
 ] as const;
 
+// Phase 6: Operations (Leave, Complaints). Document/Notification
+// permissions are already seeded in Phase 0 and reused here.
+const PHASE_6_PERMISSIONS = [
+  ["leave.view", "View leave requests"],
+  ["leave.create", "Request leave"],
+  ["leave.approve", "Approve leave requests"],
+  ["leave.reject", "Reject leave requests"],
+  ["leave.cancel", "Cancel a leave request"],
+  ["complaint.view", "View complaints"],
+  ["complaint.create", "Submit a complaint"],
+  ["complaint.assign", "Assign a complaint to staff"],
+  ["complaint.resolve", "Resolve a complaint"],
+  ["complaint.close", "Close a resolved complaint"],
+] as const;
+
 const ALL_PERMISSIONS = [
   ...PHASE_0_PERMISSIONS,
   ...PHASE_1_PERMISSIONS,
@@ -192,6 +207,7 @@ const ALL_PERMISSIONS = [
   ...PHASE_3_PERMISSIONS,
   ...PHASE_4_PERMISSIONS,
   ...PHASE_5_PERMISSIONS,
+  ...PHASE_6_PERMISSIONS,
 ];
 
 async function main(): Promise<void> {

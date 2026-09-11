@@ -15,7 +15,14 @@ full-suite run), 37 pages total, all 8 new pages smoke-tested
 authenticated-200. Getting to that clean test run surfaced and fixed 3
 real bugs (not just re-running past flakiness) — see §1k/§1l and §5a for
 the full story, including a global Prisma transaction-timeout fix and a
-session auto-refresh added to the test harness itself.
+session auto-refresh added to the test harness itself. **Phase 6 backend
+complete**: Leave management, Complaints (6-state lifecycle) — 26 new
+tests passing, and the Phase 3→6 deferral (approved leave auto-marks
+attendance as LEAVE) is now closed and tested — see §1m. Verifying
+Phase 6 surfaced one more real bug (a fragile `generateStudentCode()`
+sort order, poisoned by a non-numeric test-fixture student code) —
+root-caused and fixed properly, full 42-file/295-test suite now passes
+cleanly. Phase 6 frontend not yet built.
 **Repo state:** Monorepo scaffolded. `product/api` has a working Express +
 TypeScript + Prisma backend implementing all of Phase 0's API surface (auth,
 users, roles/permissions, approvals, documents, notifications, audit).
@@ -926,6 +933,91 @@ argon2 verify against a real stored hash), refresh rotation against a real
 Session row, or the seed/bootstrap scripts actually writing to a database.
 **Do not claim these work until they've been run against a real Postgres.**
 
+### 1m. Phase 6 backend (`product/api`) — VERIFIED WORKING
+
+Operations module per PRODUCT_SPEC.md's "PHASE 6" section — Leave
+management (Student + Teacher, retrospective detection, approve/reject/
+cancel) and Complaints (6-state lifecycle). 3 new models: `Leave`,
+`Complaint`, `ComplaintNote`. 26 new integration tests, all confirmed
+passing against the real database (9 leave tests, 16 complaint tests, 1
+cross-module leave↔attendance test).
+
+- **Leave**: `subjectType` (STUDENT/TEACHER) determines which of
+  `studentId`/`teacherId` must be set — enforced with a `SUBJECT_MISMATCH`
+  error if both or neither match the declared type, verified with a
+  dedicated test. `isRetrospective` is computed server-side
+  (`fromDate` in the past at creation time), not client-supplied — tested
+  by creating a leave with a past `fromDate` and confirming the flag comes
+  back `true`. Lifecycle: PENDING → APPROVED/REJECTED (one-shot, a second
+  `decide` call correctly fails `ALREADY_DECIDED`) or → CANCELLED (blocked
+  once already CANCELLED/REJECTED, via `CANNOT_CANCEL`).
+- **Complaint**: 6-state lifecycle (OPEN → ASSIGNED → IN_PROGRESS →
+  RESOLVED → CLOSED → REOPENED → ASSIGNED again), gated with an
+  `assertStatus` helper mirroring Phase 4's Result-workflow pattern.
+  Verified every illegal transition is actually rejected with
+  `INVALID_STATE_TRANSITION`, not just that the legal path works: starting
+  progress before assignment, resolving before progress started, closing
+  before resolution (spec's explicit "cannot close without resolution"
+  rule), and re-assigning a complaint that isn't OPEN/REOPENED. Notes can
+  be added at any point except CLOSED (`COMPLAINT_CLOSED`, verified).
+  `studentId` is optional — a complaint need not be tied to a specific
+  student (e.g. a facilities complaint) — verified via a second fixture.
+- **Cross-phase integration completed**: Phase 3's `markAttendance`
+  deferred "an approved leave should auto-mark LEAVE instead of ABSENT"
+  until Leave existed (logged in `schema.prisma`'s Phase 3 header comment
+  at the time). Now implemented — `attendance/service.ts` calls the new
+  `hasApprovedLeave(studentId, date)` export from `leaves/service.ts` for
+  every entry submitted as ABSENT, silently upgrading it to LEAVE when an
+  approved leave covers that date; PRESENT entries are never touched even
+  if a leave also covers that date. Verified end-to-end with a dedicated
+  test (`leave-attendance-integration.test.ts`) that creates two students,
+  approves a leave for one, submits both as ABSENT on the covered date,
+  and confirms only the leave-covered student's stored record reads
+  LEAVE while the other correctly stays ABSENT.
+- **No hard deletes**: Leave cancellation and Complaint closure are both
+  status transitions, never row deletions, consistent with every prior
+  phase's policy.
+- **Permissions**: 10 new (`leave.view/create/approve/reject/cancel`,
+  `complaint.view/create/assign/resolve/close`) added to
+  `PHASE_6_PERMISSIONS` in `prisma/seed.ts`, run against the real database
+  and confirmed present both on the `Permission` table and granted to the
+  Super Admin role (checked directly via a throwaway query before trusting
+  any test that depends on them, per this session's "verify, don't
+  assume" rule) — `complaint.assign` doubles as the gate for start-progress
+  and notes (whoever's assigned drives the investigation), while
+  `complaint.create` doubles as the gate for reopen (the submitter, e.g. a
+  parent, is the one who reopens with new information).
+- **A real, pre-existing bug found (not caused by Phase 6, but exposed by
+  its tests) and fixed**: `generateStudentCode()`
+  (`src/lib/studentCode.ts`) computed "next code" from
+  `ORDER BY studentCode DESC LIMIT 1` — a plain lexicographic sort. Many
+  test fixtures across the suite (this session's new `leaves.test.ts`
+  included) set human-readable, non-numeric-suffix student codes like
+  `STU-LEAVE-<suffix>` for readability — and `"STU-LEAVE-..."` sorts
+  lexicographically **above** any real `"STU-########"` code (`L` > `0`).
+  A single such row left behind after `leaves.test.ts`'s `afterAll` hit a
+  transient Neon disconnect mid-cleanup (silently swallowed by the
+  established `.catch(() => {})` guard, per §5a's documented tradeoff)
+  was enough to permanently break `createStudent` for *every* caller:
+  `parseInt("LEAVE-<suffix>", 10)` → `NaN` → falls back to `1` →
+  collides with the real `STU-00000001` row every single retry
+  (deterministic, not flaky) → all 5 P2002 retries exhausted → 500.
+  Caught by the full-suite re-run: `students.test.ts` failed 9/9. Root-
+  caused by hand (not guessed) via a direct DB query showing the orphan
+  row sorted first, confirmed by manually deleting it and watching
+  `students.test.ts` pass again, then **fixed properly** — not just
+  cleaned the data — by making `generateStudentCode()` use a
+  regex-filtered raw query (`WHERE "studentCode" ~ '^STU-[0-9]{8}$'`) so
+  any future non-standard-format row (test artifact or otherwise) can
+  never poison real student-code generation again. Re-ran the full
+  42-file suite afterward: **295/295 passing**, clean.
+- **Verified for real**: `npx tsc --noEmit` clean, `npm run build` clean,
+  all 26 new tests pass in isolation against the real database, and the
+  full 42-file, 295-test historical suite passes cleanly after the fix
+  above (see session log below).
+- **Not done yet**: no `product/web` screens for Phase 6 — Leave Request,
+  Leave Approval, Complaint Submission, Complaint Management. Built next.
+
 ## 2. Decided tech stack (from PRODUCT_SPEC.md §3)
 
 **Installed and verified in `product/api`:** express, prisma/@prisma/client
@@ -974,19 +1066,19 @@ docs/
 Phase 0: fully done. Phase 1: backend + frontend built (§1c/§1d). Phase 2:
 backend + frontend built (§1e/§1f). Phase 3: backend + frontend both built
 (§1g/§1h) — 168 tests, 25 pages. Phase 4: backend + frontend both built
-(§1i/§1j) — 209 tests, 29 pages. Phase 5: **backend + frontend both built**
-(§1k/§1l) — 269 tests (full clean run), 37 pages. What's left, in order:
+(§1i/§1j) — 209 tests, 29 pages. Phase 5: backend + frontend both built
+(§1k/§1l) — 269 tests (full clean run), 37 pages. Phase 6: **backend
+built** (§1m) — 26 new tests, frontend next. What's left, in order:
 
-1. **Click through Phase 1-5's screens in a real browser** — every
+1. **Phase 6 frontend** (Leave Request, Leave Approval, Complaint
+   Submission, Complaint Management screens) — in progress.
+2. **Click through Phase 1-6's screens in a real browser** — every
    "+ Add", "Edit", "Archive", "Approve/Reject", "Transfer", "Withdraw",
    "Publish", "Submit", "Record payment", and document-upload control.
    This is the one open item standing between "built" and "actually done"
    across the whole product so far — every phase's backend is genuinely
    verified against the real database, but no phase's UI has been
    clicked through by a human yet.
-2. **Then Phase 6** (Operations — Leave, Complaints), the last piece that
-   depends on Phase 5's neighbors (Phase 2/3) rather than Phase 5 itself,
-   so it's still a free choice, not a fixed order.
 3. **Minor cleanup, low priority**: wire real email delivery when a
    provider is chosen; consider a session-refresh-on-expiry flow for
    `product/web` once 20-minute re-logins become annoying; rename the
@@ -1102,6 +1194,38 @@ backend + frontend built (§1e/§1f). Phase 3: backend + frontend both built
 Append a dated entry every session. Keep entries short — what changed, what's
 left, anything the next session needs to know that isn't obvious from the
 code/docs themselves.
+
+### 2026-09-11 (r) — Phase 6 backend built: Leave management, Complaints; fixed a real generateStudentCode() bug
+
+- Continued directly from entry (q). Built Leave (`Leave` model,
+  Student/Teacher subject types, retrospective detection,
+  approve/reject/cancel) and Complaints (`Complaint`/`ComplaintNote`
+  models, 6-state lifecycle) — see §1m for full detail.
+- Closed the Phase 3→6 deferral: `markAttendance` now consults
+  `hasApprovedLeave()` and auto-upgrades ABSENT to LEAVE, verified by a
+  dedicated cross-module test (`leave-attendance-integration.test.ts`).
+- 26 new integration tests, all passing individually against the real
+  database.
+- A full-suite re-run (295 tests) then surfaced a **real, pre-existing
+  bug**, not a Phase 6 defect but exposed by its tests:
+  `generateStudentCode()` sorted candidate codes lexicographically, and a
+  leftover test-fixture student code (`STU-LEAVE-*`, left behind by a
+  transient Neon disconnect during cleanup) sorted above every real
+  `STU-########` code, permanently breaking `createStudent` for everyone
+  (`students.test.ts` went 0/9). Root-caused by hand, not guessed, then
+  fixed properly in `src/lib/studentCode.ts` with a regex-filtered query
+  rather than just deleting the bad row — same "fix root cause" standard
+  applied to the 3 bugs found during Phase 5 verification.
+- **Verified for real**: `npx tsc --noEmit` and `npm run build` both
+  clean; re-ran the full suite after the fix — **42 files, 295/295 tests
+  passing**, clean.
+- **Not done**: Phase 6 frontend (Leave Request, Leave Approval,
+  Complaint Submission, Complaint Management screens) — next.
+- **Next session should**: build Phase 6 frontend following the
+  established pattern (screens under a new sidebar group, verify
+  typecheck/build, log in via curl, confirm pages render 200), or tackle
+  §3 item 2 (click-testing all phases' dialogs in a real browser) if the
+  user prioritizes that instead.
 
 ### 2026-09-11 (q) — Phase 5 frontend built: Fee Structures, Invoicing, Payments, Refunds, Discounts, Waivers, Cash Closing
 
