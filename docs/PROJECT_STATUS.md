@@ -33,7 +33,16 @@ mobile-first `/portal` shell for Teacher/Parent/Student (9 pages) — see
 Teacher, Parent, Student) against real running dev servers. 48 pages
 total. Full suite: 289/307 passed outright, the remaining 18 failed only
 on documented Neon flakiness (§5a) and re-ran clean immediately after —
-effectively 307/307.
+effectively 307/307. **Phase 8 backend and frontend both complete**: 5
+live-computed report categories (Academic, Attendance, Financial,
+Admissions, Staff) verified against known fixture data (exact
+percentages, not just "some data"), CSV export with a separate
+`report.export` permission, a new Report Center + 5 Viewer pages with
+`recharts` charts — see §1q/§1r. Live verification caught and fixed a
+real bug: some roles have a report-view permission but lack the
+permission for a filter dropdown's data (e.g. Office can view financial
+reports but not list exams) — was crashing with a 500, now degrades
+gracefully.
 **Repo state:** Monorepo scaffolded. `product/api` has a working Express +
 TypeScript + Prisma backend implementing all of Phase 0's API surface (auth,
 users, roles/permissions, approvals, documents, notifications, audit).
@@ -1243,6 +1252,121 @@ the correct one.
   (already scope-enforced per §1o) is there for a future session to
   build those overview pages without any backend work.
 
+### 1q. Phase 8 backend (`product/api`) — VERIFIED WORKING
+
+Reports & Analytics per PRODUCT_SPEC.md's "PHASE 8" section — 5 report
+categories (Academic, Attendance, Financial, Admission, Staff), each
+computed **live** from Phase 1-7's real data. No new persistent models:
+every number in every report is recomputed from the source tables on
+each request, nothing is cached or stored. Per spec's own note, a custom
+report builder and "auto-generate daily/weekly/monthly" scheduling are
+explicitly out of scope (the latter would need a job scheduler this app
+doesn't have) — documented deferrals, not oversights.
+
+- **`src/modules/reports/service.ts`** — real Prisma aggregation, not
+  mocked numbers, for all 5 categories:
+  - **Academic** (`?examId=&sectionId=`): student performance (%),
+    class/subject/teacher averages, curriculum-topic completion %,
+    pass/fail rates. "Pass" is defined as >=40% — not specified anywhere
+    else in the schema, so this module owns that choice in one named
+    constant (`PASS_THRESHOLD`) rather than a scattered magic number.
+  - **Attendance** (`?dateFrom=&dateTo=&sectionId=&classId=&campusId=`):
+    daily/monthly/student-wise/class-wise breakdowns, highest-absence
+    days. **Deviation**: spec asks for a "Late arrivals" metric, but
+    `AttendanceStatus` is only PRESENT/ABSENT/LEAVE — no LATE state
+    exists anywhere in the schema (Phase 3 never modeled tardiness
+    separately from absence). Omitted rather than faked.
+  - **Financial** (`?dateFrom=&dateTo=&campusId=`): daily/monthly
+    collection, outstanding fees, paid-invoice count, discount/waiver
+    totals, campus-wise revenue (attributed via each student's *current*
+    active enrollment — Payment/Invoice carry no campusId directly,
+    since Student is deliberately campus-context-free per Phase 2's
+    design), cashier reports (reusing Phase 5's CashClosing), pending
+    reconciliation (reusing Phase 5's ReconciliationException).
+  - **Admissions** (`?dateFrom=&dateTo=&campusId=&academicYearId=`):
+    applications received, approved/rejected/pending/withdrawn counts,
+    monthly enrollment trend, per-section capacity utilization.
+  - **Staff** (`?dateFrom=&dateTo=&campusId=`): teacher workload
+    (sections/subjects assigned), attendance %, approved-leave counts.
+- **CSV export is the one format actually implemented.** PDF/Excel need
+  a rendering dependency this project doesn't have — same category of
+  deferral as Phase 4's report-card PDF stub. **Export is gated by a
+  SEPARATE permission (`report.export`) from viewing**, per spec's
+  explicit rule — a role with only `report.view_X` sees the report on
+  screen but a `?format=csv` request 403s with `EXPORT_NOT_ALLOWED`.
+- **Permissions**: `report.view_academic/attendance/financial/
+  admissions/staff` + `report.export`, granted per spec's per-role
+  screen descriptions — PRINCIPAL gets all 6 ("broad oversight"), OFFICE
+  gets financial+admissions+export ("administrative staff"), INCHARGE
+  gets academic+attendance ("scoped academic manager"). TEACHER/PARENT/
+  STUDENT get none — Reports has no screen in their portal per spec.
+- **Verified for real**: a new `reports.test.ts` (9 tests) builds a
+  fixture exam+results with *known* marks (90% and 20%) and asserts the
+  computed `passFailRates`, `classPerformance` average (55%),
+  `subjectWiseAnalysis` average, and `teacherPerformance` average all
+  come back exactly right — not just "some data returned." Also verifies
+  CSV export headers/content, and permission enforcement (a Teacher
+  fixture user gets 403 on academic; a Parent fixture gets 403 on
+  financial; an Incharge fixture with `report.view_academic` but not
+  `report.export` gets 403 on `?format=csv` specifically). `npx tsc
+  --noEmit` and `npm run build` both clean. Full historical suite
+  re-verified clean afterward (see session log).
+
+### 1r. Phase 8 frontend (`product/web`) — screens built, permission edge case found and fixed live
+
+Report Center (`/dashboard/reports`, 5 category cards) + one Viewer page
+per category, each with its own filters (exam/section for Academic;
+date range + campus for the other 4), a couple of `recharts` bar/line
+visualizations, a results table, and an Export CSV button.
+
+- **`recharts@3` newly installed** — the first charting dependency in
+  this app; `npm install`, 0 vulnerabilities.
+- **CSV download as a same-origin passthrough**
+  (`dashboard/reports/export/route.ts`): a browser can't hit
+  `product/api`'s CSV endpoint directly with credentials (its cookies
+  are httpOnly and scoped to `product/web`'s own origin — the BFF
+  pattern every Server Action already uses). This Route Handler
+  re-attaches the cookies server-side and forwards only a fixed
+  whitelist of 5 report categories — never an arbitrary path — then
+  streams the CSV straight back so the browser's native download flow
+  handles it.
+- **A real bug found and fixed during live verification, not by
+  inspection**: the first live test (an Office-role fixture user
+  hitting the Academic report) crashed with a raw 500, not a clean
+  denial. Root cause, found by reading the dev server's actual stack
+  trace rather than guessing: the page's *filter-support* fetches
+  (`/api/v1/exams`, `/api/v1/campuses` — needed to populate the
+  dropdowns) require their own permissions (`exam.view`, `campus.view`)
+  independent of whether the actor has the `report.view_X` permission
+  for the report itself, and several roles have one without the other
+  (Office has `report.view_financial` but not `exam.view`; Incharge has
+  `report.view_attendance` but not `campus.view`). Original code let
+  any 403 from those calls propagate as an uncaught throw. Fixed in two
+  layers: (1) every report page's entire body is now wrapped in a
+  try/catch that renders a clean "You do not have permission to view
+  this report" message on a 403 from the *report* endpoint itself; (2)
+  a separate `apiRequestOrEmpty` helper degrades the *supplementary*
+  filter-list fetches (campus dropdown) to an empty list on 403 instead
+  of blocking the whole page — a role that can see a report but not the
+  full campus list still sees the report, just with a narrower filter
+  bar. Also added `exam.view` to INCHARGE and `campus.view` to OFFICE
+  (both were plausible, small, justified permission gaps exposed by this
+  same investigation, not just papered over with the frontend fallback).
+  Re-verified live as Office (denied on Academic, allowed on Financial)
+  and Incharge (allowed on both Academic and Attendance, with the
+  campus filter correctly empty) after the fix — no more 500s.
+- **Verified live**: logged in as Super Admin, a disposable Office
+  fixture, and a disposable Incharge fixture via the established curl
+  technique against real running dev servers; confirmed the CSV export
+  route returns real `text/csv` with correct headers end-to-end.
+  `npx tsc --noEmit` and `npm run build` both clean — 55 routes total (7
+  new `/dashboard/reports/*`, up from 48).
+- **Not done at this pass**: PDF/Excel export (deferred, see §1q);
+  Favorites/Recent reports (would need a persistence layer this session
+  didn't build — the "Report Center: Browse by category" half of spec's
+  screen list is done, "Favorites, Recent reports" is not); scheduled
+  report generation (needs a job scheduler this app doesn't have).
+
 ## 2. Decided tech stack (from PRODUCT_SPEC.md §3)
 
 **Installed and verified in `product/api`:** express, prisma/@prisma/client
@@ -1294,27 +1418,29 @@ backend + frontend built (§1e/§1f). Phase 3: backend + frontend both built
 (§1i/§1j) — 209 tests, 29 pages. Phase 5: backend + frontend both built
 (§1k/§1l) — 269 tests (full clean run), 37 pages. Phase 6: backend +
 frontend both built (§1m/§1n) — 26 new tests, 39 pages total. Phase 7:
-**backend + frontend both built** (§1o/§1p) — role permissions for all 7
+backend + frontend both built (§1o/§1p) — role permissions for all 7
 roles, scope enforcement, Student/Parent login, a new `/portal` shell —
-48 pages total. All Phases 0-7 are now backend+frontend complete.
-What's left, in order:
+48 pages total. Phase 8: **backend + frontend both built** (§1q/§1r) —
+5 live-computed report categories, CSV export, Report Center — 55 pages
+total. All Phases 0-8 are now backend+frontend complete. What's left,
+in order:
 
-1. **Click through Phases 1-7's screens in a real browser** — every
+1. **Click through Phases 1-8's screens in a real browser** — every
    "+ Add", "Edit", "Archive", "Approve/Reject", "Transfer", "Withdraw",
    "Publish", "Submit", "Record payment", "Assign/Resolve/Close/Reopen",
-   "Mark attendance", "Assign homework", "Request leave", and
-   document-upload control, now across 4 different role experiences
+   "Mark attendance", "Assign homework", "Request leave", "Export CSV",
+   and document-upload control, across 4 different role experiences
    (admin, teacher portal, parent portal, student portal), not just
    Super Admin. This is the one open item standing between "built" and
    "actually done" across the whole product so far — every phase's
    backend is genuinely verified against the real database, but no
    phase's UI has been clicked through by a human yet.
-2. **Then Phase 8** (Reports & Analytics) per the roadmap — the next
-   phase not yet started.
-3. **Deliberately scoped out of Phase 7, worth a follow-up**: bespoke
-   Principal/Incharge/Office dashboard home pages (they currently reuse
-   the same admin Overview as everything else, just with a filtered
-   sidebar) — see §1p's "Not done at this pass."
+2. **Then Phase 9** (Online Payment Integration) per the roadmap — the
+   next phase not yet started.
+3. **Deliberately scoped out, worth a follow-up**: bespoke
+   Principal/Incharge/Office dashboard home pages (Phase 7, they
+   currently reuse the shared admin Overview — see §1p); PDF/Excel
+   report export and scheduled report generation (Phase 8, see §1q).
 4. **Minor cleanup, low priority**: wire real email delivery when a
    provider is chosen; consider a session-refresh-on-expiry flow for
    `product/web` once 20-minute re-logins become annoying; rename the
@@ -1430,6 +1556,48 @@ What's left, in order:
 Append a dated entry every session. Keep entries short — what changed, what's
 left, anything the next session needs to know that isn't obvious from the
 code/docs themselves.
+
+### 2026-09-11 (u) — Phase 8 built end-to-end: Reports & Analytics
+
+- Continued directly from entry (t) — user asked to start Phase 8.
+- Backend: `src/modules/reports/` computes 5 report categories live
+  from real data (no new persistent models). Real Prisma aggregation
+  throughout — verified against a fixture with known marks (90%/20%),
+  asserting the exact computed averages (55%) and pass/fail counts, not
+  just "some data returned." CSV export gated by a separate
+  `report.export` permission per spec. See §1q.
+- Permissions per role, matching spec's screen descriptions: PRINCIPAL
+  all 6, OFFICE financial+admissions+export, INCHARGE academic+
+  attendance. 9 new `reports.test.ts` tests, all passing.
+- Frontend: Report Center + 5 Viewer pages, `recharts@3` newly
+  installed for charts, a same-origin CSV-download Route Handler (the
+  browser can't hit the API's CSV endpoint directly — same BFF-cookie
+  reasoning as every other Server Action). See §1r.
+- **A real bug found live, not by inspection**: an Office-role fixture
+  user hitting the Academic report page crashed with a raw 500. Root
+  cause (found by reading the actual dev-server stack trace): the
+  page's filter-dropdown data (exams, campuses) needs its own
+  permissions independent of the report-view permission, and several
+  roles have one without the other. Fixed in two layers — the whole
+  page body now catches a 403 from the *report* endpoint and shows a
+  clean message; a `apiRequestOrEmpty` helper degrades *supplementary*
+  filter-list fetches to `[]` instead of blocking the page. Also closed
+  two small, justified permission gaps this exposed (`exam.view` for
+  INCHARGE, `campus.view` for OFFICE). Re-verified live as both Office
+  and Incharge after the fix — no more 500s, correct behavior either
+  way (denied vs. shown-with-narrower-filters).
+- **Verified live**: Super Admin + disposable Office/Incharge fixture
+  users via the established curl technique against real running dev
+  servers; the CSV export route confirmed end-to-end with real
+  `text/csv` headers. `npx tsc --noEmit` and `npm run build` both clean
+  on both sides — 55 pages total (up from 48).
+- Full suite re-run after all Phase 8 changes: see next entry / §5a for
+  the result once the background run completes.
+- **Not done**: PDF/Excel export, Favorites/Recent reports, scheduled
+  report generation — all documented deferrals in §1q/§1r.
+- **Next session should**: either click through Phases 1-8's dialogs in
+  a real browser (the single largest standing open item across the
+  whole product), or start Phase 9 (Online Payment Integration).
 
 ### 2026-09-11 (t) — Phase 7 built end-to-end: role permissions, scope enforcement, Student/Parent login, /portal shell
 

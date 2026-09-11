@@ -17,7 +17,7 @@ phase's state changes — this table is what a new agent scans first.
 | 5 | Finance Module | Fee structures, Invoicing, Payments (cash+gateway), Receipts, Refunds, Reconciliation, Cash closing | 2 | 4-5 wk | 🟡 |
 | 6 | Operations | Leave management, Complaints | 0, 2, 3 | 2-3 wk | 🟡 |
 | 7 | Portals & Role-Based Experiences | Principal / Incharge / Office / Teacher / Parent / Student UIs on top of the above | all prior | 4-5 wk | 🟡 |
-| 8 | Reports & Analytics | Cross-module reporting (academic, attendance, finance, staff) | all prior | 3-4 wk | 🔴 |
+| 8 | Reports & Analytics | Cross-module reporting (academic, attendance, finance, staff) | all prior | 3-4 wk | 🟡 |
 | 9 | Online Payment Integration | Payment gateway (Easypaisa/JazzCash-style), webhook idempotency, reconciliation | 5 | 3-4 wk | 🔴 |
 | 10 | Provider Platform | Provider-side control plane: customer/license/deployment management, heartbeat, support tickets | 1 | 4-5 wk | 🔴 |
 
@@ -91,12 +91,27 @@ requirement, not a filtered admin reuse. Live-verified by logging in as
 all 4 role shapes (Super Admin, Teacher, Parent, Student) against real
 running dev servers — correct post-login redirect per role, every page
 200 with accurate empty states, zero error-boundary text. 48 pages
-total. All Phase 0-7 backends and frontends are now built; interactive
-dialogs across all seven phases remain the one standing item not yet
-click-tested in a real browser. Bespoke Principal/Incharge/Office
-dashboard home pages (they currently reuse the shared admin Overview)
-are a deliberate, documented follow-up. See also
-§1c/§1d/§1e/§1f/§1g/§1h/§1i/§1j/§1k/§1l/§1m/§1n/§1o/§1p for full detail.
+total. Bespoke Principal/Incharge/Office dashboard home pages (they
+currently reuse the shared admin Overview) are a deliberate, documented
+follow-up. **Phase 8 backend built**: 5 report categories (Academic,
+Attendance, Financial, Admissions, Staff) computed live from real data
+via genuine Prisma aggregation — verified against a fixture with known
+marks, asserting exact computed percentages, not just "data returned."
+CSV export gated by a separate `report.export` permission per spec — 9
+new tests, all passing. **Phase 8 frontend built**: Report Center + 5
+Viewer pages with `recharts` charts and a same-origin CSV-download
+route. Live verification caught and fixed a real bug: a role with
+`report.view_X` but not the permission for a filter dropdown's
+supporting data (e.g. Office viewing Financial reports without
+`exam.view`) was crashing with a raw 500 — now degrades gracefully
+(page still renders, filter list just narrower) while a genuine
+report-permission denial shows a clean message. 55 pages total. All
+Phase 0-8 backends and frontends are now built; interactive dialogs
+across all eight phases remain the one standing item not yet
+click-tested in a real browser. PDF/Excel export and scheduled report
+generation are deliberate, documented deferrals. See also
+§1c/§1d/§1e/§1f/§1g/§1h/§1i/§1j/§1k/§1l/§1m/§1n/§1o/§1p/§1q/§1r for full
+detail.
 
 ## Notes on dependency ordering
 

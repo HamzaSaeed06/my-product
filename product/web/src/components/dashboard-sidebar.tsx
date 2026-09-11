@@ -81,6 +81,10 @@ const NAV_GROUPS = [
       { href: "/dashboard/complaints", label: "Complaints", roles: ["PRINCIPAL", "INCHARGE", "OFFICE"] as StaffRole[] },
     ],
   },
+  {
+    label: "Reports",
+    items: [{ href: "/dashboard/reports", label: "Report Center", roles: ["PRINCIPAL", "INCHARGE", "OFFICE"] as StaffRole[] }],
+  },
 ] as const;
 
 export function DashboardSidebar({ roles }: { roles: string[] }) {
