@@ -2,19 +2,14 @@
 // PROVIDER PLATFORM" and its "Provider Database (Platform DB - Separate)"
 // architecture (§2 "COMMERCIAL & DEPLOYMENT MODEL").
 //
-// DEVIATION FROM SPEC, recorded per docs/README.md convention: spec's
-// diagram shows the provider platform on a fully separate database server.
-// This session has one provisioned Neon Postgres instance; a brand-new
-// database/project isn't something this agent can provision without new
-// credentials. Used a distinct Postgres SCHEMA ("provider", vs product/api's
-// "public") on the SAME instance instead — set via this app's own
-// DATABASE_URL's `?schema=provider` query param (the same convention
-// product/api's .env.example already documents for `public`), so every
-// table below lives in its own namespace with zero risk of colliding with
-// or querying customer operational data, without requiring new
-// infrastructure. See docs/PROJECT_STATUS.md §1u for the full reasoning. A
-// real production deployment would point this at its own physical
-// database, per spec.
+// Runs on a genuinely SEPARATE Postgres instance from product/api's — a
+// different Neon project entirely, not just a different schema on the
+// same server (an earlier pass used a same-instance-different-schema
+// workaround for lack of separate credentials; the user provided a real,
+// dedicated Neon project for this platform, closing that gap — see
+// docs/PROJECT_STATUS.md §1u for the corrected reasoning). Zero risk of
+// colliding with or querying customer operational data, matching spec
+// exactly rather than approximating it.
 //
 // No roles/permissions system here — spec never describes provider-side
 // RBAC (unlike product/api's ROLE+PERMISSION+SCOPE model for 7 customer

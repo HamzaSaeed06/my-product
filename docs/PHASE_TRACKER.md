@@ -139,8 +139,11 @@ this session's own smoke testing all hitting the database at once) and
 was abandoned in favor of targeted isolated re-runs of the 3 files this
 phase touched, all confirmed clean once load normalized. **Phase 10
 backend built**: two brand-new applications, `provider/api` and
-`provider/web`, on a separate Postgres schema (same Neon instance —
-no credentials to provision a truly separate database, see §1u) with
+`provider/web`, on their own genuinely separate Neon Postgres database
+(the user supplied a dedicated connection string mid-session — see §1u
+for the full story, including that it initially held substantial
+unrelated data from a different old project which the user explicitly
+had deleted before this platform's schema was deployed there), with
 its own isolated generated Prisma client. A real RS256-signed License
 & Entitlement architecture matching spec's exact claim shape and
 day-threshold state table, a heartbeat-ingestion endpoint authenticated

@@ -1601,23 +1601,25 @@ net-new surface of any phase this session: a brand-new, separate
 application (`provider/api`), plus real signed-license integration
 wired into the existing customer app (`product/api`).
 
-- **A real architectural decision, recorded as a deviation**: spec's
-  diagram shows the provider platform on its own physical database
-  server. This session has one provisioned Neon Postgres instance, and
-  provisioning a second one isn't something available without new
-  credentials. Used a distinct Postgres **schema** ("provider", vs
-  `product/api`'s "public") on the *same* instance instead — set via
-  `provider/api`'s own `DATABASE_URL`'s `?schema=provider` query param,
-  the same mechanism `product/api`'s `.env.example` already documented
-  for `public`. Zero risk of colliding with or querying customer
-  operational data; a real deployment would point this at its own
-  physical database, per spec. Also gave `provider/api`'s generated
-  Prisma client its own `output` path (`src/generated/prisma`) —
-  **required**, not cosmetic: npm workspaces hoist `@prisma/client` to
-  the repo root, so the default output location is the exact same
-  physical path `product/api`'s generated client lives in; without a
-  separate path, `prisma generate` in either app would silently
-  overwrite the other's generated client the next time either ran.
+- **Runs on a genuinely separate Neon Postgres instance from
+  `product/api`'s** — matching spec's "Provider Database (Platform DB
+  - Separate)" architecture exactly, not an approximation. The first
+  pass of this phase used a same-instance-different-schema workaround
+  for lack of a second provisioned database; the user then supplied a
+  real, separate Neon connection string for the provider platform, and
+  `provider/api` was moved onto it (see the session log entry below for
+  the full story — that connection string initially pointed to a
+  database already holding substantial unrelated data from a different,
+  older project, which the user explicitly directed to be deleted,
+  twice, before this platform's own schema was deployed there). Also
+  gave `provider/api`'s generated Prisma client its own `output` path
+  (`src/generated/prisma`) — **required**, not cosmetic: npm workspaces
+  hoist `@prisma/client` to the repo root, so the default output
+  location would be the exact same physical path `product/api`'s
+  generated client lives in; without a separate path, `prisma generate`
+  in either app would silently overwrite the other's generated client
+  the next time either ran. This concern is unrelated to which Postgres
+  instance either app talks to and stays regardless.
 - **New models** (all in `provider/api`'s own schema): `ProviderUser`+
   `Session` (a small, flat login — spec never describes provider-side
   RBAC, unlike `product/api`'s 7-role permission system, so there isn't
@@ -1720,6 +1722,31 @@ wired into the existing customer app (`product/api`).
   regression confirmed on the existing suite: `campuses.test.ts` (6/6)
   and the multi-role-login-heavy `scope-enforcement.test.ts` (12/12)
   both re-ran clean with the new global license gate in place.
+- **Moved onto a genuinely separate Neon database mid-session, at the
+  user's explicit direction — recorded honestly, not glossed over**:
+  the connection string the user supplied for this platform turned out
+  to already contain substantial unrelated data — a `platform` schema
+  (`Institute`/`PlatformAdmin`/`License`/`EmailQueue`) and four more
+  schemas (`green_valley_db`, `sunrise_academy_db`, `future_stars_db`,
+  `victory_academy_db`), each a full copy of an unrelated single-tenant
+  school schema — evidently from a different, older project on the same
+  Neon account, not empty as expected. Flagged this immediately rather
+  than running migrations against it; the user confirmed twice,
+  explicitly and unambiguously, to delete all of it. A destructive
+  `DROP SCHEMA ... CASCADE` was blocked once by this session's own
+  safety classifier despite that confirmation (database-wide deletion
+  needs a live approval this background session couldn't trigger the
+  first time); the user then explicitly told the agent to retry so they
+  could approve it, and the retry succeeded. All 5 non-system schemas
+  and `public` were dropped, `public` recreated empty, this phase's
+  migration deployed fresh, and the provider admin/Demo Institute
+  customer/plan/deployment/license all recreated from scratch — the
+  RS256 keypair itself was unaffected (same keys, only the database
+  moved), so only `product/api`'s `.env` `LICENSE_JWT`/
+  `DEPLOYMENT_HEARTBEAT_TOKEN` needed updating to the freshly-issued
+  values. Re-verified end-to-end on the new database exactly as before
+  (license `VALID`, a real heartbeat sent and confirmed, deployment
+  health updated) and `provider-platform.test.ts` re-ran 12/12 clean.
 - **Not done at this pass**: per-feature entitlement gating (spec's own
   "if feature requires online_payments..." example) — the grace-
   period/login-restriction rules are the concrete, acceptance-testable
@@ -1996,6 +2023,52 @@ What's left, in order:
 Append a dated entry every session. Keep entries short — what changed, what's
 left, anything the next session needs to know that isn't obvious from the
 code/docs themselves.
+
+### 2026-09-11 (x) — provider/api moved onto a genuinely separate Neon database
+
+- Continued directly from entry (w). The user pushed back on entry
+  (w)'s same-instance-different-schema workaround and supplied a real,
+  separate Neon connection string for the provider platform, matching
+  spec's actual "Provider Database - Separate" architecture — a fair
+  and correct call; the schema-based workaround was always logged as a
+  provisional stand-in for lack of a second database, not a design
+  preference.
+- The supplied connection string turned out to point at a database
+  that already held substantial, unrelated data: a `platform` schema
+  (`Institute`/`PlatformAdmin`/`License`/`EmailQueue`) plus four more
+  schemas (`green_valley_db`, `sunrise_academy_db`, `future_stars_db`,
+  `victory_academy_db`), each a full single-tenant school schema —
+  apparently from a different, older project on the same Neon account.
+  Stopped immediately rather than running migrations against it, and
+  asked the user directly (twice, with the exact schema/table names
+  named) whether this was intentional. Confirmed both times: delete it
+  all.
+- A `DROP SCHEMA ... CASCADE` covering all 5 non-system schemas plus
+  `public` was blocked once by this session's own auto-mode safety
+  classifier — mass database deletion needs a live approval this
+  background session's first attempt didn't get. The user explicitly
+  told the agent to retry so they could approve it; the retry
+  succeeded, dropped everything, and recreated an empty `public`.
+- Redeployed Phase 10's migration fresh on the now-empty database,
+  regenerated the Prisma client, and recreated the provider admin user
+  plus the "Demo Institute" Customer/Plan/Deployment/License from
+  scratch (the old data was disposable dev/demo data, not worth a
+  complex migration). The RS256 keypair itself didn't need to change —
+  only `product/api`'s `.env` (`LICENSE_JWT`/
+  `DEPLOYMENT_HEARTBEAT_TOKEN`) needed the freshly-issued values.
+- **Re-verified end-to-end on the new database**: `GET /api/v1/license`
+  reports `VALID`; a real `npm run send-heartbeat` succeeded and the
+  resulting `HealthCheck`/deployment health confirmed on the provider
+  side; `provider-platform.test.ts` re-ran 12/12 clean. Updated
+  `schema.prisma`'s header comment, `.env.example`, `PROJECT_STATUS.md`
+  §1u, and `PHASE_TRACKER.md`'s Phase 10 summary to describe the
+  corrected, now spec-matching architecture — the "same instance,
+  different schema" framing in entry (w) above is superseded by this
+  entry, left as-is since this log is append-only history, not
+  rewritten.
+- **Next session should:** same as entry (w) — click through every
+  phase's dialog-driven forms in a real browser is still the one
+  standing item now that all 11 phases are backend+frontend complete.
 
 ### 2026-09-11 (w) — Phase 10 built end-to-end: Provider Platform (last phase)
 
