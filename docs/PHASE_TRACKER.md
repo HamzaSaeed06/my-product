@@ -27,16 +27,20 @@ alongside Phase 4/5 once Phase 0/2/3 are done).
 
 ## Current focus
 
-**Phase 0 — essentially complete** (backend + login/dashboard frontend,
-verified). **Phase 1 backend — built and integration-tested**: Institute
-(singleton), Campuses, Academic Years, Classes, Sections, and dynamic
-Incharge scopes (with optimistic concurrency) all have working APIs, 38
-passing integration tests against the real database, on top of Phase 0's 30.
-Not yet done for Phase 1: no `product/web` screens for any of this (Institute
-Profile, Campuses List, etc. are all unbuilt), and Incharge scope checks
-aren't wired into any protected resource route yet (nothing exists for an
-Incharge to act on besides the scope assignment itself — that comes with
-Phase 2/3). See `PROJECT_STATUS.md` §1c for full detail.
+**Phase 0 — complete** (backend + login/dashboard frontend, verified).
+**Phase 1 — backend and frontend both built.** Institute (singleton),
+Campuses, Academic Years, Classes, Sections, and dynamic Incharge scopes
+(with optimistic concurrency) all have working APIs (70 passing integration
+tests against the real database, on top of Phase 0's 30) and matching
+`product/web` screens (Institute Profile, Campuses, Academic Years, Classes,
+Sections, Incharge Scope Assignment) under a shared dashboard sidebar shell.
+Server-rendered data verified live (real institute name, correct empty
+states); the interactive dialogs (create/edit/archive/revoke) are built on
+the same cookie/CSRF pattern already proven for login/logout but have not
+been individually click-tested in a real browser yet. Incharge scope checks
+(`checkInchargeScope`) still have no route consumer — correctly so, nothing
+exists for an Incharge to act on until Phase 2/3. See `PROJECT_STATUS.md`
+§1c/§1d for full detail.
 
 ## Notes on dependency ordering
 

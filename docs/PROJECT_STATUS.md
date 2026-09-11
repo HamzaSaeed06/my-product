@@ -1,10 +1,11 @@
 # Project Status
 
 **Last updated:** 2026-09-11
-**Current phase:** Phase 0 essentially complete (backend + login/dashboard
-frontend, verified). **Phase 1 backend now built and integration-tested**:
-Institute, Campuses, Academic Years, Classes, Sections, dynamic Incharge
-scopes. No Phase 1 frontend screens exist yet. See §1/§1c.
+**Current phase:** Phase 0 complete. **Phase 1 backend AND frontend now
+built**: Institute, Campuses, Academic Years, Classes, Sections, dynamic
+Incharge scopes — 70 passing integration tests, plus matching `product/web`
+screens under a dashboard sidebar shell. Server-rendered data verified live;
+interactive dialogs not yet click-tested in a real browser. See §1c/§1d.
 **Repo state:** Monorepo scaffolded. `product/api` has a working Express +
 TypeScript + Prisma backend implementing all of Phase 0's API surface (auth,
 users, roles/permissions, approvals, documents, notifications, audit).
@@ -246,8 +247,8 @@ always run `npm run typecheck` too.
 ### 1c. Phase 1 backend (`product/api`) — VERIFIED WORKING
 
 Institute Structure per PRODUCT_SPEC.md's "PHASE 1" section. All of it is
-built, integration-tested against the real database (38 new tests, on top
-of Phase 0's 30 — 68 total, all passing), and live-smoke-tested.
+built, integration-tested against the real database (40 new tests, on top
+of Phase 0's 30 — 70 total, all passing), and live-smoke-tested.
 
 - **Schema**: `Institute` (singleton — service layer refuses a second row,
   no DB constraint for it), `InstituteSettings` (kept separate per spec's
@@ -285,29 +286,82 @@ of Phase 0's 30 — 68 total, all passing), and live-smoke-tested.
   any route yet**, since Phase 1 has nothing else for it to gate. Tested
   directly (not just via HTTP): assign scope to Class A → ALLOW for A, DENY
   for B → expand scope to A+B → ALLOW for B too → revoke → DENY again.
+  `sectionIds` are validated to actually belong to the scope's campus,
+  academic year, and one of its assigned `classIds` — a gap caught and
+  fixed while building the frontend's section-picker (a scope could
+  otherwise reference a section from an unrelated campus).
 - **Bootstrap script** (`scripts/create-institute.ts`, mirrors
   `create-super-admin.ts`) — Institute is a singleton, so seeding one is a
   real one-time deployment action, not disposable test data. Run once
   against the dev database with a placeholder name ("Demo Institute",
   type SCHOOL) — **rename this via `PATCH /institute` before any real use.**
-- **Verified for real**: all 68 integration tests pass (institute
+- **Verified for real**: all 70 integration tests pass (institute
   singleton/duplicate-refused/update/settings-update; campus create/list/
   update/archive/archive-refused-with-active-section/edit-after-archive-
   refused; academic year date-validation/create/duplicate-refused/update/
   close/edit-after-close-refused; class create/duplicate-refused/update/
   archive; section create/duplicate-refused/closed-year-refused/update/
   archiving-parent-campus-or-class-blocked-then-unblocked-after-section-
-  archived; incharge scope non-incharge-user-refused/create/scope-check-
-  allow/scope-check-deny/stale-version-refused/version-conflict-free-
-  update/expanded-scope-now-allows/revoke/revoke-twice-refused). Live
-  server smoke test confirms all 6 new route groups are mounted and
-  correctly require authentication. Row-count check after the full test
-  run confirms zero residue beyond the real bootstrapped Institute, Super
-  Admin, roles, and permissions.
-- **Not done**: no `product/web` screens exist for any of Phase 1 (Institute
-  Profile, Campuses List, Academic Years, Classes/Sections Management,
-  Incharge Scope Assignment — all unbuilt). `checkInchargeScope` has no
-  route consumer yet (expected — nothing to gate until Phase 2/3).
+  archived; incharge scope non-incharge-user-refused/create/section-scope-
+  mismatch-refused/scope-check-allow/scope-check-deny/stale-version-
+  refused/version-conflict-free-update/expanded-scope-now-allows/revoke/
+  revoke-twice-refused). Live server smoke test confirms all 6 new route
+  groups are mounted and correctly require authentication. Row-count check
+  after the full test run confirms zero residue beyond the real
+  bootstrapped Institute, Super Admin, roles, and permissions.
+- **Not done in the backend itself**: `checkInchargeScope` has no route
+  consumer yet (expected — nothing to gate until Phase 2/3).
+
+### 1d. Phase 1 frontend (`product/web`) — screens built, server-rendering verified
+
+Six new screens under a shared dashboard sidebar shell
+(`src/components/dashboard-sidebar.tsx`, wired into
+`src/app/dashboard/layout.tsx` — the header/logout logic that used to live
+in `dashboard/page.tsx` moved here so it's shared across every dashboard
+route): Institute (profile + settings, singleton edit-in-place, no create
+flow needed), Campuses, Academic Years, Classes, Sections, Incharge Scopes.
+
+**Two reusable pieces worth knowing about** (used across all six screens,
+not one-off per-page code):
+- `src/components/form-dialog.tsx` — the "+ Add X" / "Edit X" dialog
+  pattern: open state, submit-via-`useTransition`, inline error, close +
+  `router.refresh()` on success. The `<form action={...}>` is bound to a
+  **client** function (not passed the server action directly) precisely so
+  this open/close/refresh orchestration is possible — a plain `<form
+  action={serverAction}>` (the pattern login/logout use) can't do this
+  because that path is designed around full navigation/redirect, not
+  staying on the same page.
+- `src/components/confirm-action-button.tsx` — the "Archive / Close /
+  Revoke" confirm-then-mutate pattern, same shape.
+- `src/lib/apiClient.ts`'s `apiRequest()` (added this session) is what
+  every Server Action above calls — it forwards this app's cookies and CSRF
+  token to `product/api`, exactly the pattern already proven correct for
+  login/logout, just generalized for GET/POST/PATCH to any endpoint.
+- `getCurrentUser()` (`src/lib/session.ts`) is now wrapped in React's
+  `cache()` so the layout (auth gate + header) and a page can both call it
+  without doubling the network round-trip in one render pass.
+
+**Verified for real**: all 6 pages return 200 when authenticated (and the
+layout's auth gate still correctly protects them — unauthenticated access
+redirects to `/login`, proven already at the layout level). The Institute
+page renders the real bootstrapped institute name ("Demo Institute") pulled
+live from the database. Empty-state pages (Classes, Incharge Scopes — no
+data exists after integration test cleanup) correctly show their "no X yet"
+messaging rather than crashing or showing blank tables. `npm run typecheck`
+and `npm run build` both pass.
+
+**Not verified**: the interactive dialogs themselves (create/edit/archive/
+revoke button clicks) have not been individually tested in a real browser.
+Reproducing them via curl — the trick used for login/logout — doesn't work
+here: those two use a plain `<form action={serverAction}>` (a discoverable
+no-JS-fallback POST), while every dialog action here is invoked
+programmatically via `startTransition` (the JS-driven Server Action call
+protocol, not the form-post fallback), which is materially harder to
+reproduce by hand. They rely on the same `apiRequest()` cookie/CSRF
+forwarding already proven correct for login/logout, so confidence is
+reasonably high, but **this is inference, not verification** — click
+through each "+ Add", "Edit", "Archive", "Close", and "Revoke" control in
+an actual browser before trusting this is done.
 
 ### How this was verified (not just "should work")
 
@@ -377,19 +431,19 @@ docs/
 
 ## 3. Immediate next action
 
-Phase 0 (backend + login/dashboard) and Phase 1's backend (§1c) are both
-built and verified. User has visually confirmed login works in a real
-browser. What's left, in order:
+Phase 0 is fully done. Phase 1's backend (§1c) and frontend (§1d) are both
+built; server-rendering is verified live but the interactive dialogs are
+not yet click-tested in a browser. What's left, in order:
 
-1. **Phase 1 frontend screens** (none exist yet): Institute Profile,
-   Campuses List, Academic Years, Classes/Sections Management, Incharge
-   Scope Assignment — per PRODUCT_SPEC.md's Phase 1 "Screens" list. All the
-   backend APIs these need already exist and are tested (§1c).
-2. **Or move on to Phase 2** (Student, Parent, Teacher, Subject, Admission
-   → Enrollment) if backend-first is preferred over catching the frontend
-   up first — Phase 2 doesn't depend on Phase 1's frontend existing, only
-   its backend (Institute/Campus/AcademicYear/Class/Section rows to enroll
-   students into).
+1. **Click through the Phase 1 screens in a real browser** (§1d's "Not
+   verified" note): `npm run dev:api` + `cd product/web && npm run dev`,
+   then for each of Institute/Campuses/Academic Years/Classes/Sections/
+   Incharge Scopes: try the "+ Add" dialog, an edit, and the archive/close/
+   revoke confirm flow. This is the one remaining gap before Phase 1 is
+   genuinely done, not just "should work."
+2. **Then move on to Phase 2** (Student, Parent, Teacher, Subject, Admission
+   → Enrollment) — Phase 1's backend (Institute/Campus/AcademicYear/Class/
+   Section) is what Phase 2 enrolls students into.
 3. **Minor cleanup, low priority**: wire real email delivery when a
    provider is chosen; consider a session-refresh-on-expiry flow for
    `product/web` once 20-minute re-logins become annoying; rename the
@@ -447,6 +501,47 @@ browser. What's left, in order:
 Append a dated entry every session. Keep entries short — what changed, what's
 left, anything the next session needs to know that isn't obvious from the
 code/docs themselves.
+
+### 2026-09-11 (i) — Phase 1 frontend built: 6 screens under a dashboard shell
+
+- User said (paraphrased): finish phases one at a time, use your own
+  judgment on what's next. Decided to complete Phase 1's frontend before
+  moving to Phase 2, rather than stacking up unbuilt UI across phases.
+- Refactored the dashboard: header/logout moved from `dashboard/page.tsx`
+  into a new `dashboard/layout.tsx` (single auth gate for every dashboard
+  route now, not just one page), added a sidebar (`dashboard-sidebar.tsx`)
+  linking to all six new screens.
+- Built two reusable client components used across every screen —
+  `form-dialog.tsx` (add/edit dialogs) and `confirm-action-button.tsx`
+  (archive/close/revoke confirms) — plus `lib/apiClient.ts`'s
+  `apiRequest()`, a server-side authenticated-fetch helper generalizing the
+  cookie/CSRF-forwarding pattern already proven for login/logout to every
+  other endpoint. Wrapped `getCurrentUser()` in React's `cache()` so the
+  layout and a page don't double the network round-trip per request.
+- Built all six screens: Institute (profile + settings, singleton
+  edit-in-place), Campuses, Academic Years, Classes, Sections (with
+  Class/Campus/Year dropdowns), Incharge Scopes (with a user-role filter
+  for the Incharge picker and checkbox multi-select for classes/sections).
+- Found and fixed a real backend gap while building the Incharge Scope
+  section-picker: `createInchargeScope`/`updateInchargeScope` validated
+  that `sectionIds` existed but never checked they actually belonged to the
+  scope's campus/academic year/assigned classes — a scope could reference
+  an unrelated campus's section. Added `SECTION_SCOPE_MISMATCH` validation
+  to both, plus 2 new integration tests (70 total now, up from 68).
+- Learned Base UI's Select/Checkbox both support `name`/`value` and submit
+  through native FormData like real form controls — used this for the
+  class/section checkbox groups (`FormData.getAll("classIds")`) instead of
+  building a custom multi-select.
+- **Verified for real**: `npm run typecheck` and `npm run build` both pass;
+  all 6 pages return 200 when authenticated; Institute page renders the
+  real bootstrapped institute name from the live database; empty-state
+  pages show correctly (no fake/placeholder data).
+- **Not done**: the interactive dialogs (the actual add/edit/archive/
+  revoke button clicks) are not click-tested in a real browser — curl
+  can't easily reproduce the JS-invoked Server Action call protocol these
+  use (different from login/logout's plain-form-post fallback). See §1d.
+- **Next session should**: click through every dialog in a real browser
+  first (§3 item 1), then start Phase 2.
 
 ### 2026-09-11 (h) — Phase 1 backend built: Institute Structure + Incharge scopes
 

@@ -11,6 +11,9 @@ let campusId: string;
 let academicYearId: string;
 let classAId: string;
 let classBId: string;
+let validSectionId: string;
+let wrongCampusSectionId: string;
+let otherCampusId: string;
 let scopeId: string | undefined;
 
 describe("Incharge Scopes API (real database)", () => {
@@ -19,7 +22,7 @@ describe("Incharge Scopes API (real database)", () => {
     const inchargeRole = await prisma.role.findUniqueOrThrow({ where: { name: "INCHARGE" } });
     const passwordHash = await hashPassword("Str0ng!Passw0rd");
 
-    const [inchargeUser, nonInchargeUser, campus, year, classA, classB] = await Promise.all([
+    const [inchargeUser, nonInchargeUser, campus, otherCampus, year, classA, classB] = await Promise.all([
       prisma.user.create({
         data: {
           email: `incharge-${suffix}@example.test`,
@@ -32,6 +35,7 @@ describe("Incharge Scopes API (real database)", () => {
         data: { email: `not-incharge-${suffix}@example.test`, passwordHash, fullName: "Not Incharge" },
       }),
       prisma.campus.create({ data: { name: `Scope-Test Campus ${suffix}`, instituteId: institute.id } }),
+      prisma.campus.create({ data: { name: `Scope-Test Other Campus ${suffix}`, instituteId: institute.id } }),
       prisma.academicYear.create({
         data: {
           name: `Scope-Test-Year-${suffix}`,
@@ -47,9 +51,21 @@ describe("Incharge Scopes API (real database)", () => {
     inchargeUserId = inchargeUser.id;
     nonInchargeUserId = nonInchargeUser.id;
     campusId = campus.id;
+    otherCampusId = otherCampus.id;
     academicYearId = year.id;
     classAId = classA.id;
     classBId = classB.id;
+
+    const [validSection, wrongCampusSection] = await Promise.all([
+      prisma.section.create({
+        data: { classId: classAId, campusId, academicYearId, name: "A" },
+      }),
+      prisma.section.create({
+        data: { classId: classAId, campusId: otherCampusId, academicYearId, name: "A" },
+      }),
+    ]);
+    validSectionId = validSection.id;
+    wrongCampusSectionId = wrongCampusSection.id;
   });
 
   afterAll(async () => {
@@ -58,9 +74,10 @@ describe("Incharge Scopes API (real database)", () => {
       await prisma.inchargeScopeSection.deleteMany({ where: { inchargeScopeId: scopeId } });
       await prisma.inchargeScope.delete({ where: { id: scopeId } }).catch(() => {});
     }
+    await prisma.section.deleteMany({ where: { id: { in: [validSectionId, wrongCampusSectionId] } } });
     await prisma.academicYear.delete({ where: { id: academicYearId } }).catch(() => {});
     await prisma.class.deleteMany({ where: { id: { in: [classAId, classBId] } } });
-    await prisma.campus.delete({ where: { id: campusId } }).catch(() => {});
+    await prisma.campus.deleteMany({ where: { id: { in: [campusId, otherCampusId] } } });
     await prisma.user.deleteMany({ where: { id: { in: [inchargeUserId, nonInchargeUserId] } } });
   });
 
@@ -102,6 +119,28 @@ describe("Incharge Scopes API (real database)", () => {
     expect(allowed).toBe(false);
   });
 
+  it("rejects a sectionId from a different campus (scope mismatch)", async () => {
+    const res = await asSuperAdmin()
+      .post("/api/v1/incharge-scopes")
+      .send({
+        userId: inchargeUserId,
+        campusId,
+        academicYearId,
+        classIds: [classAId],
+        sectionIds: [wrongCampusSectionId],
+      });
+    expect(res.status).toBe(400);
+    expect(res.body.error).toBe("SECTION_SCOPE_MISMATCH");
+  });
+
+  it("accepts a sectionId that matches campus/year/class via update", async () => {
+    const res = await asSuperAdmin()
+      .patch(`/api/v1/incharge-scopes/${scopeId}`)
+      .send({ sectionIds: [validSectionId], expectedVersion: 0 });
+    expect(res.status).toBe(200);
+    expect(res.body.sections).toHaveLength(1);
+  });
+
   it("rejects an update with a stale version (optimistic concurrency)", async () => {
     const res = await asSuperAdmin()
       .patch(`/api/v1/incharge-scopes/${scopeId}`)
@@ -111,11 +150,13 @@ describe("Incharge Scopes API (real database)", () => {
   });
 
   it("expands the scope to Class A and B with the correct version", async () => {
+    // Version is 1 here, not 0 — the "accepts a sectionId..." test above
+    // already consumed version 0 with its own successful update.
     const res = await asSuperAdmin()
       .patch(`/api/v1/incharge-scopes/${scopeId}`)
-      .send({ classIds: [classAId, classBId], expectedVersion: 0 });
+      .send({ classIds: [classAId, classBId], expectedVersion: 1 });
     expect(res.status).toBe(200);
-    expect(res.body.version).toBe(1);
+    expect(res.body.version).toBe(2);
     expect(res.body.classes).toHaveLength(2);
   });
 

@@ -60,6 +60,19 @@ export async function createInchargeScope(
     if (sections.length !== sectionIds.length) {
       throw new HttpError(400, "SECTION_NOT_FOUND", "One or more sectionIds do not exist");
     }
+    // A section only makes sense as a narrowing of a class/campus/year this
+    // scope actually covers — without this check, a scope could reference a
+    // section from an unrelated campus or a class not in classIds.
+    const mismatched = sections.find(
+      (s) => s.campusId !== input.campusId || s.academicYearId !== input.academicYearId || !classIds.includes(s.classId)
+    );
+    if (mismatched) {
+      throw new HttpError(
+        400,
+        "SECTION_SCOPE_MISMATCH",
+        "sectionIds must belong to the scope's campus, academic year, and one of the assigned classIds"
+      );
+    }
   }
 
   const scope = await prisma.$transaction(async (tx) => {
@@ -111,6 +124,35 @@ export async function updateInchargeScope(
 
   const oldClassIds = scope.classes.map((c) => c.classId).sort();
   const oldSectionIds = scope.sections.map((s) => s.sectionId).sort();
+
+  const nextClassIds = input.classIds ? [...new Set(input.classIds)] : oldClassIds;
+  const nextSectionIds = input.sectionIds ? [...new Set(input.sectionIds)] : oldSectionIds;
+
+  if (input.classIds) {
+    const classes = await prisma.class.findMany({ where: { id: { in: nextClassIds } } });
+    if (classes.length !== nextClassIds.length) {
+      throw new HttpError(400, "CLASS_NOT_FOUND", "One or more classIds do not exist");
+    }
+  }
+  if (input.sectionIds && nextSectionIds.length > 0) {
+    const sections = await prisma.section.findMany({ where: { id: { in: nextSectionIds } } });
+    if (sections.length !== nextSectionIds.length) {
+      throw new HttpError(400, "SECTION_NOT_FOUND", "One or more sectionIds do not exist");
+    }
+    const mismatched = sections.find(
+      (s) =>
+        s.campusId !== scope.campusId ||
+        s.academicYearId !== scope.academicYearId ||
+        !nextClassIds.includes(s.classId)
+    );
+    if (mismatched) {
+      throw new HttpError(
+        400,
+        "SECTION_SCOPE_MISMATCH",
+        "sectionIds must belong to the scope's campus, academic year, and one of the assigned classIds"
+      );
+    }
+  }
 
   const updated = await prisma.$transaction(async (tx) => {
     const { count } = await tx.inchargeScope.updateMany({
