@@ -16,7 +16,7 @@ phase's state changes — this table is what a new agent scans first.
 | 4 | Results & Promotion | Exams, Result workflow (Draft→Submitted→Reviewed→Finalized→Published), Report cards, Promotion/Class jump | 3 | 3-4 wk | 🟡 |
 | 5 | Finance Module | Fee structures, Invoicing, Payments (cash+gateway), Receipts, Refunds, Reconciliation, Cash closing | 2 | 4-5 wk | 🟡 |
 | 6 | Operations | Leave management, Complaints | 0, 2, 3 | 2-3 wk | 🟡 |
-| 7 | Portals & Role-Based Experiences | Principal / Incharge / Office / Teacher / Parent / Student UIs on top of the above | all prior | 4-5 wk | 🔴 |
+| 7 | Portals & Role-Based Experiences | Principal / Incharge / Office / Teacher / Parent / Student UIs on top of the above | all prior | 4-5 wk | 🟡 |
 | 8 | Reports & Analytics | Cross-module reporting (academic, attendance, finance, staff) | all prior | 3-4 wk | 🔴 |
 | 9 | Online Payment Integration | Payment gateway (Easypaisa/JazzCash-style), webhook idempotency, reconciliation | 5 | 3-4 wk | 🔴 |
 | 10 | Provider Platform | Provider-side control plane: customer/license/deployment management, heartbeat, support tickets | 1 | 4-5 wk | 🔴 |
@@ -76,10 +76,27 @@ LEAVE in `markAttendance`, verified by a dedicated cross-module test.
 (list + per-complaint detail page driving its lifecycle) under a new
 "Operations" sidebar group — 39 pages total, smoke-tested
 authenticated-200 against live dev servers via the established curl
-login technique. All Phase 0-6 backends and frontends are now built;
-interactive dialogs across all six phases remain the one standing item
-not yet click-tested in a real browser. See also
-§1c/§1d/§1e/§1f/§1g/§1h/§1i/§1j/§1k/§1l/§1m/§1n for full detail.
+login technique. **Phase 7 backend built**: permission grants for all 6
+non-SUPER_ADMIN roles (previously only SUPER_ADMIN had any — everyone
+else was locked out of every route), `userId` login linkage added to
+Student and Parent (previously only Teacher could log in at all), a new
+`src/lib/scope.ts` data-scoping layer wired into ~14 modules so a
+Teacher/Parent/Student/Incharge only sees their own section/children/
+self/scope — 12 new dedicated tests, all passing. **Phase 7 frontend
+built**: a role-filtered `/dashboard` sidebar for staff roles, plus a
+brand-new mobile-first `/portal` shell (9 pages: Overview, Timetable,
+Attendance, Homework, Leave, Results, Report Card, Fees, Complaints) for
+Teacher/Parent/Student — genuinely new UI per spec's mobile-first
+requirement, not a filtered admin reuse. Live-verified by logging in as
+all 4 role shapes (Super Admin, Teacher, Parent, Student) against real
+running dev servers — correct post-login redirect per role, every page
+200 with accurate empty states, zero error-boundary text. 48 pages
+total. All Phase 0-7 backends and frontends are now built; interactive
+dialogs across all seven phases remain the one standing item not yet
+click-tested in a real browser. Bespoke Principal/Incharge/Office
+dashboard home pages (they currently reuse the shared admin Overview)
+are a deliberate, documented follow-up. See also
+§1c/§1d/§1e/§1f/§1g/§1h/§1i/§1j/§1k/§1l/§1m/§1n/§1o/§1p for full detail.
 
 ## Notes on dependency ordering
 
@@ -89,9 +106,10 @@ not yet click-tested in a real browser. See also
   plus Students (Phase 2) and Teachers/Timetable context (Phase 3).
 - Phase 7 (Portals) is really "wire up role-scoped UI for everything built so
   far" — it can be done incrementally per-role as each backend phase lands,
-  rather than as one giant phase at the end. Recommended: build each portal's
-  relevant screens right after the backend phase that feeds it, and treat
-  Phase 7 as the hardening/consistency pass rather than a from-scratch build.
+  rather than as one giant phase at the end. In practice it was built as one
+  pass after Phase 6 rather than incrementally, since permission grants and
+  scope enforcement are cross-cutting and easier to reason about all at
+  once than retrofitted phase-by-phase.
 - Phase 10 (Provider Platform) is a separate application from the customer
   product and only depends on Phase 1 (needs the license/entitlement shape
   defined in Institute config). It can be built by a different

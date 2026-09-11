@@ -33,8 +33,15 @@ export function parseCookiePairs(setCookieHeaders: string[]): Record<string, str
   return pairs;
 }
 
+// Mirrors product/api's PublicUser (auth/service.ts) — roles/teacherId/
+// parentId/studentId drive Phase 7's role-based sidebar and portal
+// routing.
 export interface ApiUser {
   id: string;
   email: string;
   fullName: string;
+  roles: string[];
+  teacherId: string | null;
+  parentId: string | null;
+  studentId: string | null;
 }

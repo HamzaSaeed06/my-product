@@ -23,7 +23,17 @@ leave auto-marks attendance as LEAVE) is now closed and tested — see
 `generateStudentCode()` sort order, poisoned by a non-numeric
 test-fixture student code) — root-caused and fixed properly, full
 42-file/295-test suite now passes cleanly. 39 pages total, all
-smoke-tested authenticated-200 against live dev servers.
+smoke-tested authenticated-200 against live dev servers. **Phase 7
+backend and frontend both complete**: role-based permissions for all 7
+roles (only SUPER_ADMIN had any before this), Student/Parent login
+linkage, a real scope-enforcement layer (`src/lib/scope.ts`) verified by
+12 dedicated tests, a role-filtered admin sidebar, and a brand-new
+mobile-first `/portal` shell for Teacher/Parent/Student (9 pages) — see
+§1o/§1p. Live-verified by logging in as all 4 role shapes (Super Admin,
+Teacher, Parent, Student) against real running dev servers. 48 pages
+total. Full suite: 289/307 passed outright, the remaining 18 failed only
+on documented Neon flakiness (§5a) and re-ran clean immediately after —
+effectively 307/307.
 **Repo state:** Monorepo scaffolded. `product/api` has a working Express +
 TypeScript + Prisma backend implementing all of Phase 0's API surface (auth,
 users, roles/permissions, approvals, documents, notifications, audit).
@@ -1064,6 +1074,175 @@ detail page driving its 6-state lifecycle).
   argument encoding for non-trivial args isn't just field names), so this
   remains the one class of verification that requires an actual browser.
 
+### 1o. Phase 7 backend (`product/api`) — VERIFIED WORKING
+
+Portals & Role-Based Experiences per PRODUCT_SPEC.md's "PHASE 7" section.
+The architecture is explicitly "ONE application, role-based rendering" —
+this phase did not add new resources, it made the 6 non-SUPER_ADMIN roles
+actually able to use the resources every prior phase already built.
+
+- **Two real, pre-existing gaps found by reading the code before writing
+  any of this**, not guessed:
+  1. Through Phase 6, **only SUPER_ADMIN had any permission grants at
+     all** (`prisma/seed.ts`'s comment said this was deliberate — "don't
+     guess ahead of the code that enforces it" — but Phase 7 is exactly
+     the code that needed it). Every route gated by `requirePermission()`
+     was unreachable by PRINCIPAL/INCHARGE/OFFICE/TEACHER/PARENT/STUDENT.
+     Fixed with a new `ROLE_PERMISSIONS` map in `seed.ts`, one curated
+     list per role derived directly from spec's "Screens Per Portal"
+     section (148/47/20/48/27/16/8 permissions for SUPER_ADMIN through
+     STUDENT respectively) — reusing existing permission keys throughout,
+     no new ones invented.
+  2. **`Student` and `Parent` had no `userId` link to `User`** — only
+     `Teacher` did. Parent/Student Portals literally could not exist
+     without this. Added `userId String? @unique` to both (mirroring
+     Teacher's existing pattern: a `User` with the matching role must
+     already exist, then gets linked — no separate "invite" flow
+     invented), migrated via a hand-written `migrate diff` +
+     `migrate deploy` (the same non-interactive-environment workaround
+     used for every migration this session, since `prisma migrate dev`
+     refuses to run without a TTY).
+- **`src/lib/scope.ts`** — the new data-scoping layer, answering the
+  second half of spec §5's `ROLE + PERMISSION + SCOPE + CONTEXT`
+  formula. A permission grant says "may this role call this endpoint at
+  all"; `scope.ts` says "which specific records may this actor see."
+  `getActorProfile(userId)` loads `{ roles, teacherId, parentId,
+  studentId }` once; `assertSectionInScope` covers Teacher (assigned via
+  `TeacherAssignment`), Incharge (reuses Phase 1's `checkInchargeScope`,
+  finally wired into a real route — logged as unused since Phase 1),
+  Student/Parent (their own/child's active `Enrollment`);
+  `assertStudentInScope` mirrors this for student-identity checks;
+  `resolveStudentScopeFilter` handles the "no explicit studentId named"
+  case — Student defaults to themselves, Parent to the set of their own
+  children (never silently "everyone", the way an unfiltered admin query
+  behaves for SUPER_ADMIN/PRINCIPAL/OFFICE, who are treated as
+  unrestricted here since their permission grant is already the real
+  gate).
+- **Wired into every module a portal screen actually needs**: students
+  (list + get), attendance (list), timetable (get-or-create), homework
+  (list), assessments (list), results (a new read-only
+  `listResultsForStudent` — published-only, unlike the existing
+  create-capable `examId`+`sectionId` path staff use), report-cards
+  (list + get), invoices (list + get), payments (list), leaves (list,
+  plus Teacher's own-teacherId self-scoping), complaints (list + get),
+  teacher-attendance (list, self-scoping), enrollments (list, needed as
+  a roster source for the Teacher/Student/Parent Portal's attendance and
+  homework screens), teacher-assignments (list, self-scoping — the
+  Teacher Portal's "which sections am I assigned to" source). Each
+  service's `where` clause gained a `studentIdIn?: string[]` alternative
+  to its existing `studentId?: string` filter so "give me my children's
+  records" doesn't require a separate query per child.
+- **`PublicUser` (the `/auth/me`, login, and refresh response shape)
+  now carries `roles`/`teacherId`/`parentId`/`studentId`** — before this
+  session, login returned only `{ id, email, fullName }`, so
+  `product/web` had **no way at all** to know a signed-in user's role;
+  the dashboard sidebar was the same static list for every role by
+  necessity, not by choice. This is what makes the frontend work
+  possible — see §1p.
+- **Verified for real**: a dedicated `scope-enforcement.test.ts` (12
+  tests, real HTTP + real logins as fixture Teacher/Parent/Student/
+  Incharge users, not just SUPER_ADMIN) directly exercises spec's own
+  Phase 7 test list — "Teacher sees only assigned classes",
+  "Parent sees only own children", "Incharge sees only scoped data",
+  "Student sees only own data" — including the negative case each time
+  (a 403 `OUT_OF_SCOPE` when reaching for another section/child/student).
+  First run caught a real gap of its own: STUDENT's permission grant was
+  missing `student.view` (couldn't view their own profile) — fixed and
+  re-verified 12/12 passing. `npx tsc --noEmit` and `npm run build` both
+  clean. Re-ran the full historical suite afterward: 289/307 passed
+  outright, the other 18 failed only because 3 files
+  (`approvals.test.ts`, `fee-categories.test.ts`, `leaves.test.ts`) hit
+  the documented Neon connectivity flakiness (§5a) mid-`beforeAll` — all
+  3 re-ran clean in isolation immediately after (4/4, 5/5, 9/9), meaning
+  the effective result is **307/307**, not a real regression.
+- **Not done at this pass**: scope enforcement covers the modules Phase
+  7's portal screens actually call, not literally every list endpoint in
+  the app (e.g. substitutions, curriculum, cash-closing are permission-
+  gated but not further scope-narrowed) — a deliberate, scoped decision
+  given the sheer surface area of 6 phases' worth of endpoints, same
+  category of documented tradeoff as §5a's "16 more test files" item.
+  `Discount`/refund/waiver "own request" scoping for Parent wasn't
+  needed since Parent's portal doesn't surface those screens per spec.
+
+### 1p. Phase 7 frontend (`product/web`) — screens built, live-verified across all 4 role shapes
+
+**Architecture**: staff roles (SUPER_ADMIN/PRINCIPAL/INCHARGE/OFFICE)
+keep the existing `/dashboard` admin shell — same screens built in
+Phases 1-6, now with a **role-filtered sidebar**
+(`dashboard-sidebar.tsx` takes a `roles` prop and hides nav groups/items
+the signed-in role has no permission for; SUPER_ADMIN always sees
+everything). TEACHER/PARENT/STUDENT get a genuinely separate, new
+**`/portal` shell** — spec's explicit "mobile-first" requirement for
+Parent/Student and "teaching-focused interface" for Teacher didn't fit
+naturally onto the dense admin tables, so this is real new UI, not a
+filtered reuse. Login (`login/actions.ts`) branches the post-login
+redirect on the returned `roles` array; each layout also redirects a
+user who lands on the wrong shell directly (bookmark, stale link) to
+the correct one.
+
+- **`/portal` shell** (`portal/layout.tsx` + `portal-nav.tsx`): a
+  horizontal scrollable pill nav (lucide-react icons) instead of a
+  fixed-5-item bottom bar, since Parent's screen count (8) wouldn't fit
+  a conventional mobile bottom nav without a "More" overflow — chosen
+  over that added complexity for this pass. Same header pattern as the
+  admin shell (avatar dropdown + logout), reusing `dashboard/actions.ts`'s
+  `logout` directly rather than duplicating it.
+- **9 new pages**: Overview (role-branching dashboard), Timetable,
+  Attendance (Teacher: mark via the *same* `MarkAttendanceForm` the
+  admin Attendance screen uses — genuine reuse, not a rebuild — Parent/
+  Student: read-only history), Homework (Teacher: a **simplified**
+  create dialog with section/subject/teacher as hidden fields instead of
+  pickers, since a Teacher here only ever has one class context, unlike
+  the admin version which must support any section), Leave (Teacher: own;
+  Parent: per-child, reusing the exact `/api/v1/leaves` contract Phase
+  6 built), Results (published-only, via §1o's new endpoint), Report
+  Card (renders the actual `snapshot` JSON shape from
+  `report-cards/service.ts`'s `generateReportCard`, not a raw JSON dump),
+  Fees (Parent, invoices read-only — explicitly notes online payment
+  isn't available yet, correctly not overclaiming Phase 9 scope),
+  Complaints (Parent, submit + view, reusing Phase 6's contract).
+- **`ChildSwitcher`** (`components/child-switcher.tsx`) — shared by
+  every Parent Portal page that shows one child at a time (spec:
+  "Multiple children switcher"), swaps a `?studentId=` query param;
+  renders nothing when a parent has only one child (no pointless UI for
+  the common case).
+- **`portalScope.ts`** — server-only helpers (`getTeacherAssignments`,
+  `getActiveEnrollment`) resolving "which section/enrollment" a
+  Teacher/Parent/Student's portal pages should show, shared across all 9
+  pages rather than duplicated per page.
+- **Verified live, not just build/typecheck** (this session's standing
+  "don't declare done without real evidence" rule, extended to a class
+  of check — role-based routing — that's easy to get subtly wrong):
+  created disposable Teacher/Parent/Student fixture users directly via
+  Prisma, logged in as **all 4 role shapes** (Super Admin, Teacher,
+  Parent, Student) through the established curl no-JS-form-post
+  technique (real `$ACTION_1:0`/`$ACTION_1:1`/`$ACTION_KEY`/empty
+  `$ACTION_REF_1` fields from the live rendered `/login` HTML) against
+  real running dev servers — confirmed: Teacher/Parent/Student land on
+  `/portal` after login (not `/dashboard`), Super Admin still lands on
+  `/dashboard` with every sidebar group intact; every one of Teacher's 5
+  portal pages, Parent's 8, and Student's 6 returns 200 with correct,
+  accurate empty states ("No class assignments yet.", "No children
+  linked to your account yet.") and zero error-boundary text anywhere;
+  `GET /dashboard` as Teacher/Parent/Student redirects to `/portal`
+  (307); a direct `/dashboard` hit as SUPER_ADMIN still renders
+  Incharge Scopes (a SUPER_ADMIN-only nav item), confirming the sidebar
+  filter didn't over-hide for the unrestricted role either. `npx tsc
+  --noEmit` and `npm run build` both clean — 48 routes total (9 new
+  `/portal/*`, up from 39). Fixture users deleted afterward.
+- **Not verified**: the interactive dialogs within `/portal` (mark
+  attendance, assign homework, request leave, submit complaint) — same
+  standing curl-can't-reach-a-`startTransition`-action caveat as every
+  prior phase (§1e).
+- **Not done at this pass**: Principal/Incharge/Office get the existing
+  admin screens filtered by nav visibility, not bespoke role-specific
+  dashboards with the KPI-style overview spec describes for them
+  ("Principal: Dashboard (campus-wide overview)", etc.) — a deliberate,
+  documented scope decision given the size of building 3 more dashboard
+  home pages on top of everything else in this pass; the underlying data
+  (already scope-enforced per §1o) is there for a future session to
+  build those overview pages without any backend work.
+
 ## 2. Decided tech stack (from PRODUCT_SPEC.md §3)
 
 **Installed and verified in `product/api`:** express, prisma/@prisma/client
@@ -1113,21 +1292,30 @@ Phase 0: fully done. Phase 1: backend + frontend built (§1c/§1d). Phase 2:
 backend + frontend built (§1e/§1f). Phase 3: backend + frontend both built
 (§1g/§1h) — 168 tests, 25 pages. Phase 4: backend + frontend both built
 (§1i/§1j) — 209 tests, 29 pages. Phase 5: backend + frontend both built
-(§1k/§1l) — 269 tests (full clean run), 37 pages. Phase 6: **backend +
-frontend both built** (§1m/§1n) — 26 new tests, 39 pages total. All ten
-phase roadmap items through Phase 6 are now backend+frontend complete.
+(§1k/§1l) — 269 tests (full clean run), 37 pages. Phase 6: backend +
+frontend both built (§1m/§1n) — 26 new tests, 39 pages total. Phase 7:
+**backend + frontend both built** (§1o/§1p) — role permissions for all 7
+roles, scope enforcement, Student/Parent login, a new `/portal` shell —
+48 pages total. All Phases 0-7 are now backend+frontend complete.
 What's left, in order:
 
-1. **Click through Phase 1-6's screens in a real browser** — every
+1. **Click through Phases 1-7's screens in a real browser** — every
    "+ Add", "Edit", "Archive", "Approve/Reject", "Transfer", "Withdraw",
    "Publish", "Submit", "Record payment", "Assign/Resolve/Close/Reopen",
-   and document-upload control. This is the one open item standing
-   between "built" and "actually done" across the whole product so
-   far — every phase's backend is genuinely verified against the real
-   database, but no phase's UI has been clicked through by a human yet.
-2. **Then Phase 7** (Portals & Role-Based Experiences) per the roadmap —
-   the next phase not yet started.
-3. **Minor cleanup, low priority**: wire real email delivery when a
+   "Mark attendance", "Assign homework", "Request leave", and
+   document-upload control, now across 4 different role experiences
+   (admin, teacher portal, parent portal, student portal), not just
+   Super Admin. This is the one open item standing between "built" and
+   "actually done" across the whole product so far — every phase's
+   backend is genuinely verified against the real database, but no
+   phase's UI has been clicked through by a human yet.
+2. **Then Phase 8** (Reports & Analytics) per the roadmap — the next
+   phase not yet started.
+3. **Deliberately scoped out of Phase 7, worth a follow-up**: bespoke
+   Principal/Incharge/Office dashboard home pages (they currently reuse
+   the same admin Overview as everything else, just with a filtered
+   sidebar) — see §1p's "Not done at this pass."
+4. **Minor cleanup, low priority**: wire real email delivery when a
    provider is chosen; consider a session-refresh-on-expiry flow for
    `product/web` once 20-minute re-logins become annoying; rename the
    placeholder "Demo Institute" to something real before any actual use.
@@ -1242,6 +1430,47 @@ What's left, in order:
 Append a dated entry every session. Keep entries short — what changed, what's
 left, anything the next session needs to know that isn't obvious from the
 code/docs themselves.
+
+### 2026-09-11 (t) — Phase 7 built end-to-end: role permissions, scope enforcement, Student/Parent login, /portal shell
+
+- User asked to move on to "the next phase" after Phase 6. Read
+  PRODUCT_SPEC.md's Phase 7 section and the current codebase first,
+  which surfaced two real, previously-undiscovered gaps before writing
+  any code: only SUPER_ADMIN had permission grants (every other role
+  was locked out of everything), and Student/Parent had no `userId`
+  link to `User` at all (no possible login). Both are foundational —
+  fixed first.
+- Backend: `ROLE_PERMISSIONS` map in `seed.ts` (curated per role from
+  spec's screen list), `userId` added to Student/Parent (migration via
+  the established non-interactive `migrate diff` + `migrate deploy`
+  workaround), `src/lib/scope.ts` (the new scope-enforcement layer),
+  wired into ~14 modules' controllers. `PublicUser` now carries
+  `roles`/`teacherId`/`parentId`/`studentId`. See §1o.
+- 12 new `scope-enforcement.test.ts` tests, real HTTP + real logins as
+  fixture Teacher/Parent/Student/Incharge users — caught a real gap of
+  its own (STUDENT missing `student.view`), fixed, re-verified 12/12.
+- Frontend: role-filtered `/dashboard` sidebar for staff roles, a
+  brand-new mobile-first `/portal` shell (9 pages) for Teacher/Parent/
+  Student — genuinely new UI, not a filtered admin reuse, per spec's
+  explicit mobile-first requirement. See §1p.
+- **Verified live across all 4 role shapes** (not just build/typecheck):
+  created disposable fixture users, logged in as Super Admin/Teacher/
+  Parent/Student via the established curl technique against real
+  running dev servers, confirmed correct post-login redirect
+  (`/dashboard` vs `/portal`), all pages 200 with correct empty states,
+  zero error-boundary text, `/dashboard` correctly redirects a
+  Teacher/Parent/Student to `/portal`.
+- Full suite: 289/307 passed outright; the other 18 failed only because
+  3 files hit the documented Neon flakiness (§5a) mid-`beforeAll` — all
+  3 re-ran clean in isolation right after (4/4, 5/5, 9/9). Effective
+  **307/307**, not a regression.
+- **Not done**: bespoke Principal/Incharge/Office dashboard home pages
+  (they reuse the existing admin Overview); scope enforcement covers
+  the modules Phase 7's screens actually call, not literally every
+  list endpoint in the app.
+- **Next session should**: either click through Phases 1-7's dialogs in
+  a real browser (the single largest standing open item across the
+  whole product), or start Phase 8 (Reports & Analytics).
 
 ### 2026-09-11 (s) — Phase 6 frontend built: Leaves, Complaints
 
