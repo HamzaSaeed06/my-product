@@ -200,6 +200,19 @@ const PHASE_6_PERMISSIONS = [
   ["complaint.close", "Close a resolved complaint"],
 ] as const;
 
+// Phase 8: Reports & Analytics. Every report is computed live from
+// existing data — no new resource-specific permissions beyond "may view
+// this report category" and "may export it" (a separate grant per spec's
+// explicit view-vs-export split).
+const PHASE_8_PERMISSIONS = [
+  ["report.view_academic", "View academic reports"],
+  ["report.view_attendance", "View attendance reports"],
+  ["report.view_financial", "View financial reports"],
+  ["report.view_admissions", "View admission reports"],
+  ["report.view_staff", "View staff reports"],
+  ["report.export", "Export report data"],
+] as const;
+
 const ALL_PERMISSIONS = [
   ...PHASE_0_PERMISSIONS,
   ...PHASE_1_PERMISSIONS,
@@ -208,6 +221,7 @@ const ALL_PERMISSIONS = [
   ...PHASE_4_PERMISSIONS,
   ...PHASE_5_PERMISSIONS,
   ...PHASE_6_PERMISSIONS,
+  ...PHASE_8_PERMISSIONS,
 ];
 
 // Phase 7: every non-SUPER_ADMIN role's permission grant, derived from
@@ -272,6 +286,12 @@ const ROLE_PERMISSIONS: Record<Exclude<(typeof CORE_ROLES)[number], "SUPER_ADMIN
     "approval.decide",
     "document.view",
     "notification.view",
+    "report.view_academic",
+    "report.view_attendance",
+    "report.view_financial",
+    "report.view_admissions",
+    "report.view_staff",
+    "report.export",
   ],
   // Scoped class/section management — the permission grant is broad (same
   // shape as Teacher/Office for the resources Incharges touch); the
@@ -281,6 +301,7 @@ const ROLE_PERMISSIONS: Record<Exclude<(typeof CORE_ROLES)[number], "SUPER_ADMIN
   INCHARGE: [
     "class.view",
     "section.view",
+    "exam.view",
     "student.view",
     "teacher.view",
     "timetable.view",
@@ -299,11 +320,14 @@ const ROLE_PERMISSIONS: Record<Exclude<(typeof CORE_ROLES)[number], "SUPER_ADMIN
     "complaint.assign",
     "leave.view",
     "notification.view",
+    "report.view_academic",
+    "report.view_attendance",
   ],
   // Administrative staff: admissions, records, fee collection, leave/
   // complaint intake — per spec's "Office: administrative staff (admissions,
   // fees, records)".
   OFFICE: [
+    "campus.view",
     "student.view",
     "student.create",
     "student.edit",
@@ -352,6 +376,9 @@ const ROLE_PERMISSIONS: Record<Exclude<(typeof CORE_ROLES)[number], "SUPER_ADMIN
     "document.upload",
     "document.manage",
     "notification.view",
+    "report.view_financial",
+    "report.view_admissions",
+    "report.export",
   ],
   // Teaching staff: own classes' academics, attendance, homework, marks —
   // per spec's "Teacher: teaching staff (academics, attendance, homework)".
