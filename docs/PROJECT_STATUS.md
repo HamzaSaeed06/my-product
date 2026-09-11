@@ -2024,6 +2024,56 @@ Append a dated entry every session. Keep entries short — what changed, what's
 left, anything the next session needs to know that isn't obvious from the
 code/docs themselves.
 
+### 2026-09-11 (y) — product/api: one-command customer onboarding script, plus a real Prisma+pooler bug found and fixed
+
+- The user asked a genuinely important operational question: when a new
+  customer buys the product and gets their own hosted deployment, how
+  does that deployment's very first Super Admin login actually get
+  created? Per spec, there's no self-registration and (by design) the
+  provider platform has no access to any customer's database — so this
+  has to happen via a script run against the customer's own database
+  during initial setup. That already existed as 3 separate manual steps
+  (`prisma:seed`, `create-institute`, `create-super-admin`, plus
+  `prisma migrate deploy` itself) — added `scripts/onboard-customer.ts`
+  to run all 4 in one command, stopping on the first real failure.
+- **Two real bugs found and fixed while testing it against a disposable
+  schema (not by inspection)**:
+  1. The first version shelled out via `execFileSync(..., {shell:
+     true})` with an args array — Node does NOT quote array elements for
+     the shell in that mode (confirmed by its own DEP0190 deprecation
+     warning), so `--institute-name "Riverside Test School"` silently
+     became three separate argv tokens and only "Riverside" reached
+     `create-institute.ts`. Fixed by switching to `execSync` with every
+     argument explicitly quoted before joining into one command string.
+  2. `prisma migrate deploy` intermittently failed with `P1002 ...
+     Timed out trying to acquire a postgres advisory lock`, twice in a
+     row with the identical lock ID. Root-caused, not guessed: queried
+     `pg_stat_activity`/`pg_locks` directly and found an *idle* pooled
+     session still holding that exact advisory lock — Neon's pooled
+     ("-pooler") endpoint multiplexes logical Prisma sessions onto
+     reused physical backend connections (PgBouncer-style pooling), and
+     a session-scoped advisory lock taken by one migrate run can outlive
+     that run and get inherited by whatever unrelated query the pool
+     hands the same backend connection to next. Fixed properly, not
+     worked around: added `directUrl = env("DIRECT_DATABASE_URL")` to
+     `schema.prisma`'s datasource block — Prisma's own documented
+     mechanism for exactly this pooler interaction — pointing migrations
+     at Neon's non-pooled host variant instead. `DIRECT_DATABASE_URL` is
+     now a required new env var for reliable migrations in any
+     environment (this session's own `.env` already has it; documented
+     in `.env.example` with a fallback note for a customer whose
+     Postgres has no pooled/direct distinction: set it to the same value
+     as `DATABASE_URL`).
+- Re-verified against a disposable Postgres schema simulating a fresh
+  customer install end-to-end after both fixes: all 10 migrations
+  applied cleanly, roles/permissions seeded, "Institute created:
+  Riverside Test School" (the full, untruncated name), Super Admin
+  created. Re-ran `tests/integration/campuses.test.ts` (6/6) to confirm
+  the `directUrl` schema addition causes zero regression on normal app
+  operation.
+- **Next session should:** same standing item as before — click through
+  every phase's dialog-driven forms in a real browser.
+
 ### 2026-09-11 (x) — provider/api moved onto a genuinely separate Neon database
 
 - Continued directly from entry (w). The user pushed back on entry

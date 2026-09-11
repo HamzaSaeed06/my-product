@@ -19,8 +19,23 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  // Migrations run through this connection instead of DATABASE_URL, per
+  // Prisma's own recommended fix for a real bug found while building the
+  // onboard-customer.ts bootstrap script: `prisma migrate deploy` against
+  // a PgBouncer-pooled connection (Neon's "-pooler" endpoint, and most
+  // managed Postgres poolers generally) can leak its migration advisory
+  // lock onto a pooled backend connection that outlives the migrate
+  // command — a later, unrelated query reusing that same pooled backend
+  // then silently inherits the held lock, and the next real migrate
+  // deploy times out acquiring it ("P1002 ... Timed out trying to
+  // acquire a postgres advisory lock"), reproduced twice in a row against
+  // this exact database. DIRECT_DATABASE_URL should point at the same
+  // database via a non-pooled connection; for a customer whose Postgres
+  // has no pooled/direct distinction (self-hosted, a single connection
+  // string), set it to the same value as DATABASE_URL.
+  directUrl = env("DIRECT_DATABASE_URL")
 }
 
 // ─────────────────────────────────────────────────────────────────────────

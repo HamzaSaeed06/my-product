@@ -17,6 +17,7 @@
     "prisma:seed": "tsx prisma/seed.ts",
     "create-super-admin": "tsx scripts/create-super-admin.ts",
     "create-institute": "tsx scripts/create-institute.ts",
+    "onboard-customer": "tsx scripts/onboard-customer.ts",
     "send-heartbeat": "tsx scripts/send-heartbeat.ts"
   },
   "prisma": {
