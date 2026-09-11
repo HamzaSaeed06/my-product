@@ -66,14 +66,33 @@ describe("Promotions API (real database)", () => {
     enrollmentPendingId = enrollmentPending.id;
   });
 
+  // Guards every cleanup step against beforeAll having crashed partway
+  // through (fixture variables can be undefined) — a crashed beforeAll
+  // should surface its own real error, not a secondary
+  // "undefined value within array" validation error from afterAll that
+  // masks it. See docs/PROJECT_STATUS.md §5a.
   afterAll(async () => {
-    await prisma.promotion.deleteMany({ where: { academicYearId: toYearId } });
-    await prisma.enrollment.deleteMany({ where: { sectionId: { in: [fromSectionId, toSectionId] } } });
-    await prisma.section.deleteMany({ where: { id: { in: [fromSectionId, toSectionId] } } });
-    await prisma.student.deleteMany({ where: { id: { in: [studentPromoteId, studentJumpId, studentPendingId] } } });
-    await prisma.academicYear.deleteMany({ where: { id: { in: [fromYearId, toYearId] } } });
-    await prisma.class.deleteMany({ where: { id: { in: [fromClassId, toClassId] } } });
-    await prisma.campus.delete({ where: { id: campusId } }).catch(() => {});
+    const definedIds = (ids: (string | undefined)[]) => ids.filter((id): id is string => Boolean(id));
+
+    if (toYearId) await prisma.promotion.deleteMany({ where: { academicYearId: toYearId } }).catch(() => {});
+    const sectionIds = definedIds([fromSectionId, toSectionId]);
+    if (sectionIds.length) {
+      await prisma.enrollment.deleteMany({ where: { sectionId: { in: sectionIds } } }).catch(() => {});
+      await prisma.section.deleteMany({ where: { id: { in: sectionIds } } }).catch(() => {});
+    }
+    const studentIds = definedIds([studentPromoteId, studentJumpId, studentPendingId]);
+    if (studentIds.length) {
+      await prisma.student.deleteMany({ where: { id: { in: studentIds } } }).catch(() => {});
+    }
+    const yearIds = definedIds([fromYearId, toYearId]);
+    if (yearIds.length) {
+      await prisma.academicYear.deleteMany({ where: { id: { in: yearIds } } }).catch(() => {});
+    }
+    const classIds = definedIds([fromClassId, toClassId]);
+    if (classIds.length) {
+      await prisma.class.deleteMany({ where: { id: { in: classIds } } }).catch(() => {});
+    }
+    if (campusId) await prisma.campus.delete({ where: { id: campusId } }).catch(() => {});
   });
 
   it("refuses an enrollment that doesn't belong to the given student", async () => {
