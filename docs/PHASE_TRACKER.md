@@ -50,19 +50,22 @@ protocol via curl hit real complexity — React Flight's multipart argument
 encoding, not just field names — documented as a known gap rather than
 pursued further). Incharge scope checks (`checkInchargeScope`) still have
 no route consumer — Phase 3/4's routes are gated by plain permission
-checks only. **Phase 5 — backend built**: Fee Structures, Invoicing,
-Payments (cash + a manual-trigger online-gateway state machine, +reversal
-approval workflow), Refunds, Discounts, Waivers, Cash Closing,
-Reconciliation Exceptions — 60 new integration tests, no frontend yet.
-Confirmed via a fully clean **39-file, 269-test** run spanning Phase 0-5
-together — the first such clean full-suite run since Phase 3 was added.
-Getting there surfaced and fixed 3 real bugs (2 Zod-validation-ordering
-issues, a Prisma transaction-timeout fix, plus a session auto-refresh
-added to the test harness itself) — see `PROJECT_STATUS.md` §1k. An
-intermittent Neon connection drop (P1001) during long test runs was
-separately investigated and confirmed to be external flakiness, not a
-code defect — see §5a. See also §1c/§1d/§1e/§1f/§1g/§1h/§1i/§1j/§1k for
-full detail.
+checks only. **Phase 5 — backend and frontend both built**: Fee
+Structures, Invoicing, Payments (cash + a manual-trigger online-gateway
+state machine, +reversal approval workflow), Refunds, Discounts, Waivers,
+Cash Closing, Reconciliation Exceptions — confirmed via a fully clean
+**39-file, 269-test** run spanning Phase 0-5 together (the first such
+clean full-suite run since Phase 3 was added) plus 8 new pages, 37 total,
+all smoke-tested authenticated-200. Getting to that clean test run
+surfaced and fixed 3 real bugs (2 Zod-validation-ordering issues, a Prisma
+transaction-timeout fix, plus a session auto-refresh added to the test
+harness itself) — see `PROJECT_STATUS.md` §1k. An intermittent Neon
+connection drop (P1001) during long test runs was separately investigated
+and confirmed to be external flakiness, not a code defect — see §5a.
+Interactive dialogs across all five phases remain not individually
+click-tested in a real browser — the one open item standing between
+"built" and "actually done" for the whole product so far. See also
+§1c/§1d/§1e/§1f/§1g/§1h/§1i/§1j/§1k/§1l for full detail.
 
 ## Notes on dependency ordering
 

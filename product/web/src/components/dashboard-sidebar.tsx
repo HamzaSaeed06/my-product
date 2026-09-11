@@ -52,6 +52,19 @@ const NAV_GROUPS = [
       { href: "/dashboard/promotions", label: "Promotions" },
     ],
   },
+  {
+    label: "Finance",
+    items: [
+      { href: "/dashboard/fee-structures", label: "Fee Structures" },
+      { href: "/dashboard/student-fees", label: "Student Fees" },
+      { href: "/dashboard/invoices", label: "Invoices" },
+      { href: "/dashboard/payments", label: "Payments" },
+      { href: "/dashboard/refunds", label: "Refunds" },
+      { href: "/dashboard/discounts", label: "Discounts" },
+      { href: "/dashboard/waivers", label: "Waivers" },
+      { href: "/dashboard/cash-closing", label: "Cash Closing" },
+    ],
+  },
 ] as const;
 
 export function DashboardSidebar() {

@@ -6,16 +6,16 @@
 frontend both complete (116 passing integration tests, 18 pages — see
 §1e/§1f). Phase 3 backend and frontend both complete (168 integration
 tests, 25 pages — see §1g/§1h). Phase 4 backend and frontend both complete
-(209 integration tests, 29 pages — see §1i/§1j). **Phase 5 backend now
-built**: Fee Structures, Invoicing, Payments (cash + a manual-trigger
-online-gateway state machine), Payment Reversal (approval workflow),
-Refunds, Discounts, Waivers, Cash Closing, Reconciliation Exceptions — 20
-new integration test files' worth of fixes and a full clean run: **all 39
-test files, 269/269 tests passing** with zero failures (Phase 0-5
-combined). Getting to that clean run surfaced and fixed 3 real bugs (not
-just re-running past flakiness) — see §1k and §5a for the full story,
-including a global Prisma transaction-timeout fix and a session
-auto-refresh added to the test harness itself. No Phase 5 frontend yet.
+(209 integration tests, 29 pages — see §1i/§1j). **Phase 5 backend and
+frontend both complete**: Fee Structures, Invoicing, Payments (cash + a
+manual-trigger online-gateway state machine), Payment Reversal (approval
+workflow), Refunds, Discounts, Waivers, Cash Closing, Reconciliation
+Exceptions — 269/269 tests passing (Phase 0-5 combined, a fully clean
+full-suite run), 37 pages total, all 8 new pages smoke-tested
+authenticated-200. Getting to that clean test run surfaced and fixed 3
+real bugs (not just re-running past flakiness) — see §1k/§1l and §5a for
+the full story, including a global Prisma transaction-timeout fix and a
+session auto-refresh added to the test harness itself.
 **Repo state:** Monorepo scaffolded. `product/api` has a working Express +
 TypeScript + Prisma backend implementing all of Phase 0's API surface (auth,
 users, roles/permissions, approvals, documents, notifications, audit).
@@ -848,11 +848,60 @@ passing in a real, clean, complete full-suite run.
   session that showed failures was diagnosed down to either genuine
   external flakiness (documented in §5a) or one of the three real bugs
   above, never left unexplained.
-- **Not done**: no `product/web` screens for Phase 5 yet (Fee Structure,
-  Student Fee Assignment, Invoice Generation, Payment Recording, Payment
-  Reversal, Refund, Discount Management, Waiver, Cash Closing, Financial
-  Reports — all unbuilt, per PRODUCT_SPEC.md's Phase 5 "Screens" list).
-  `checkInchargeScope` still has no route consumer.
+- **Not done at first**: no `product/web` screens for Phase 5 — built next,
+  see §1l. `checkInchargeScope` still has no route consumer.
+
+### 1l. Phase 5 frontend (`product/web`) — screens built, server-rendering verified
+
+Eight new screens added under a new "Finance" sidebar group: Fee
+Structures (categories + per-class structures on one page), Student Fees
+(assign a structure to a student with an optional override amount),
+Invoices (list + a dynamic multi-line-item create dialog + a detail page
+showing paid/waived/remaining), Payments (record against a student's
+payable invoices with optional credit application + a reversal
+request/decide flow), Refunds (request → approve/reject → mark completed),
+Discounts (percentage-or-flat-amount request → approve/reject), Waivers
+(request against a specific invoice → approve/reject), Cash Closing
+(opening/collections/refunds/actual → computed expected+variance →
+approve).
+
+**Notable patterns**:
+- `invoices/create-dialog.tsx` is the first dialog in this app with a
+  **dynamic list of form rows** (add/remove line items) inside a
+  `FormDialog` — each row is plain local React state, serialized into one
+  hidden `itemsJson` input as JSON on every render, parsed back out by the
+  Server Action. Simpler than trying to encode an indexed array through
+  native `FormData` field names.
+- `payments/record-dialog.tsx` picks a student first, then **filters
+  already-fetched invoice/credit lists client-side** by that student id —
+  no extra network round-trip needed (unlike Phase 3's Substitution
+  dialog, which genuinely needed a fresh server fetch per section
+  selection), since Phase 5's data volumes are small enough to fetch once
+  up front.
+- Discovered a real Base UI typing gap while building
+  `payments/record-dialog.tsx`: a `<Select>` with **neither** a `value`
+  nor a `defaultValue` prop (only `onValueChange`) has its generic value
+  type inferred as `{}` instead of `string | null`, so `onValueChange`'s
+  parameter typed as `{}` and calling `setState({})`-shaped code failed to
+  typecheck. Worked around by typing the callback parameter `unknown` and
+  narrowing with `typeof v === "string"` rather than trusting the
+  library's inferred type — every other `<Select>` in this app avoids the
+  issue by always passing a `value`/`defaultValue`.
+
+**Verified for real**: `npm run typecheck` and `npm run build` both pass
+(37 routes, up from 29). Logged in via the established curl no-JS-form
+technique and confirmed all 8 new pages return 200 with correct, accurate
+empty states ("No fee categories yet", "No invoices yet", etc. — accurate
+given the database has no Phase 5 data after integration test cleanup).
+
+**Not verified**: the interactive dialogs — fee category/structure
+create/archive, student-fee assign, the dynamic invoice line-item editor,
+payment record (+ credit application), the four approval-decision flows
+(reversal/refund/discount/waiver), cash closing create/approve — have not
+been individually click-tested in a real browser, same standing caveat as
+every prior phase. The invoice line-item editor and the payment dialog's
+student-dependent invoice/credit filtering are the highest-value ones to
+check first, since they carry the most client-side logic.
 
 ### How this was verified (not just "should work")
 
@@ -925,24 +974,20 @@ docs/
 Phase 0: fully done. Phase 1: backend + frontend built (§1c/§1d). Phase 2:
 backend + frontend built (§1e/§1f). Phase 3: backend + frontend both built
 (§1g/§1h) — 168 tests, 25 pages. Phase 4: backend + frontend both built
-(§1i/§1j) — 209 tests, 29 pages. Phase 5: **backend built and passing all
-269 tests in a full clean suite run (§1k), no frontend yet.** What's left,
-in order:
+(§1i/§1j) — 209 tests, 29 pages. Phase 5: **backend + frontend both built**
+(§1k/§1l) — 269 tests (full clean run), 37 pages. What's left, in order:
 
-1. **Build Phase 5's frontend** (Fee Structure, Student Fee Assignment,
-   Invoice Generation, Payment Recording, Payment Reversal, Refund,
-   Discount Management, Waiver, Cash Closing, Financial Reports) —
-   matches the "finish a phase fully before the next" approach used for
-   Phases 1-4.
-2. **Click through Phase 1-5's screens in a real browser** — every
+1. **Click through Phase 1-5's screens in a real browser** — every
    "+ Add", "Edit", "Archive", "Approve/Reject", "Transfer", "Withdraw",
    "Publish", "Submit", "Record payment", and document-upload control.
    This is the one open item standing between "built" and "actually done"
-   across the whole product so far.
-3. **Then Phase 6** (Operations — Leave, Complaints), the last piece that
+   across the whole product so far — every phase's backend is genuinely
+   verified against the real database, but no phase's UI has been
+   clicked through by a human yet.
+2. **Then Phase 6** (Operations — Leave, Complaints), the last piece that
    depends on Phase 5's neighbors (Phase 2/3) rather than Phase 5 itself,
    so it's still a free choice, not a fixed order.
-4. **Minor cleanup, low priority**: wire real email delivery when a
+3. **Minor cleanup, low priority**: wire real email delivery when a
    provider is chosen; consider a session-refresh-on-expiry flow for
    `product/web` once 20-minute re-logins become annoying; rename the
    placeholder "Demo Institute" to something real before any actual use.
@@ -1057,6 +1102,28 @@ in order:
 Append a dated entry every session. Keep entries short — what changed, what's
 left, anything the next session needs to know that isn't obvious from the
 code/docs themselves.
+
+### 2026-09-11 (q) — Phase 5 frontend built: Fee Structures, Invoicing, Payments, Refunds, Discounts, Waivers, Cash Closing
+
+- Continued directly from entry (p) once the 269/269 clean full-suite run
+  was confirmed. Built all 8 remaining screens under a new "Finance"
+  sidebar group.
+- The invoice creation dialog needed a genuinely new pattern — a dynamic,
+  add/remove-able list of line-item rows inside a `FormDialog` — solved
+  with local component state serialized into one hidden JSON input rather
+  than fighting `FormData`'s flat field-name model.
+- Found a real Base UI typing gap while building the payment dialog: a
+  `<Select>` with neither `value` nor `defaultValue` infers its value
+  type as `{}` instead of `string | null`, breaking `onValueChange`.
+  Worked around with an `unknown` parameter + `typeof` narrowing.
+- **Verified for real**: `npm run typecheck` and `npm run build` both pass
+  (37 routes); all 8 new pages return 200 with correct empty states.
+- **Not done**: interactive dialogs across all five phases still not
+  click-tested in a real browser — the standing, largest open item, now
+  spanning the whole product.
+- **Next session should**: either click through all phases' dialogs in a
+  real browser (§3 item 1), or start Phase 6 (Operations — Leave,
+  Complaints).
 
 ### 2026-09-11 (p) — Phase 5 backend built: Finance Module, plus a real full-suite clean run
 
