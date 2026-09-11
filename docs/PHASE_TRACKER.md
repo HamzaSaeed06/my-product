@@ -37,21 +37,23 @@ and frontend both built**: Timetable (+conflict detection), Attendance
 (+correction workflow), Teacher Attendance, Substitution, Curriculum/
 Progress, Homework, Assessments (+marks lock/correction) — 168 integration
 tests total, 25 pages total, all smoke-tested authenticated-200. **Phase 4
-— backend built and passing**: Exams (+schedule conflict detection),
+— backend and frontend both built**: Exams (+schedule conflict detection),
 Result workflow (Draft→Submitted→Reviewed→Finalized→Published, +correction
 workflow), Report Cards (JSON snapshot), Promotion (Promote/Repeat/Pending
-immediate, Class Jump requires approval) — 207 integration tests total (39
-new), all confirmed passing in a real watched test run. No Phase 4 frontend
-yet. Server-rendered data verified live on every Phase 1-3 page; the
-interactive dialogs across Phase 1, 2, and 3 are built on the same proven
-cookie/CSRF pattern as login/logout but have not been individually
-click-tested in a real browser (a genuine attempt to reproduce the
-JS-invoked Server Action protocol via curl hit real complexity — React
-Flight's multipart argument encoding, not just field names — documented as
-a known gap rather than pursued further). Incharge scope checks
-(`checkInchargeScope`) still have no route consumer — Phase 3/4's routes
-are gated by plain permission checks only. See `PROJECT_STATUS.md`
-§1c/§1d/§1e/§1f/§1g/§1h/§1i for full detail.
+immediate, Class Jump requires approval) — 209 integration tests total, 29
+pages total, all confirmed passing/rendering across several verification
+runs. Server-rendered data verified live on every page; the interactive
+dialogs across all four phases are built on the same proven cookie/CSRF
+pattern as login/logout but have not been individually click-tested in a
+real browser (a genuine attempt to reproduce the JS-invoked Server Action
+protocol via curl hit real complexity — React Flight's multipart argument
+encoding, not just field names — documented as a known gap rather than
+pursued further). Incharge scope checks (`checkInchargeScope`) still have
+no route consumer — Phase 3/4's routes are gated by plain permission
+checks only. An intermittent Neon connection drop (P1001) during long
+test runs was investigated and confirmed to be external flakiness, not a
+code defect — see `PROJECT_STATUS.md` §5a. See also §1c/§1d/§1e/§1f/§1g/
+§1h/§1i/§1j for full detail.
 
 ## Notes on dependency ordering
 

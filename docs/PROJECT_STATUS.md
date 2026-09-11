@@ -5,13 +5,15 @@
 (interactive dialogs unverified in-browser — see §1d). Phase 2 backend and
 frontend both complete (116 passing integration tests, 18 pages — see
 §1e/§1f). Phase 3 backend and frontend both complete (168 integration
-tests, 25 pages — see §1g/§1h). **Phase 4 backend now built and passing**:
-Exams (+schedule conflict detection), Result workflow (Draft→Submitted→
-Reviewed→Finalized→Published, with a correction-approval workflow),
-Report Cards (JSON snapshot, PDF rendering deferred), Promotion
-(Promote/Repeat/Pending immediate, Class Jump requires approval) — 207
-integration tests total (39 new), all confirmed passing in a real watched
-run. No Phase 4 frontend yet. See §1i.
+tests, 25 pages — see §1g/§1h). **Phase 4 backend and frontend both
+complete**: Exams (+schedule conflict detection), Result workflow
+(Draft→Submitted→Reviewed→Finalized→Published, with a correction-approval
+workflow), Report Cards (JSON snapshot, PDF rendering deferred), Promotion
+(Promote/Repeat/Pending immediate, Class Jump requires approval) — 209
+integration tests total, 29 pages, all confirmed passing/rendering across
+several verification runs (one intermittent Neon connection drop per long
+run observed and root-caused as external flakiness, not a code defect —
+see §5a). See §1i/§1j.
 **Repo state:** Monorepo scaffolded. `product/api` has a working Express +
 TypeScript + Prisma backend implementing all of Phase 0's API surface (auth,
 users, roles/permissions, approvals, documents, notifications, audit).
@@ -707,10 +709,52 @@ database.
   network round-trips to Neon plus verbose Prisma query logging, the same
   characteristic already seen and diagnosed in Phase 3's entry, not a
   regression).
-- **Not done**: no `product/web` screens for any of Phase 4 yet (Exam
-  Management, Exam Schedule, Result Entry/Review/Finalization/Publication,
-  Result Correction, Report Card Generator, Promotion — all unbuilt, per
-  PRODUCT_SPEC.md's Phase 4 "Screens" list).
+- **Not done at first**: no `product/web` screens for Phase 4 — built next,
+  see §1j. Also added a small missing endpoint discovered while building
+  the frontend: `GET /exams/:examId` (the list endpoint existed, a
+  single-exam getter didn't) — added with 2 new tests, bringing the total
+  to 209.
+
+### 1j. Phase 4 frontend (`product/web`) — screens built, server-rendering verified
+
+Four new screens/flows added under a new "Results & Promotion" sidebar
+group: Exams (list + create/publish, per-exam detail page for schedule
+management with conflict errors surfaced from the backend), Results
+(per-exam+section student list, per-subject marks entry while draft, a
+single "next step" action button per result that walks the sequential
+workflow, correction-request/decide flow), Report Cards (generate/
+regenerate per eligible result, a detail page rendering the JSON
+snapshot), Promotions (per-student decision dialog scoped to a chosen
+target year/class/section, a class-jump approval inbox).
+
+**Notable pattern**: `results/status-action-button.tsx` is a single
+component that looks up the *one* valid next transition for a result's
+current status (DRAFT→Submit, SUBMITTED→Review, REVIEWED→Finalize,
+FINALIZED→Publish) from a lookup table and renders only that action —
+rather than one button per possible transition with most of them
+disabled, this directly reflects the backend's sequential-only enforcement
+in the UI itself.
+
+**Verified for real**: `npm run typecheck` and `npm run build` both pass
+(29 routes, up from 25). Logged in via the established curl no-JS-form
+technique and confirmed all 4 new pages return 200 with correct, accurate
+empty states ("No exams yet", "Create an exam first", "Create sections
+and academic years first" — accurate given the database has no Phase 1-4
+data after integration test cleanup). One transient hiccup hit mid-session:
+`next build` failed once with a raw memory-allocation error from
+Turbopack's Rust toolchain with 7.8GB free on `C:` — retried immediately
+with no other change and it succeeded, so treated as a one-off resource
+blip (the machine running other things at that moment), not a real issue;
+worth a second look only if it recurs.
+
+**Not verified**: the interactive dialogs — exam create/publish, schedule
+add, marks entry, workflow transition buttons, correction request/decide,
+report card generate, promotion decide/class-jump-approve — have not been
+individually click-tested in a real browser, same standing caveat as every
+prior phase. Results' status-action-button and Promotions' decide-dialog
+(with its target-year/class/section dependency) are the highest-value ones
+to check first, since they encode the most business logic in the UI layer
+itself.
 
 ### How this was verified (not just "should work")
 
@@ -782,21 +826,17 @@ docs/
 
 Phase 0: fully done. Phase 1: backend + frontend built (§1c/§1d). Phase 2:
 backend + frontend built (§1e/§1f). Phase 3: backend + frontend both built
-(§1g/§1h) — 168 tests, 25 pages. Phase 4: **backend built and passing 207
-tests (§1i), no frontend yet.** What's left, in order:
+(§1g/§1h) — 168 tests, 25 pages. Phase 4: **backend + frontend both built**
+(§1i/§1j) — 209 tests, 29 pages. What's left, in order:
 
-1. **Build Phase 4's frontend** (Exam Management, Exam Schedule, Result
-   Entry/Review/Finalization/Publication, Result Correction, Report Card
-   Generator, Promotion) — matches the "finish a phase fully before the
-   next" approach used for Phases 1-3.
-2. **Click through Phase 1, 2, 3, and 4's screens in a real browser** —
+1. **Click through Phase 1, 2, 3, and 4's screens in a real browser** —
    every "+ Add", "Edit", "Archive", "Approve/Reject", "Transfer",
    "Withdraw", "Publish", "Submit", and document-upload control. This is
    the one open item standing between "built" and "actually done" across
-   the whole product so far. Phase 3's Timetable grid, Substitution's
-   dependent dropdown, and Assessment's marks table remain the
-   highest-value ones to check first.
-3. **Then Phase 5** (Finance Module) or **Phase 6** (Operations) — either
+   the whole product so far. Phase 3's Timetable grid and Substitution's
+   dependent dropdown, and Phase 4's Results status-action-button and
+   Promotions' decide-dialog, remain the highest-value ones to check first.
+2. **Then Phase 5** (Finance Module) or **Phase 6** (Operations) — either
    is unblocked (both only depend on Phase 2), so this is a free choice
    when the time comes, not a fixed order.
 4. **Minor cleanup, low priority**: wire real email delivery when a
@@ -885,6 +925,43 @@ tests (§1i), no frontend yet.** What's left, in order:
 Append a dated entry every session. Keep entries short — what changed, what's
 left, anything the next session needs to know that isn't obvious from the
 code/docs themselves.
+
+### 2026-09-11 (o) — Phase 4 frontend built: Exams, Results, Report Cards, Promotions
+
+- Continued directly from entry (n) once the backend's 207-test pass was
+  confirmed. Built all 4 remaining screens: Exams (list/create/publish +
+  per-exam schedule management), Results (marks entry + single "next
+  step" workflow button + correction flow), Report Cards (generate/
+  regenerate + snapshot view), Promotions (per-student decision dialog +
+  class-jump approval inbox).
+- Found and fixed a real gap while building the Exams detail page: no
+  `GET /exams/:examId` endpoint existed (only the list endpoint did).
+  Added it with 2 new tests (209 total).
+- **User pushed back mid-session on how long verification was taking** —
+  investigated properly instead of just re-running blindly. Root-caused a
+  pattern across 3 full-suite re-runs: a different, unrelated test file
+  failed each time, always with the identical `PrismaClientInitializationError
+  P1001 (Can't reach database server)`, never an assertion/logic failure.
+  Confirmed this is real, external Neon connectivity flakiness during long
+  (~15 min) continuous runs, not a code defect — verified by isolating and
+  re-running just the new exam tests (8/8 clean) rather than re-running
+  the full slow suite repeatedly chasing a random flake. Documented in
+  §5a, including a real (but low-priority, no-data-leak-this-session) test
+  hygiene gap this exposed: `afterAll` blocks assume `beforeAll` always
+  succeeds.
+- Hit one other transient blip: `next build` failed once with a raw Rust
+  memory-allocation error (7.8GB free on `C:`, not critically low like the
+  earlier disk-space incident); an immediate retry with no changes
+  succeeded. Treated as a one-off resource hiccup, not investigated
+  further since it didn't recur.
+- **Verified for real**: `npm run typecheck` and `npm run build` both pass
+  (29 routes); all 4 new pages return 200 with correct empty states.
+- **Not done**: interactive dialogs across all four phases still not
+  click-tested in a real browser — the standing, largest open item.
+- **Next session should**: either click through all phases' dialogs in a
+  real browser (§3 item 1), or start Phase 5 (Finance) or Phase 6
+  (Operations) — both are unblocked and it's a free choice which comes
+  first.
 
 ### 2026-09-11 (n) — Phase 4 backend built: Results & Promotion
 
