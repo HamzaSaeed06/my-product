@@ -27,20 +27,21 @@ alongside Phase 4/5 once Phase 0/2/3 are done).
 
 ## Current focus
 
-**Phase 0 — complete** (backend + login/dashboard frontend, verified).
-**Phase 1 — backend and frontend both built.** Institute (singleton),
-Campuses, Academic Years, Classes, Sections, and dynamic Incharge scopes
-(with optimistic concurrency) all have working APIs (70 passing integration
-tests against the real database, on top of Phase 0's 30) and matching
-`product/web` screens (Institute Profile, Campuses, Academic Years, Classes,
-Sections, Incharge Scope Assignment) under a shared dashboard sidebar shell.
-Server-rendered data verified live (real institute name, correct empty
-states); the interactive dialogs (create/edit/archive/revoke) are built on
-the same cookie/CSRF pattern already proven for login/logout but have not
-been individually click-tested in a real browser yet. Incharge scope checks
-(`checkInchargeScope`) still have no route consumer — correctly so, nothing
-exists for an Incharge to act on until Phase 2/3. See `PROJECT_STATUS.md`
-§1c/§1d for full detail.
+**Phase 0 — complete.** **Phase 1 — backend and frontend both built** (70
+integration tests; 6 screens under the dashboard sidebar). **Phase 2 —
+backend and frontend both built**: Students (list/search/detail/enroll/
+transfer/withdraw/documents), Parents (+ child linking), Teachers, Subjects,
+Admissions (+ approve/reject/withdraw), Teacher Assignments — 116
+integration tests total, 18 pages across both phases. Server-rendered data
+verified live on every page; the interactive dialogs across BOTH Phase 1
+and Phase 2 are built on the same proven cookie/CSRF pattern as login/logout
+but have not been individually click-tested in a real browser (a genuine
+attempt to reproduce the JS-invoked Server Action protocol via curl hit real
+complexity — React Flight's multipart argument encoding, not just field
+names — documented as a known gap rather than pursued further). Incharge
+scope checks (`checkInchargeScope`) still have no route consumer —
+correctly so, nothing exists for an Incharge to act on until Phase 3. See
+`PROJECT_STATUS.md` §1c/§1d/§1e/§1f for full detail.
 
 ## Notes on dependency ordering
 

@@ -51,3 +51,34 @@ export async function apiRequest<T>(
 
   return data as T;
 }
+
+/**
+ * Multipart variant of apiRequest, for file uploads. Forwards a FormData
+ * body as-is (never JSON-stringified, and no manual Content-Type — fetch
+ * sets the multipart boundary itself). Same cookie/CSRF forwarding as
+ * apiRequest().
+ */
+export async function apiUpload<T>(path: string, formData: FormData): Promise<T> {
+  const cookieStore = await cookies();
+  const headers: Record<string, string> = {
+    Cookie: cookieStore.toString(),
+    "X-CSRF-Token": cookieStore.get("csrfToken")?.value ?? "",
+  };
+
+  const res = await fetch(`${API_URL}${path}`, {
+    method: "POST",
+    headers,
+    body: formData,
+    cache: "no-store",
+  });
+
+  const text = await res.text();
+  const data: unknown = text ? JSON.parse(text) : undefined;
+
+  if (!res.ok) {
+    const errorBody = data as { error?: string; message?: string } | undefined;
+    throw new ApiError(res.status, errorBody?.error ?? "UNKNOWN_ERROR", errorBody?.message ?? "Request failed");
+  }
+
+  return data as T;
+}

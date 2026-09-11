@@ -1,0 +1,103 @@
+import Link from "next/link";
+import { apiRequest } from "@/lib/apiClient";
+import { PageHeader } from "@/components/page-header";
+import { Badge } from "@/components/ui/badge";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import {
+  CreateAdmissionDialog,
+  ApproveAdmissionButton,
+  RejectAdmissionButton,
+  WithdrawAdmissionButton,
+} from "./admission-dialogs";
+
+interface Admission {
+  id: string;
+  status: "PENDING" | "APPROVED" | "REJECTED" | "WITHDRAWN";
+  appliedAt: string;
+  student: { id: string; studentCode: string; fullName: string };
+  campus: { name: string };
+  klass: { name: string };
+  academicYear: { name: string };
+}
+
+interface StudentOption {
+  id: string;
+  studentCode: string;
+  fullName: string;
+}
+interface NamedOption {
+  id: string;
+  name: string;
+}
+
+function statusBadge(status: Admission["status"]) {
+  if (status === "APPROVED") return <Badge>Approved</Badge>;
+  if (status === "PENDING") return <Badge variant="secondary">Pending</Badge>;
+  return <Badge variant="secondary">{status.charAt(0) + status.slice(1).toLowerCase()}</Badge>;
+}
+
+export default async function AdmissionsPage() {
+  const [admissions, students, campuses, classes, academicYears] = await Promise.all([
+    apiRequest<Admission[]>("/api/v1/admissions"),
+    apiRequest<StudentOption[]>("/api/v1/students?status=ACTIVE"),
+    apiRequest<NamedOption[]>("/api/v1/campuses"),
+    apiRequest<NamedOption[]>("/api/v1/classes"),
+    apiRequest<NamedOption[]>("/api/v1/academic-years"),
+  ]);
+
+  return (
+    <div>
+      <PageHeader
+        title="Admissions"
+        description="Admission ≠ Enrollment — approving here does not automatically enroll the student."
+        action={
+          <CreateAdmissionDialog students={students} campuses={campuses} classes={classes} academicYears={academicYears} />
+        }
+      />
+
+      {admissions.length === 0 ? (
+        <p className="text-sm text-muted-foreground">No admission applications yet.</p>
+      ) : (
+        <div className="overflow-x-auto rounded-lg border border-border">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Student</TableHead>
+                <TableHead>Class</TableHead>
+                <TableHead>Campus</TableHead>
+                <TableHead>Academic year</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead className="text-right">Actions</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {admissions.map((admission) => (
+                <TableRow key={admission.id}>
+                  <TableCell className="font-medium">
+                    <Link href={`/dashboard/students/${admission.student.id}`} className="hover:underline">
+                      {admission.student.fullName}
+                    </Link>{" "}
+                    <span className="text-muted-foreground">({admission.student.studentCode})</span>
+                  </TableCell>
+                  <TableCell className="text-muted-foreground">{admission.klass.name}</TableCell>
+                  <TableCell className="text-muted-foreground">{admission.campus.name}</TableCell>
+                  <TableCell className="text-muted-foreground">{admission.academicYear.name}</TableCell>
+                  <TableCell>{statusBadge(admission.status)}</TableCell>
+                  <TableCell className="flex justify-end gap-2">
+                    {admission.status === "PENDING" && (
+                      <>
+                        <ApproveAdmissionButton id={admission.id} studentName={admission.student.fullName} />
+                        <RejectAdmissionButton id={admission.id} studentName={admission.student.fullName} />
+                        <WithdrawAdmissionButton id={admission.id} studentName={admission.student.fullName} />
+                      </>
+                    )}
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </div>
+      )}
+    </div>
+  );
+}

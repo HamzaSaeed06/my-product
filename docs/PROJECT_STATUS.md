@@ -3,9 +3,11 @@
 **Last updated:** 2026-09-11
 **Current phase:** Phase 0 complete. Phase 1 backend+frontend complete
 (interactive dialogs unverified in-browser — see §1d). **Phase 2 backend
-now built**: Students, Parents, Teachers, Subjects, Admissions, Enrollments,
-Teacher Assignments — 116 passing integration tests total (46 new). No
-Phase 2 frontend yet. See §1e.
+and frontend both complete**: Students (list/search/detail/enroll/transfer/
+withdraw/documents), Parents (+ child linking), Teachers, Subjects,
+Admissions (+ approve/reject/withdraw), Teacher Assignments — 116 passing
+integration tests, 18 total pages, typecheck+build clean. Interactive
+dialogs unverified in-browser, same caveat as Phase 1. See §1e/§1f.
 **Repo state:** Monorepo scaffolded. `product/api` has a working Express +
 TypeScript + Prisma backend implementing all of Phase 0's API surface (auth,
 users, roles/permissions, approvals, documents, notifications, audit).
@@ -432,6 +434,57 @@ with Phase 0/1's 70), all passing against the real database.
   Assignment, Subjects, Parents — all unbuilt, per PRODUCT_SPEC.md's Phase
   2 "Screens" list).
 
+### 1f. Phase 2 frontend (`product/web`) — screens built, server-rendering verified
+
+Six new screens/flows under the same dashboard sidebar shell (now grouped
+into "" / "Institute Structure" / "Academic Structure" sections in
+`dashboard-sidebar.tsx`): Students (list + search + detail), Parents,
+Teachers, Subjects, Admissions, Teacher Assignments.
+
+**New shared pieces worth knowing about:**
+- `src/components/section-picker.tsx` — a `<Select>` of sections that also
+  emits hidden `classId`/`academicYearId` inputs derived from the chosen
+  section (`emitClassId`/`emitAcademicYearId` props to opt out), extracted
+  once Enrollment and Teacher Assignment both needed the exact same
+  "pick a section, get its class+year for free" behavior.
+- `src/lib/apiClient.ts`'s `apiUpload<T>()` — added for the student document
+  upload flow. Forwards a `FormData` as-is (cookies + CSRF headers only, no
+  manual `Content-Type` so the browser sets the multipart boundary), unlike
+  `apiRequest()` which JSON-encodes.
+- Student detail (`dashboard/students/[studentId]/`) is the most complex
+  screen built so far: profile edit, enrollment history + create/transfer/
+  withdraw, document upload/list, all on one page, fetched in parallel via
+  `Promise.all`. Document upload is a hand-rolled dialog (not built on the
+  shared `FormDialog`) because it needs a real `<input type="file">` and
+  `apiUpload` instead of `apiRequest`.
+- Students list search (`search-box.tsx`) is a debounced (300ms), URL-driven
+  (`?q=`) client component — `page.tsx` reads the query param and switches
+  between `/students/search?q=` and `/students` server-side, so the search
+  state survives a refresh/back-navigation.
+- Admissions and Teacher Assignments both reuse `SectionPicker`.
+
+**Verified for real**: `npm run typecheck` and `npm run build` both pass
+(18 total routes). All 6 new pages return 200 for an authenticated session,
+server-rendering real (empty, post-test-cleanup) data correctly — "No X
+yet" empty states, not crashes. Attempted a genuine curl reproduction of
+`createStudent`'s write path (the JS-invoked Server Action protocol, since
+`FormDialog` calls it via `startTransition`, not a plain form-post) using a
+`Next-Action` header + multipart body — got further than expected (engaged
+the real RSC action pipeline, got a structured RSC error stream back
+instead of a 404) but ultimately failed on React Flight's own argument-
+encoding scheme for a `FormData`-typed argument, which isn't just plain
+field names. Verified this left zero orphan data (`student` count 0
+afterward) before abandoning the attempt as diminishing-returns.
+
+**Not verified** (same caveat as §1d, now applying to twice as many
+screens): none of the interactive dialogs — create/edit/archive/approve/
+reject/withdraw/upload — have been individually click-tested in a real
+browser. They all use the same `apiRequest`/`apiUpload` cookie+CSRF
+mechanism already proven correct for login/logout, so confidence is
+reasonable, but **this is inference, not verification.** Click through
+every dialog across both Phase 1 and Phase 2 in an actual browser before
+treating either phase as fully done in a visual/interaction sense.
+
 ### How this was verified (not just "should work")
 
 In this session, with dependencies actually installed against a real npm
@@ -500,21 +553,18 @@ docs/
 
 ## 3. Immediate next action
 
-Phase 0: fully done. Phase 1: backend + frontend built (§1c/§1d), dialogs
-not yet click-tested in browser. Phase 2: backend built and tested (§1e),
-no frontend yet. What's left, in order:
+Phase 0: fully done. Phase 1: backend + frontend built (§1c/§1d). Phase 2:
+backend + frontend built (§1e/§1f). Both phases' interactive dialogs are
+still unverified in a real browser. What's left, in order:
 
-1. **Build Phase 2's frontend** (Students List/Detail, Admission
-   Application, Enrollment, Teachers List, Teacher Assignment, Subjects,
-   Parents) — matches the "finish a phase fully before moving to the next"
-   approach used for Phase 1.
-2. **Click through Phase 1's screens in a real browser** (§1d's "Not
-   verified" note) — still outstanding, can be done alongside Phase 2
-   frontend work.
-3. **Then Phase 3** (Timetable, Attendance, Curriculum, Homework,
+1. **Click through Phase 1 and Phase 2's screens in a real browser** —
+   every "+ Add", "Edit", "Archive", "Approve/Reject", "Transfer",
+   "Withdraw", and document-upload control. This is the one open item
+   standing between "built" and "actually done" for both phases.
+2. **Then Phase 3** (Timetable, Attendance, Curriculum, Homework,
    Assessments) — this is also where `checkInchargeScope` finally gets a
    real route to gate.
-4. **Minor cleanup, low priority**: wire real email delivery when a
+3. **Minor cleanup, low priority**: wire real email delivery when a
    provider is chosen; consider a session-refresh-on-expiry flow for
    `product/web` once 20-minute re-logins become annoying; rename the
    placeholder "Demo Institute" to something real before any actual use.
@@ -571,6 +621,46 @@ no frontend yet. What's left, in order:
 Append a dated entry every session. Keep entries short — what changed, what's
 left, anything the next session needs to know that isn't obvious from the
 code/docs themselves.
+
+### 2026-09-11 (k) — Phase 2 frontend built: Students, Parents, Teachers, Subjects, Admissions, Teacher Assignments
+
+- User confirmed to continue straight into Phase 2's frontend after backend
+  status was reported (entry (j)), keeping to the "finish a phase fully
+  before the next" approach.
+- Regrouped `dashboard-sidebar.tsx` into sections ("" / "Institute
+  Structure" / "Academic Structure") now that there are 12 total nav links.
+- Built `src/components/section-picker.tsx` (shared `<Select>` that also
+  emits hidden `classId`/`academicYearId` fields from the chosen section)
+  and `apiClient.ts`'s `apiUpload()` (multipart FormData forwarding for the
+  document upload flow) — both extracted for reuse, not one-off.
+- Built all 6 Phase 2 screens/flows: Subjects and Teachers (mirror Classes'
+  pattern), Parents (card layout with inline linked children + "link child"
+  dialog per card), Students list (debounced URL-driven search) + Student
+  detail (profile edit, enrollment history/create/transfer/withdraw,
+  document upload/list — the most complex screen built so far), Admissions
+  (create + separate approve/reject/withdraw confirm buttons), Teacher
+  Assignments (reuses `SectionPicker`).
+- Fixed two TypeScript issues before they became a pattern: `useActionState`
+  needed an explicit `FormState` interface (`profile-form.tsx`) rather than
+  relying on inferred union types; removed a leftover phantom import in
+  student detail's `page.tsx`.
+- Attempted a real curl reproduction of the JS-invoked Server Action
+  protocol (`Next-Action` header) for `createStudent`, to prove the write
+  path without a browser — got further than a login/logout-style
+  reproduction (engaged the actual RSC pipeline) but failed on React
+  Flight's argument-encoding scheme for a `FormData` argument. Verified zero
+  orphan data resulted, then stopped (diminishing returns — the underlying
+  cookie/CSRF mechanism is already proven via login/logout and every Phase 1
+  dialog uses the identical pattern untested the same way).
+- **Verified for real**: `npm run typecheck` and `npm run build` both pass
+  (18 routes total); all 6 new pages return 200 for an authenticated
+  session with correct empty states.
+- **Not done**: interactive dialogs across BOTH Phase 1 and Phase 2 still
+  not click-tested in a real browser — this is now the single largest open
+  item before either phase is "done" in the full sense. See §3.
+- **Next session should**: click through both phases' dialogs in a real
+  browser (§3 item 1), then start Phase 3 (Timetable, Attendance,
+  Curriculum, Homework, Assessments).
 
 ### 2026-09-11 (j) — Phase 2 backend built: Academic Structure
 
