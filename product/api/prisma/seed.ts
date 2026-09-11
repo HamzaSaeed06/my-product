@@ -66,7 +66,37 @@ const PHASE_1_PERMISSIONS = [
   ["incharge_scope.revoke", "Revoke Incharge scope assignments"],
 ] as const;
 
-const ALL_PERMISSIONS = [...PHASE_0_PERMISSIONS, ...PHASE_1_PERMISSIONS];
+// Phase 2: Student/Parent/Teacher/Subject/Admission/Enrollment.
+const PHASE_2_PERMISSIONS = [
+  ["student.view", "View students"],
+  ["student.create", "Create students"],
+  ["student.edit", "Edit students"],
+  ["student.archive", "Archive/withdraw students"],
+  ["parent.view", "View parents/guardians"],
+  ["parent.create", "Create parents/guardians"],
+  ["parent.edit", "Edit parents/guardians"],
+  ["teacher.view", "View teachers"],
+  ["teacher.create", "Create teachers"],
+  ["teacher.edit", "Edit teachers"],
+  ["teacher.archive", "Archive teachers"],
+  ["subject.view", "View subjects"],
+  ["subject.create", "Create subjects"],
+  ["subject.edit", "Edit subjects"],
+  ["subject.archive", "Archive subjects"],
+  ["admission.view", "View admission applications"],
+  ["admission.create", "Create admission applications"],
+  ["admission.approve", "Approve admission applications"],
+  ["admission.reject", "Reject admission applications"],
+  ["enrollment.view", "View enrollments"],
+  ["enrollment.create", "Create enrollments"],
+  ["enrollment.transfer", "Transfer a student's class/section"],
+  ["enrollment.withdraw", "Withdraw an enrollment"],
+  ["teacher_assignment.view", "View teacher assignments"],
+  ["teacher_assignment.create", "Create teacher assignments"],
+  ["teacher_assignment.edit", "Edit teacher assignments"],
+] as const;
+
+const ALL_PERMISSIONS = [...PHASE_0_PERMISSIONS, ...PHASE_1_PERMISSIONS, ...PHASE_2_PERMISSIONS];
 
 async function main(): Promise<void> {
   for (const roleName of CORE_ROLES) {

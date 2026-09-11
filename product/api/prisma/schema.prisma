@@ -48,6 +48,8 @@ model User {
   approvalRequestsDecided   ApprovalRequest[]       @relation("ApprovalDecidedBy")
   inchargeScopes            InchargeScope[]
   classTeacherOfSections    Section[]               @relation("SectionClassTeacher")
+  teacherProfile            Teacher?
+  admissionsDecided         Admission[]
 
   @@map("users")
 }
@@ -211,7 +213,8 @@ model Document {
   uploadedById String
   createdAt    DateTime @default(now())
 
-  uploadedBy User @relation("DocumentUploadedBy", fields: [uploadedById], references: [id])
+  uploadedBy      User             @relation("DocumentUploadedBy", fields: [uploadedById], references: [id])
+  studentDocument StudentDocument?
 
   @@index([ownerType, ownerId])
   @@map("documents")
@@ -289,6 +292,7 @@ model Institute {
   settings InstituteSettings?
   campuses Campus[]
   classes  Class[]
+  subjects Subject[]
 
   @@map("institutes")
 }
@@ -329,6 +333,7 @@ model Campus {
   userRoles      UserRole[]
   sections       Section[]
   inchargeScopes InchargeScope[]
+  admissions     Admission[]
 
   @@map("campuses")
 }
@@ -353,8 +358,11 @@ model AcademicYear {
   createdAt   DateTime           @default(now())
   updatedAt   DateTime           @updatedAt
 
-  sections       Section[]
-  inchargeScopes InchargeScope[]
+  sections           Section[]
+  inchargeScopes     InchargeScope[]
+  admissions         Admission[]
+  enrollments        Enrollment[]
+  teacherAssignments TeacherAssignment[]
 
   @@unique([instituteId, name])
   @@map("academic_years")
@@ -372,9 +380,12 @@ model Class {
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
 
-  institute      Institute            @relation(fields: [instituteId], references: [id], onDelete: Cascade)
-  sections       Section[]
-  inchargeScopes InchargeScopeClass[]
+  institute          Institute            @relation(fields: [instituteId], references: [id], onDelete: Cascade)
+  sections           Section[]
+  inchargeScopes     InchargeScopeClass[]
+  admissions         Admission[]
+  enrollments        Enrollment[]
+  teacherAssignments TeacherAssignment[]
 
   @@unique([instituteId, name])
   @@map("classes")
@@ -394,11 +405,13 @@ model Section {
   createdAt      DateTime  @default(now())
   updatedAt      DateTime  @updatedAt
 
-  class          Class                  @relation(fields: [classId], references: [id], onDelete: Cascade)
-  campus         Campus                 @relation(fields: [campusId], references: [id], onDelete: Cascade)
-  academicYear   AcademicYear           @relation(fields: [academicYearId], references: [id], onDelete: Cascade)
-  classTeacher   User?                  @relation("SectionClassTeacher", fields: [classTeacherId], references: [id])
-  inchargeScopes InchargeScopeSection[]
+  class              Class                  @relation(fields: [classId], references: [id], onDelete: Cascade)
+  campus             Campus                 @relation(fields: [campusId], references: [id], onDelete: Cascade)
+  academicYear       AcademicYear           @relation(fields: [academicYearId], references: [id], onDelete: Cascade)
+  classTeacher       User?                  @relation("SectionClassTeacher", fields: [classTeacherId], references: [id])
+  inchargeScopes     InchargeScopeSection[]
+  enrollments        Enrollment[]
+  teacherAssignments TeacherAssignment[]
 
   @@unique([classId, campusId, academicYearId, name])
   @@map("sections")
@@ -457,4 +470,232 @@ model InchargeScopeSection {
 
   @@unique([inchargeScopeId, sectionId])
   @@map("incharge_scope_sections")
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// Phase 2 — Academic Structure (Student/Parent/Teacher/Subject/Admission/
+// Enrollment). See docs/PRODUCT_SPEC.md → "PHASE 2: ACADEMIC STRUCTURE".
+//
+// Student is deliberately institute/campus-context-free — its permanent
+// identity (studentCode) never changes across years, campuses, or classes.
+// All context (which class, section, year, roll number) lives on
+// Enrollment, a separate model, per spec's core "Student ≠ Enrollment"
+// rule. A student has exactly one Enrollment row per Admission, but can
+// accumulate many Enrollment rows over time (promotion, transfer, re-
+// admission) — never overwritten, always a new row.
+// ─────────────────────────────────────────────────────────────────────────
+
+enum StudentStatus {
+  ACTIVE
+  WITHDRAWN
+  ARCHIVED
+}
+
+model Student {
+  id          String        @id @default(uuid())
+  // Permanent, human-readable identity — e.g. STU-00018427. Generated once,
+  // never reused, never changes. See lib/studentCode.ts.
+  studentCode String        @unique
+  fullName    String
+  dateOfBirth DateTime?
+  gender      String?
+  phone       String?
+  address     String?
+  photoUrl    String?
+  status      StudentStatus @default(ACTIVE)
+  withdrawnAt DateTime?
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  parents     StudentParent[]
+  admissions  Admission[]
+  enrollments Enrollment[]
+  documents   StudentDocument[]
+
+  @@map("students")
+}
+
+model Parent {
+  id        String   @id @default(uuid())
+  fullName  String
+  phone     String
+  email     String?
+  address   String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  children StudentParent[]
+
+  @@map("parents")
+}
+
+// Join table — a parent can have multiple children, a child can have
+// multiple parents/guardians (spec: "Parent Can Have Multiple Children —
+// Link, don't duplicate").
+model StudentParent {
+  id           String   @id @default(uuid())
+  studentId    String
+  parentId     String
+  relationship String? // e.g. "Father", "Mother", "Guardian"
+  isPrimary    Boolean  @default(false)
+  createdAt    DateTime @default(now())
+
+  student Student @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  parent  Parent  @relation(fields: [parentId], references: [id], onDelete: Cascade)
+
+  @@unique([studentId, parentId])
+  @@map("student_parents")
+}
+
+enum StaffStatus {
+  ACTIVE
+  ARCHIVED
+}
+
+// Teaching-staff profile, 1:1 with a User that has the TEACHER role
+// (created via the Phase 0 Users API). Kept separate from User because
+// employment details (employee code, qualification, ...) aren't identity/
+// auth concerns.
+model Teacher {
+  id            String      @id @default(uuid())
+  userId        String      @unique
+  employeeCode  String?     @unique
+  qualification String?
+  joiningDate   DateTime?
+  phone         String?
+  address       String?
+  status        StaffStatus @default(ACTIVE)
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+
+  user        User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  assignments TeacherAssignment[]
+
+  @@map("teachers")
+}
+
+// Institute-wide catalog, same pattern as Class (Phase 1).
+model Subject {
+  id          String    @id @default(uuid())
+  instituteId String
+  name        String
+  code        String?
+  archivedAt  DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  institute   Institute           @relation(fields: [instituteId], references: [id], onDelete: Cascade)
+  assignments TeacherAssignment[]
+
+  @@unique([instituteId, name])
+  @@map("subjects")
+}
+
+enum AdmissionStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  WITHDRAWN
+}
+
+// Admission ≠ Enrollment (spec's explicit rule): approving an Admission
+// does NOT automatically create an Enrollment — that's a deliberate
+// separate step (createEnrollment), matching the real workflow where fee
+// assignment/other checks can happen in between.
+model Admission {
+  id             String          @id @default(uuid())
+  studentId      String
+  campusId       String
+  classId        String
+  academicYearId String
+  status         AdmissionStatus @default(PENDING)
+  appliedAt      DateTime        @default(now())
+  decidedById    String?
+  decidedAt      DateTime?
+  decisionNote   String?
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+
+  student      Student      @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  campus       Campus       @relation(fields: [campusId], references: [id])
+  klass        Class        @relation(fields: [classId], references: [id])
+  academicYear AcademicYear @relation(fields: [academicYearId], references: [id])
+  decidedBy    User?        @relation(fields: [decidedById], references: [id])
+
+  @@index([studentId])
+  @@map("admissions")
+}
+
+enum EnrollmentStatus {
+  ACTIVE
+  TRANSFERRED
+  WITHDRAWN
+}
+
+model Enrollment {
+  id             String           @id @default(uuid())
+  studentId      String
+  academicYearId String
+  classId        String
+  sectionId      String
+  rollNumber     String?
+  status         EnrollmentStatus @default(ACTIVE)
+  enrolledAt     DateTime         @default(now())
+  withdrawnAt    DateTime?
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+
+  student      Student      @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  academicYear AcademicYear @relation(fields: [academicYearId], references: [id])
+  klass        Class        @relation(fields: [classId], references: [id])
+  section      Section      @relation(fields: [sectionId], references: [id])
+
+  // Roll numbers are unique within a section when assigned — NOT enforced
+  // globally (spec: "Roll Number is CONTEXTUAL", repeats across sections/
+  // years). "One active enrollment per academic year" is enforced at the
+  // service layer, not here, because a student legitimately accumulates
+  // multiple Enrollment rows per year across transfers (only one may be
+  // ACTIVE at a time).
+  @@unique([sectionId, rollNumber])
+  @@index([studentId, academicYearId])
+  @@map("enrollments")
+}
+
+// Duplicate-assignment prevention (spec: "Teacher Assignment is Academic-
+// Year-Specific"). Real time-of-day scheduling conflicts are Phase 3's
+// Timetable/PeriodSlot concern — this only prevents assigning the exact
+// same teacher+subject+section+year combination twice.
+model TeacherAssignment {
+  id             String    @id @default(uuid())
+  teacherId      String
+  subjectId      String
+  classId        String
+  sectionId      String
+  academicYearId String
+  archivedAt     DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  teacher      Teacher      @relation(fields: [teacherId], references: [id], onDelete: Cascade)
+  subject      Subject      @relation(fields: [subjectId], references: [id])
+  klass        Class        @relation(fields: [classId], references: [id])
+  section      Section      @relation(fields: [sectionId], references: [id])
+  academicYear AcademicYear @relation(fields: [academicYearId], references: [id])
+
+  @@unique([teacherId, subjectId, sectionId, academicYearId])
+  @@map("teacher_assignments")
+}
+
+// Formalizes the Student <-> Document (Phase 0) link with a real FK,
+// instead of relying on Document's loose ownerType/ownerId string pair.
+model StudentDocument {
+  id         String   @id @default(uuid())
+  studentId  String
+  documentId String   @unique
+  createdAt  DateTime @default(now())
+
+  student  Student  @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  document Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+
+  @@map("student_documents")
 }

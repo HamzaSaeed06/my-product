@@ -16,6 +16,13 @@ import { academicYearsRouter } from "./modules/academic-years/routes.js";
 import { classesRouter } from "./modules/classes/routes.js";
 import { sectionsRouter } from "./modules/sections/routes.js";
 import { inchargeScopesRouter } from "./modules/incharge-scopes/routes.js";
+import { studentsRouter } from "./modules/students/routes.js";
+import { parentsRouter } from "./modules/parents/routes.js";
+import { teachersRouter } from "./modules/teachers/routes.js";
+import { subjectsRouter } from "./modules/subjects/routes.js";
+import { admissionsRouter } from "./modules/admissions/routes.js";
+import { enrollmentsRouter } from "./modules/enrollments/routes.js";
+import { teacherAssignmentsRouter } from "./modules/teacher-assignments/routes.js";
 import { errorHandler, notFoundHandler } from "./middleware/errorHandler.js";
 import { readRateLimiter } from "./middleware/rateLimiter.js";
 
@@ -51,6 +58,13 @@ export function createApp(): Express {
   app.use("/api/v1/classes", classesRouter);
   app.use("/api/v1/sections", sectionsRouter);
   app.use("/api/v1/incharge-scopes", inchargeScopesRouter);
+  app.use("/api/v1/students", studentsRouter);
+  app.use("/api/v1/parents", parentsRouter);
+  app.use("/api/v1/teachers", teachersRouter);
+  app.use("/api/v1/subjects", subjectsRouter);
+  app.use("/api/v1/admissions", admissionsRouter);
+  app.use("/api/v1/enrollments", enrollmentsRouter);
+  app.use("/api/v1/teacher-assignments", teacherAssignmentsRouter);
 
   app.use(notFoundHandler);
   app.use(errorHandler);

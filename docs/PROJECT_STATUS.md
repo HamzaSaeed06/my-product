@@ -1,11 +1,11 @@
 # Project Status
 
 **Last updated:** 2026-09-11
-**Current phase:** Phase 0 complete. **Phase 1 backend AND frontend now
-built**: Institute, Campuses, Academic Years, Classes, Sections, dynamic
-Incharge scopes — 70 passing integration tests, plus matching `product/web`
-screens under a dashboard sidebar shell. Server-rendered data verified live;
-interactive dialogs not yet click-tested in a real browser. See §1c/§1d.
+**Current phase:** Phase 0 complete. Phase 1 backend+frontend complete
+(interactive dialogs unverified in-browser — see §1d). **Phase 2 backend
+now built**: Students, Parents, Teachers, Subjects, Admissions, Enrollments,
+Teacher Assignments — 116 passing integration tests total (46 new). No
+Phase 2 frontend yet. See §1e.
 **Repo state:** Monorepo scaffolded. `product/api` has a working Express +
 TypeScript + Prisma backend implementing all of Phase 0's API surface (auth,
 users, roles/permissions, approvals, documents, notifications, audit).
@@ -363,6 +363,75 @@ reasonably high, but **this is inference, not verification** — click
 through each "+ Add", "Edit", "Archive", "Close", and "Revoke" control in
 an actual browser before trusting this is done.
 
+### 1e. Phase 2 backend (`product/api`) — VERIFIED WORKING
+
+Academic Structure per PRODUCT_SPEC.md's "PHASE 2" section — Student,
+Parent, StudentParent, Teacher, Subject, Admission, Enrollment,
+TeacherAssignment, StudentDocument. 46 new integration tests (116 total
+with Phase 0/1's 70), all passing against the real database.
+
+- **Schema**: `Student` is deliberately institute/campus-context-free — a
+  permanent `studentCode` (STU-00000001, sequential, generated in
+  `lib/studentCode.ts` with retry-on-collision) that never changes.
+  `Enrollment` is a fully separate model carrying all context (year, class,
+  section, roll number) — a student accumulates many Enrollment rows over
+  time (transfers, re-admission), never overwritten. `Teacher` sits 1:1 on
+  top of a `User` with the TEACHER role (same "must already have the role"
+  pattern as Incharge scope/Phase 1). `StudentDocument` formalizes the
+  Student↔Document link with a real FK instead of Document's loose
+  ownerType/ownerId strings.
+- **One active enrollment per academic year** (spec's explicit rule) is
+  enforced at the service layer, not a DB constraint — a student can have
+  multiple Enrollment rows in the same year (transfer history), but only
+  one may be ACTIVE. `transferEnrollment` atomically marks the old row
+  TRANSFERRED and creates a new ACTIVE one in a single transaction, never
+  mutating history in place.
+- **Duplicate detection**: `GET /students/search?q=` and `GET
+  /parents/search?phone=` — the frontend will show these as "possible
+  existing match" before letting Office create a new record, per spec.
+  Office makes the final call; nothing is silently blocked.
+- **Withdrawal cascades correctly**: withdrawing a Student also withdraws
+  their currently-ACTIVE enrollment (a withdrawn student can't
+  simultaneously have an active one) — in one transaction. Re-enrolling a
+  withdrawn student (re-admission) automatically reactivates them.
+- **Cross-entity consistency validated, not just existence**: creating an
+  Enrollment or TeacherAssignment checks the given Section actually
+  belongs to the given Class and Academic Year (`SECTION_CLASS_MISMATCH`/
+  `SECTION_YEAR_MISMATCH`) — same category of gap as Phase 1's Incharge
+  Scope section-mismatch fix, caught proactively this time by writing the
+  check before the frontend existed to expose it.
+- **Admission ≠ Enrollment** (spec's explicit rule): approving an Admission
+  does not auto-create an Enrollment — that's a deliberate separate
+  `POST /enrollments` call. Admission decisions are two dedicated routes
+  (`/admissions/:id/approve`, `/admissions/:id/reject`) rather than one
+  route with a decision body, so `admission.approve` and `admission.reject`
+  can be granted independently.
+- **DEVIATION from spec**: added `subject.archive` (spec's Phase 2
+  permission list only names `subject.view/create/edit`). The blanket
+  no-hard-delete policy needs an archive path for every catalog, same
+  reasoning as Phase 0's `User` model addition and Phase 1's `Role`
+  archive — logged in `schema.prisma`'s comment too.
+- **Verified for real**: all 116 integration tests pass, covering (per
+  module) — Students: create-generates-code/duplicate-search/detail/
+  update-audited/document-upload-and-link/list-documents/withdraw/
+  withdraw-twice-refused/archive. Parents: create/phone-search/link-child/
+  duplicate-link-refused/list-with-children/unlink. Teachers: non-teacher-
+  refused/create/duplicate-profile-refused/update/list/archive. Subjects:
+  create/duplicate-refused/update/archive. Admissions: closed-year-refused/
+  create/list/approve/double-decide-refused/create-and-withdraw-second/
+  approvedBy-recorded. Enrollments: section-class-mismatch-refused/create/
+  second-active-refused/transfer-creates-new-marks-old-transferred/still-
+  one-active-after-transfer/history-shows-both-rows/withdraw/reenroll-
+  reactivates-student. Teacher Assignments: section-class-mismatch-refused/
+  create/duplicate-refused/blocks-teacher-archive-while-active/list/
+  archive-then-unblocks-teacher-archive. Live server smoke test confirms
+  all 7 new route groups are mounted and require authentication. Row-count
+  check after the full run confirms zero residue.
+- **Not done**: no `product/web` screens for any of Phase 2 yet (Students
+  List/Detail, Admission Application, Enrollment, Teachers List, Teacher
+  Assignment, Subjects, Parents — all unbuilt, per PRODUCT_SPEC.md's Phase
+  2 "Screens" list).
+
 ### How this was verified (not just "should work")
 
 In this session, with dependencies actually installed against a real npm
@@ -431,20 +500,21 @@ docs/
 
 ## 3. Immediate next action
 
-Phase 0 is fully done. Phase 1's backend (§1c) and frontend (§1d) are both
-built; server-rendering is verified live but the interactive dialogs are
-not yet click-tested in a browser. What's left, in order:
+Phase 0: fully done. Phase 1: backend + frontend built (§1c/§1d), dialogs
+not yet click-tested in browser. Phase 2: backend built and tested (§1e),
+no frontend yet. What's left, in order:
 
-1. **Click through the Phase 1 screens in a real browser** (§1d's "Not
-   verified" note): `npm run dev:api` + `cd product/web && npm run dev`,
-   then for each of Institute/Campuses/Academic Years/Classes/Sections/
-   Incharge Scopes: try the "+ Add" dialog, an edit, and the archive/close/
-   revoke confirm flow. This is the one remaining gap before Phase 1 is
-   genuinely done, not just "should work."
-2. **Then move on to Phase 2** (Student, Parent, Teacher, Subject, Admission
-   → Enrollment) — Phase 1's backend (Institute/Campus/AcademicYear/Class/
-   Section) is what Phase 2 enrolls students into.
-3. **Minor cleanup, low priority**: wire real email delivery when a
+1. **Build Phase 2's frontend** (Students List/Detail, Admission
+   Application, Enrollment, Teachers List, Teacher Assignment, Subjects,
+   Parents) — matches the "finish a phase fully before moving to the next"
+   approach used for Phase 1.
+2. **Click through Phase 1's screens in a real browser** (§1d's "Not
+   verified" note) — still outstanding, can be done alongside Phase 2
+   frontend work.
+3. **Then Phase 3** (Timetable, Attendance, Curriculum, Homework,
+   Assessments) — this is also where `checkInchargeScope` finally gets a
+   real route to gate.
+4. **Minor cleanup, low priority**: wire real email delivery when a
    provider is chosen; consider a session-refresh-on-expiry flow for
    `product/web` once 20-minute re-logins become annoying; rename the
    placeholder "Demo Institute" to something real before any actual use.
@@ -501,6 +571,41 @@ not yet click-tested in a browser. What's left, in order:
 Append a dated entry every session. Keep entries short — what changed, what's
 left, anything the next session needs to know that isn't obvious from the
 code/docs themselves.
+
+### 2026-09-11 (j) — Phase 2 backend built: Academic Structure
+
+- User asked to finish each phase properly before moving to the next
+  (matches the approach already taken for Phase 1) and to report status +
+  a recommendation periodically rather than silently plowing ahead.
+- Added Phase 2's schema: Student (permanent studentCode, institute/campus-
+  context-free), Parent, StudentParent (join), Teacher (1:1 on User with
+  TEACHER role), Subject (institute catalog), Admission, Enrollment
+  (separate from Student, carries all context), TeacherAssignment,
+  StudentDocument (formalizes the Document link with a real FK).
+- Built and wired 7 API modules: students (+ nested document upload/list),
+  parents (+ child linking), teachers, subjects, admissions, enrollments,
+  teacher-assignments. Same pattern throughout: authenticate → authorize
+  → csrf → rate-limit → zod → service → writeAuditLog.
+- Enforced the two trickiest business rules for real: "one active
+  enrollment per academic year" (service-layer check, not a DB constraint,
+  since transfer history needs multiple rows per year) and "Admission ≠
+  Enrollment" (approving an admission never auto-creates an enrollment).
+- Proactively added cross-entity consistency checks (section must actually
+  belong to the given class/year) to Enrollment and TeacherAssignment
+  creation, before any frontend existed to expose the gap — learned from
+  Phase 1's Incharge Scope section-mismatch fix, applied preemptively here.
+- Wrote 46 new integration tests (116 total), all passing against the live
+  database on the first full run. Verified zero residue via real row
+  counts afterward. Live server smoke test confirms all 7 new route groups
+  require authentication.
+- **Deviation**: added `subject.archive` (not in spec's Phase 2 permission
+  list) for the same no-hard-delete reason as prior deviations.
+- **Not done**: no `product/web` screens for Phase 2 yet. Phase 1's
+  interactive dialogs are still not click-tested in a browser (carried
+  over from the previous entry).
+- **Next session should**: build Phase 2's frontend (Students, Admissions,
+  Enrollment, Teachers, Subjects, Parents screens) to keep Phase 2 "done"
+  in the same complete sense Phase 1 is, then move to Phase 3.
 
 ### 2026-09-11 (i) — Phase 1 frontend built: 6 screens under a dashboard shell
 
