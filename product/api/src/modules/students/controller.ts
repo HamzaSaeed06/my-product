@@ -3,6 +3,9 @@ import { z } from "zod";
 import * as studentsService from "./service.js";
 import { getUserPermissionKeys } from "../../middleware/authorize.js";
 import { HttpError } from "../../middleware/errorHandler.js";
+import { getActorProfile, getOwnChildStudentIds, assertStudentInScope, assertSectionQueryInScope } from "../../lib/scope.js";
+
+const UNRESTRICTED_ROLES = new Set(["SUPER_ADMIN", "PRINCIPAL", "OFFICE"]);
 
 const statusEnum = z.enum(["ACTIVE", "WITHDRAWN", "ARCHIVED"]);
 
@@ -23,13 +26,41 @@ export async function searchStudentsHandler(req: Request, res: Response): Promis
   res.status(200).json(await studentsService.searchStudents(q));
 }
 
+const listQuerySchema = z.object({
+  status: statusEnum.optional(),
+  sectionId: z.string().uuid().optional(),
+});
+
 export async function listStudentsHandler(req: Request, res: Response): Promise<void> {
-  const status = statusEnum.optional().parse(req.query.status);
-  res.status(200).json(await studentsService.listStudents({ status }));
+  const query = listQuerySchema.parse(req.query);
+  const profile = await getActorProfile(req.user!.id);
+
+  if (profile.roles.some((r) => UNRESTRICTED_ROLES.has(r))) {
+    res.status(200).json(await studentsService.listStudents(query));
+    return;
+  }
+
+  if (profile.roles.includes("STUDENT")) {
+    res.status(200).json(await studentsService.listStudents({ ...query, idIn: profile.studentId ? [profile.studentId] : [] }));
+    return;
+  }
+
+  if (profile.roles.includes("PARENT")) {
+    res.status(200).json(await studentsService.listStudents({ ...query, idIn: await getOwnChildStudentIds(profile) }));
+    return;
+  }
+
+  // TEACHER / INCHARGE: no well-defined "all students in my scope" without
+  // a section, same reasoning as resolveStudentScopeFilter.
+  await assertSectionQueryInScope(profile, query.sectionId);
+  res.status(200).json(await studentsService.listStudents(query));
 }
 
 export async function getStudentHandler(req: Request, res: Response): Promise<void> {
-  res.status(200).json(await studentsService.getStudent(req.params.studentId!));
+  const student = await studentsService.getStudent(req.params.studentId!);
+  const profile = await getActorProfile(req.user!.id);
+  await assertStudentInScope(profile, student.id);
+  res.status(200).json(student);
 }
 
 export async function createStudentHandler(req: Request, res: Response): Promise<void> {

@@ -100,8 +100,12 @@ export async function recordPayment(
   return result;
 }
 
-export async function listPayments(filter: { studentId?: string }) {
-  return prisma.payment.findMany({ where: filter, include: paymentInclude(), orderBy: { createdAt: "desc" } });
+export async function listPayments(filter: { studentId?: string; studentIdIn?: string[] }) {
+  return prisma.payment.findMany({
+    where: { studentId: filter.studentIdIn ? { in: filter.studentIdIn } : filter.studentId },
+    include: paymentInclude(),
+    orderBy: { createdAt: "desc" },
+  });
 }
 
 export async function requestPaymentReversal(paymentId: string, reason: string, actorId: string) {

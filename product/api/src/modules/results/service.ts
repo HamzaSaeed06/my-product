@@ -42,6 +42,19 @@ export async function getOrCreateResultsForSection(examId: string, sectionId: st
   return prisma.result.findMany({ where: { examId, studentId: { in: enrollments.map((e) => e.studentId) } }, include: include() });
 }
 
+// Read-only, unlike getOrCreateResultsForSection — used by the Parent/
+// Student Portal "Results" screens, which must never trigger DRAFT Result
+// creation as a side effect of merely looking. Only PUBLISHED results are
+// returned: a student's own Result row exists in DRAFT the moment a
+// teacher starts entering marks, long before it's meant to be seen.
+export async function listResultsForStudent(studentId: string) {
+  return prisma.result.findMany({
+    where: { studentId, status: "PUBLISHED" },
+    include: include(),
+    orderBy: { publishedAt: "desc" },
+  });
+}
+
 export async function getResult(id: string) {
   const result = await prisma.result.findUnique({ where: { id }, include: include() });
   if (!result) throw new HttpError(404, "RESULT_NOT_FOUND", "Result not found");

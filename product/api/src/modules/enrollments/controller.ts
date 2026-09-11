@@ -1,6 +1,7 @@
 import type { Request, Response } from "express";
 import { z } from "zod";
 import * as enrollmentsService from "./service.js";
+import { getActorProfile, assertSectionInScope, resolveStudentScopeFilter } from "../../lib/scope.js";
 
 const listQuerySchema = z.object({
   studentId: z.string().uuid().optional(),
@@ -24,7 +25,12 @@ const transferSchema = z.object({
 
 export async function listEnrollmentsHandler(req: Request, res: Response): Promise<void> {
   const query = listQuerySchema.parse(req.query);
-  res.status(200).json(await enrollmentsService.listEnrollments(query));
+  const profile = await getActorProfile(req.user!.id);
+  if (query.sectionId) await assertSectionInScope(profile, query.sectionId);
+  const studentScope = await resolveStudentScopeFilter(profile, query.studentId);
+  res.status(200).json(
+    await enrollmentsService.listEnrollments({ sectionId: query.sectionId, academicYearId: query.academicYearId, ...studentScope })
+  );
 }
 
 export async function createEnrollmentHandler(req: Request, res: Response): Promise<void> {

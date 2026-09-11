@@ -1,6 +1,7 @@
 import type { Request, Response } from "express";
 import { z } from "zod";
 import * as service from "./service.js";
+import { getActorProfile, resolveStudentScopeFilter, assertStudentInScope } from "../../lib/scope.js";
 
 const amountSchema = z.string().regex(/^\d+(\.\d{1,2})?$/, "amount must be a decimal number with up to 2 places");
 
@@ -22,11 +23,16 @@ const voidSchema = z.object({ reason: z.string().min(1) });
 
 export async function listInvoicesHandler(req: Request, res: Response): Promise<void> {
   const query = listQuerySchema.parse(req.query);
-  res.status(200).json(await service.listInvoices(query));
+  const profile = await getActorProfile(req.user!.id);
+  const studentScope = await resolveStudentScopeFilter(profile, query.studentId);
+  res.status(200).json(await service.listInvoices({ status: query.status, ...studentScope }));
 }
 
 export async function getInvoiceHandler(req: Request, res: Response): Promise<void> {
-  res.status(200).json(await service.getInvoice(req.params.invoiceId!));
+  const invoice = await service.getInvoice(req.params.invoiceId!);
+  const profile = await getActorProfile(req.user!.id);
+  await assertStudentInScope(profile, invoice.studentId);
+  res.status(200).json(invoice);
 }
 
 export async function createInvoiceHandler(req: Request, res: Response): Promise<void> {

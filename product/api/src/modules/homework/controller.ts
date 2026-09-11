@@ -1,6 +1,7 @@
 import type { Request, Response } from "express";
 import { z } from "zod";
 import * as service from "./service.js";
+import { getActorProfile, assertSectionQueryInScope } from "../../lib/scope.js";
 
 const createSchema = z.object({
   subjectId: z.string().uuid(),
@@ -32,6 +33,8 @@ export async function createHomeworkHandler(req: Request, res: Response): Promis
 
 export async function listHomeworkHandler(req: Request, res: Response): Promise<void> {
   const query = listQuerySchema.parse(req.query);
+  const profile = await getActorProfile(req.user!.id);
+  await assertSectionQueryInScope(profile, query.sectionId);
   res.status(200).json(await service.listHomework(query));
 }
 

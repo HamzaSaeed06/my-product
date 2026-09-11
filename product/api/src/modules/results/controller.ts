@@ -1,10 +1,15 @@
 import type { Request, Response } from "express";
 import { z } from "zod";
 import * as service from "./service.js";
+import { getActorProfile, assertSectionInScope, assertStudentInScope } from "../../lib/scope.js";
 
 const getOrCreateQuerySchema = z.object({
   examId: z.string().uuid(),
   sectionId: z.string().uuid(),
+});
+
+const listByStudentQuerySchema = z.object({
+  studentId: z.string().uuid(),
 });
 
 const enterItemSchema = z.object({
@@ -25,13 +30,32 @@ const decideSchema = z.object({
   decisionNote: z.string().optional(),
 });
 
+// Two distinct shapes behind one route, per the Zod-parsed query shape:
+// ?examId=&sectionId= (staff entering/reviewing marks — creates DRAFT rows
+// as needed) vs ?studentId= (Parent/Student Portal viewing published
+// results only, read-only). Kept as one handler because both are GET /
+// gated by the same result.view permission, and the two never overlap in
+// which query params they read.
 export async function getOrCreateResultsHandler(req: Request, res: Response): Promise<void> {
+  const profile = await getActorProfile(req.user!.id);
+
+  if (typeof req.query.studentId === "string") {
+    const query = listByStudentQuerySchema.parse(req.query);
+    await assertStudentInScope(profile, query.studentId);
+    res.status(200).json(await service.listResultsForStudent(query.studentId));
+    return;
+  }
+
   const query = getOrCreateQuerySchema.parse(req.query);
+  await assertSectionInScope(profile, query.sectionId);
   res.status(200).json(await service.getOrCreateResultsForSection(query.examId, query.sectionId));
 }
 
 export async function getResultHandler(req: Request, res: Response): Promise<void> {
-  res.status(200).json(await service.getResult(req.params.resultId!));
+  const result = await service.getResult(req.params.resultId!);
+  const profile = await getActorProfile(req.user!.id);
+  await assertStudentInScope(profile, result.studentId);
+  res.status(200).json(result);
 }
 
 export async function enterResultItemHandler(req: Request, res: Response): Promise<void> {

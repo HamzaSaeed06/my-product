@@ -2,9 +2,18 @@ import { prisma } from "../../lib/prisma.js";
 import { writeAuditLog } from "../../lib/audit.js";
 import { HttpError } from "../../middleware/errorHandler.js";
 
-export async function listEnrollments(filter: { studentId?: string; sectionId?: string; academicYearId?: string }) {
+export async function listEnrollments(filter: {
+  studentId?: string;
+  studentIdIn?: string[];
+  sectionId?: string;
+  academicYearId?: string;
+}) {
   return prisma.enrollment.findMany({
-    where: filter,
+    where: {
+      studentId: filter.studentIdIn ? { in: filter.studentIdIn } : filter.studentId,
+      sectionId: filter.sectionId,
+      academicYearId: filter.academicYearId,
+    },
     include: { student: true, klass: true, section: true, academicYear: true },
     orderBy: { enrolledAt: "desc" },
   });

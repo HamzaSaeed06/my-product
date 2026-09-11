@@ -1,6 +1,7 @@
 import type { Request, Response } from "express";
 import { z } from "zod";
 import * as attendanceService from "./service.js";
+import { getActorProfile, assertSectionInScope, resolveStudentScopeFilter } from "../../lib/scope.js";
 
 const STATUS = ["PRESENT", "ABSENT", "LEAVE"] as const;
 
@@ -34,7 +35,12 @@ export async function markAttendanceHandler(req: Request, res: Response): Promis
 
 export async function listAttendanceHandler(req: Request, res: Response): Promise<void> {
   const query = listQuerySchema.parse(req.query);
-  res.status(200).json(await attendanceService.listAttendance(query));
+  const profile = await getActorProfile(req.user!.id);
+  if (query.sectionId) await assertSectionInScope(profile, query.sectionId);
+  const studentScope = await resolveStudentScopeFilter(profile, query.studentId);
+  res.status(200).json(
+    await attendanceService.listAttendance({ sectionId: query.sectionId, date: query.date, ...studentScope })
+  );
 }
 
 export async function requestAttendanceCorrectionHandler(req: Request, res: Response): Promise<void> {

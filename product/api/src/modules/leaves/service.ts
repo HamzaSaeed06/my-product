@@ -12,9 +12,18 @@ function include() {
   } as const;
 }
 
-export async function listLeaves(filter: { studentId?: string; teacherId?: string; status?: string }) {
+export async function listLeaves(filter: {
+  studentId?: string;
+  studentIdIn?: string[];
+  teacherId?: string;
+  status?: string;
+}) {
   return prisma.leave.findMany({
-    where: { studentId: filter.studentId, teacherId: filter.teacherId, status: filter.status as never },
+    where: {
+      studentId: filter.studentIdIn ? { in: filter.studentIdIn } : filter.studentId,
+      teacherId: filter.teacherId,
+      status: filter.status as never,
+    },
     include: include(),
     orderBy: { createdAt: "desc" },
   });

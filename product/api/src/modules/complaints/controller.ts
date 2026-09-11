@@ -1,6 +1,7 @@
 import type { Request, Response } from "express";
 import { z } from "zod";
 import * as service from "./service.js";
+import { getActorProfile, resolveStudentScopeFilter, assertStudentInScope } from "../../lib/scope.js";
 
 const listQuerySchema = z.object({
   studentId: z.string().uuid().optional(),
@@ -21,11 +22,18 @@ const reopenSchema = z.object({ reason: z.string().min(1) });
 
 export async function listComplaintsHandler(req: Request, res: Response): Promise<void> {
   const query = listQuerySchema.parse(req.query);
-  res.status(200).json(await service.listComplaints(query));
+  const profile = await getActorProfile(req.user!.id);
+  const studentScope = await resolveStudentScopeFilter(profile, query.studentId);
+  res.status(200).json(
+    await service.listComplaints({ assignedToId: query.assignedToId, status: query.status, ...studentScope })
+  );
 }
 
 export async function getComplaintHandler(req: Request, res: Response): Promise<void> {
-  res.status(200).json(await service.getComplaint(req.params.complaintId!));
+  const complaint = await service.getComplaint(req.params.complaintId!);
+  const profile = await getActorProfile(req.user!.id);
+  if (complaint.studentId) await assertStudentInScope(profile, complaint.studentId);
+  res.status(200).json(complaint);
 }
 
 export async function createComplaintHandler(req: Request, res: Response): Promise<void> {

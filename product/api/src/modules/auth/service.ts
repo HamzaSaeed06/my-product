@@ -10,6 +10,7 @@ import {
 import { writeAuditLog } from "../../lib/audit.js";
 import { env } from "../../config/env.js";
 import { HttpError } from "../../middleware/errorHandler.js";
+import { getActorProfile } from "../../lib/scope.js";
 import type { Request } from "express";
 
 interface LoginInput {
@@ -26,14 +27,32 @@ interface AuthTokens {
   csrfToken: string;
 }
 
+// roles/teacherId/parentId/studentId back the frontend's role-based
+// routing and portal switcher (Phase 7) — before this, the login response
+// carried no signal at all about who the user was beyond a name, so
+// product/web had no way to render anything but one static admin sidebar
+// for every role.
 export interface PublicUser {
   id: string;
   email: string;
   fullName: string;
+  roles: string[];
+  teacherId: string | null;
+  parentId: string | null;
+  studentId: string | null;
 }
 
-function toPublicUser(user: { id: string; email: string; fullName: string }): PublicUser {
-  return { id: user.id, email: user.email, fullName: user.fullName };
+async function toPublicUser(user: { id: string; email: string; fullName: string }): Promise<PublicUser> {
+  const profile = await getActorProfile(user.id);
+  return {
+    id: user.id,
+    email: user.email,
+    fullName: user.fullName,
+    roles: profile.roles,
+    teacherId: profile.teacherId,
+    parentId: profile.parentId,
+    studentId: profile.studentId,
+  };
 }
 
 // Generic message on purpose — never reveal whether the email exists or the
@@ -85,7 +104,7 @@ export async function login(input: LoginInput): Promise<{ user: PublicUser; toke
     ipAddress: input.ipAddress,
   });
 
-  return { user: toPublicUser(user), tokens: { accessToken, refreshToken, csrfToken } };
+  return { user: await toPublicUser(user), tokens: { accessToken, refreshToken, csrfToken } };
 }
 
 export async function refresh(
@@ -129,7 +148,7 @@ export async function refresh(
   const csrfToken = generateCsrfToken();
 
   return {
-    user: toPublicUser(session.user),
+    user: await toPublicUser(session.user),
     tokens: { accessToken, refreshToken: newRefreshToken, csrfToken },
   };
 }

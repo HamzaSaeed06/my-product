@@ -210,6 +210,220 @@ const ALL_PERMISSIONS = [
   ...PHASE_6_PERMISSIONS,
 ];
 
+// Phase 7: every non-SUPER_ADMIN role's permission grant, derived from
+// PRODUCT_SPEC.md §"PHASE 7"'s "Screens Per Portal" list. Through Phase 6,
+// only SUPER_ADMIN had any permissions at all (deliberately — "don't guess
+// ahead of the code that enforces it"); every route gated by
+// requirePermission() was therefore unreachable by any other role. This is
+// what makes the other 6 portals actually usable for the first time.
+// Route-level scope enforcement (a Teacher only sees their own sections, a
+// Parent only their own children, ...) is separate and lives in
+// src/lib/scope.ts — a permission grant here means "this role may use this
+// endpoint at all", not "this role sees everyone's data".
+const ROLE_PERMISSIONS: Record<Exclude<(typeof CORE_ROLES)[number], "SUPER_ADMIN">, string[]> = {
+  // Campus-wide oversight + the "critical actions" spec calls out
+  // (class-jump promotions, financial approvals) at the top of the
+  // approval chain above Office.
+  PRINCIPAL: [
+    "institute.view",
+    "campus.view",
+    "academic_year.view",
+    "class.view",
+    "section.view",
+    "student.view",
+    "teacher.view",
+    "parent.view",
+    "subject.view",
+    "admission.view",
+    "enrollment.view",
+    "teacher_assignment.view",
+    "timetable.view",
+    "attendance.view",
+    "teacher_attendance.view",
+    "substitution.view",
+    "curriculum.view",
+    "homework.view",
+    "assessment.view",
+    "exam.view",
+    "result.view",
+    "report_card.view",
+    "promotion.view",
+    "promotion.approve",
+    "fee_structure.view",
+    "fee_assignment.view",
+    "invoice.view",
+    "invoice.export",
+    "payment.view",
+    "refund.view",
+    "refund.approve",
+    "discount.view",
+    "discount.approve",
+    "waiver.view",
+    "waiver.approve",
+    "cash_closing.view",
+    "cash_closing.approve",
+    "leave.view",
+    "leave.approve",
+    "leave.reject",
+    "complaint.view",
+    "complaint.assign",
+    "audit.view",
+    "approval.view",
+    "approval.decide",
+    "document.view",
+    "notification.view",
+  ],
+  // Scoped class/section management — the permission grant is broad (same
+  // shape as Teacher/Office for the resources Incharges touch); the
+  // classes/sections/students it actually *returns* are narrowed by
+  // checkInchargeScope() at the route level, not by a smaller permission
+  // set here.
+  INCHARGE: [
+    "class.view",
+    "section.view",
+    "student.view",
+    "teacher.view",
+    "timetable.view",
+    "timetable.create",
+    "timetable.edit",
+    "attendance.view",
+    "attendance.correct",
+    "teacher_attendance.view",
+    "curriculum.view",
+    "curriculum.edit",
+    "homework.view",
+    "assessment.view",
+    "assessment.correct",
+    "result.view",
+    "complaint.view",
+    "complaint.assign",
+    "leave.view",
+    "notification.view",
+  ],
+  // Administrative staff: admissions, records, fee collection, leave/
+  // complaint intake — per spec's "Office: administrative staff (admissions,
+  // fees, records)".
+  OFFICE: [
+    "student.view",
+    "student.create",
+    "student.edit",
+    "student.archive",
+    "parent.view",
+    "parent.create",
+    "parent.edit",
+    "teacher.view",
+    "class.view",
+    "section.view",
+    "academic_year.view",
+    "admission.view",
+    "admission.create",
+    "admission.approve",
+    "admission.reject",
+    "enrollment.view",
+    "enrollment.create",
+    "enrollment.transfer",
+    "enrollment.withdraw",
+    "fee_structure.view",
+    "fee_assignment.view",
+    "fee_assignment.create",
+    "fee_assignment.edit",
+    "invoice.view",
+    "invoice.create",
+    "invoice.void",
+    "invoice.export",
+    "payment.view",
+    "payment.record",
+    "payment.reverse",
+    "refund.view",
+    "refund.create",
+    "discount.view",
+    "discount.create",
+    "waiver.view",
+    "waiver.create",
+    "cash_closing.view",
+    "cash_closing.create",
+    "leave.view",
+    "leave.approve",
+    "leave.reject",
+    "complaint.view",
+    "complaint.create",
+    "complaint.assign",
+    "document.view",
+    "document.upload",
+    "document.manage",
+    "notification.view",
+  ],
+  // Teaching staff: own classes' academics, attendance, homework, marks —
+  // per spec's "Teacher: teaching staff (academics, attendance, homework)".
+  // Which sections/students count as "own" is enforced by scope.ts, not by
+  // this list.
+  TEACHER: [
+    "teacher_assignment.view",
+    "enrollment.view",
+    "timetable.view",
+    "attendance.view",
+    "attendance.mark",
+    "teacher_attendance.view",
+    "substitution.view",
+    "curriculum.view",
+    "curriculum.edit",
+    "homework.view",
+    "homework.create",
+    "homework.edit",
+    "homework.publish",
+    "assessment.view",
+    "assessment.create",
+    "assessment.edit",
+    "assessment.enter_marks",
+    "assessment.submit",
+    "exam.view",
+    "result.view",
+    "result.create",
+    "result.edit",
+    "student.view",
+    "leave.view",
+    "leave.create",
+    "leave.cancel",
+    "document.view",
+    "document.upload",
+    "notification.view",
+  ],
+  // Guardian: view own children, pay fees, raise requests — per spec's
+  // "Parent: student guardian (view children, pay fees, requests)". Read-
+  // only everywhere except the requests it's allowed to initiate.
+  PARENT: [
+    "student.view",
+    "timetable.view",
+    "attendance.view",
+    "homework.view",
+    "assessment.view",
+    "result.view",
+    "report_card.view",
+    "invoice.view",
+    "payment.view",
+    "leave.view",
+    "leave.create",
+    "leave.cancel",
+    "complaint.view",
+    "complaint.create",
+    "document.view",
+    "notification.view",
+  ],
+  // Learner: view-only, per spec's explicit "Student Portal Specific: View-
+  // only (no edits)".
+  STUDENT: [
+    "student.view",
+    "timetable.view",
+    "attendance.view",
+    "homework.view",
+    "assessment.view",
+    "result.view",
+    "report_card.view",
+    "document.view",
+    "notification.view",
+  ],
+};
+
 async function main(): Promise<void> {
   for (const roleName of CORE_ROLES) {
     await prisma.role.upsert({
@@ -240,6 +454,22 @@ async function main(): Promise<void> {
     });
   }
   console.log(`Granted all ${allPermissions.length} permissions to SUPER_ADMIN.`);
+
+  const permissionByKey = new Map(allPermissions.map((p) => [p.key, p.id]));
+
+  for (const [roleName, keys] of Object.entries(ROLE_PERMISSIONS)) {
+    const role = await prisma.role.findUniqueOrThrow({ where: { name: roleName } });
+    for (const key of keys) {
+      const permissionId = permissionByKey.get(key);
+      if (!permissionId) throw new Error(`ROLE_PERMISSIONS['${roleName}'] references unknown permission key '${key}'`);
+      await prisma.rolePermission.upsert({
+        where: { roleId_permissionId: { roleId: role.id, permissionId } },
+        update: {},
+        create: { roleId: role.id, permissionId },
+      });
+    }
+    console.log(`Granted ${keys.length} permissions to ${roleName}.`);
+  }
 }
 
 main()

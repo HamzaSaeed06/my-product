@@ -82,11 +82,16 @@ export async function markAttendance(
   return created;
 }
 
-export async function listAttendance(filter: { sectionId?: string; studentId?: string; date?: string }) {
+export async function listAttendance(filter: {
+  sectionId?: string;
+  studentId?: string;
+  studentIdIn?: string[];
+  date?: string;
+}) {
   return prisma.attendance.findMany({
     where: {
       sectionId: filter.sectionId,
-      studentId: filter.studentId,
+      studentId: filter.studentIdIn ? { in: filter.studentIdIn } : filter.studentId,
       date: filter.date ? new Date(filter.date) : undefined,
     },
     include: { student: { select: { id: true, fullName: true, studentCode: true } } },

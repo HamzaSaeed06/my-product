@@ -1,6 +1,7 @@
 import type { Request, Response } from "express";
 import { z } from "zod";
 import * as service from "./service.js";
+import { getActorProfile, resolveStudentScopeFilter } from "../../lib/scope.js";
 
 const amountSchema = z.string().regex(/^\d+(\.\d{1,2})?$/, "amount must be a decimal number with up to 2 places");
 
@@ -29,7 +30,9 @@ export async function recordPaymentHandler(req: Request, res: Response): Promise
 
 export async function listPaymentsHandler(req: Request, res: Response): Promise<void> {
   const query = listQuerySchema.parse(req.query);
-  res.status(200).json(await service.listPayments(query));
+  const profile = await getActorProfile(req.user!.id);
+  const studentScope = await resolveStudentScopeFilter(profile, query.studentId);
+  res.status(200).json(await service.listPayments(studentScope));
 }
 
 export async function requestPaymentReversalHandler(req: Request, res: Response): Promise<void> {

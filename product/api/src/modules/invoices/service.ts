@@ -35,9 +35,12 @@ export async function recalculateInvoiceStatus(tx: Prisma.TransactionClient, inv
   return tx.invoice.update({ where: { id: invoiceId }, data: { status } });
 }
 
-export async function listInvoices(filter: { studentId?: string; status?: string }) {
+export async function listInvoices(filter: { studentId?: string; studentIdIn?: string[]; status?: string }) {
   return prisma.invoice.findMany({
-    where: { studentId: filter.studentId, status: filter.status as never },
+    where: {
+      studentId: filter.studentIdIn ? { in: filter.studentIdIn } : filter.studentId,
+      status: filter.status as never,
+    },
     include: include(),
     orderBy: { createdAt: "desc" },
   });

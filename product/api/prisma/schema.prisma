@@ -81,6 +81,9 @@ model User {
   complaintsAssigned    Complaint[]      @relation("ComplaintAssignedTo")
   complaintNotesAuthored ComplaintNote[]
 
+  studentProfile Student?
+  parentProfile  Parent?
+
   @@map("users")
 }
 
@@ -564,6 +567,15 @@ model Student {
   createdAt   DateTime      @default(now())
   updatedAt   DateTime      @updatedAt
 
+  // Optional login for the Student Portal (Phase 7) — most students never
+  // get one (many institutes never issue student logins), so this is
+  // nullable, unlike Teacher.userId which is required. onDelete: SetNull,
+  // not Cascade: deleting a User must never delete the academic record it
+  // was linked to. A User must already exist with the STUDENT role before
+  // it can be linked here — same "link, don't create" pattern as Teacher.
+  userId String? @unique
+  user   User?   @relation(fields: [userId], references: [id], onDelete: SetNull)
+
   parents           StudentParent[]
   admissions        Admission[]
   enrollments       Enrollment[]
@@ -591,6 +603,11 @@ model Parent {
   address   String?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  // Optional login for the Parent Portal (Phase 7) — same "link, don't
+  // create" pattern as Student.userId above.
+  userId String? @unique
+  user   User?   @relation(fields: [userId], references: [id], onDelete: SetNull)
 
   children StudentParent[]
 

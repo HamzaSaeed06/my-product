@@ -41,12 +41,12 @@ export async function generateReportCard(resultId: string, actorId: string) {
   return reportCard;
 }
 
-export async function listReportCards(filter: { examId?: string; studentId?: string }) {
+export async function listReportCards(filter: { examId?: string; studentId?: string; studentIdIn?: string[] }) {
   return prisma.reportCard.findMany({
     where: {
       result: {
         examId: filter.examId,
-        studentId: filter.studentId,
+        studentId: filter.studentIdIn ? { in: filter.studentIdIn } : filter.studentId,
       },
     },
     include: { result: { include: { student: true, exam: true } } },

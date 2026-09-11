@@ -19,9 +19,18 @@ function assertStatus(current: string, expected: string | string[]) {
   }
 }
 
-export async function listComplaints(filter: { studentId?: string; status?: string; assignedToId?: string }) {
+export async function listComplaints(filter: {
+  studentId?: string;
+  studentIdIn?: string[];
+  status?: string;
+  assignedToId?: string;
+}) {
   return prisma.complaint.findMany({
-    where: { studentId: filter.studentId, assignedToId: filter.assignedToId, status: filter.status as never },
+    where: {
+      studentId: filter.studentIdIn ? { in: filter.studentIdIn } : filter.studentId,
+      assignedToId: filter.assignedToId,
+      status: filter.status as never,
+    },
     include: include(),
     orderBy: { createdAt: "desc" },
   });

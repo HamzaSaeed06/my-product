@@ -2,6 +2,8 @@ import fs from "node:fs";
 import path from "node:path";
 import request from "supertest";
 import { createApp } from "../../src/app.js";
+import { prisma } from "../../src/lib/prisma.js";
+import { hashPassword } from "../../src/lib/password.js";
 
 interface StoredSession {
   cookieHeader: string;
@@ -111,4 +113,49 @@ export function asSuperAdmin() {
 
 export function uniqueSuffix(): string {
   return Math.random().toString(36).slice(2, 10);
+}
+
+// Phase 7 scope-enforcement tests need to act as a real Teacher/Parent/
+// Student, not just Super Admin — this creates a User with a real hashed
+// password and a role grant via a direct Prisma insert (fast, same "insert
+// the fixture directly" approach used by every other test file's
+// beforeAll, not a roundtrip through the admin-only POST /users endpoint).
+export async function createTestUserWithRole(input: {
+  email: string;
+  password: string;
+  fullName: string;
+  roleName: string;
+}) {
+  const passwordHash = await hashPassword(input.password);
+  const user = await prisma.user.create({
+    data: { email: input.email, passwordHash, fullName: input.fullName },
+  });
+  const role = await prisma.role.findUniqueOrThrow({ where: { name: input.roleName } });
+  await prisma.userRole.create({ data: { userId: user.id, roleId: role.id } });
+  return user;
+}
+
+// Real login (not a fixture session) — used for Phase 7 scope tests where
+// the actor's role/scope genuinely matters, unlike asSuperAdmin()'s shared
+// unrestricted session. Deliberately simpler than asSuperAdmin()'s Proxy-
+// based auto-refresh wrapper: these tests are short-lived and don't run
+// long enough to hit the 20-minute access-token TTL.
+export async function loginAsTestUser(email: string, password: string) {
+  const app = createApp();
+  const res = await request(app).post("/api/v1/auth/login").send({ email, password });
+  if (res.status !== 200) {
+    throw new Error(`Test login failed for ${email} (status ${res.status}): ${JSON.stringify(res.body)}`);
+  }
+  const setCookieHeader = res.headers["set-cookie"] as unknown as string[];
+  const cookieHeader = setCookieHeader.map((c) => c.split(";")[0]).join("; ");
+  const session: StoredSession = { cookieHeader, csrfToken: res.body.csrfToken, userId: res.body.user.id };
+
+  return {
+    userId: session.userId,
+    get: (url: string) => makeRequest("get", url, session),
+    post: (url: string) => makeRequest("post", url, session),
+    patch: (url: string) => makeRequest("patch", url, session),
+    put: (url: string) => makeRequest("put", url, session),
+    delete: (url: string) => makeRequest("delete", url, session),
+  };
 }

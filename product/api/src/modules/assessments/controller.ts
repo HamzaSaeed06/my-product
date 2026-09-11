@@ -1,6 +1,7 @@
 import type { Request, Response } from "express";
 import { z } from "zod";
 import * as service from "./service.js";
+import { getActorProfile, assertSectionQueryInScope } from "../../lib/scope.js";
 
 const createSchema = z.object({
   subjectId: z.string().uuid(),
@@ -42,6 +43,8 @@ export async function createAssessmentHandler(req: Request, res: Response): Prom
 
 export async function listAssessmentsHandler(req: Request, res: Response): Promise<void> {
   const query = listQuerySchema.parse(req.query);
+  const profile = await getActorProfile(req.user!.id);
+  await assertSectionQueryInScope(profile, query.sectionId);
   res.status(200).json(await service.listAssessments(query));
 }
 

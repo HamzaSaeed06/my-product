@@ -1,6 +1,7 @@
 import type { Request, Response } from "express";
 import { z } from "zod";
 import * as timetableService from "./service.js";
+import { getActorProfile, assertSectionInScope } from "../../lib/scope.js";
 
 const DAY_OF_WEEK = ["MONDAY", "TUESDAY", "WEDNESDAY", "THURSDAY", "FRIDAY", "SATURDAY", "SUNDAY"] as const;
 
@@ -22,6 +23,8 @@ const updateEntrySchema = addEntrySchema.partial();
 
 export async function getOrCreateTimetableHandler(req: Request, res: Response): Promise<void> {
   const query = getOrCreateQuerySchema.parse(req.query);
+  const profile = await getActorProfile(req.user!.id);
+  await assertSectionInScope(profile, query.sectionId);
   res.status(200).json(await timetableService.getOrCreateTimetable(query.sectionId, query.academicYearId));
 }
 

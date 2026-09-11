@@ -27,9 +27,17 @@ export async function searchStudents(query: string) {
   });
 }
 
-export async function listStudents(filter: { status?: "ACTIVE" | "WITHDRAWN" | "ARCHIVED" }) {
+export async function listStudents(filter: {
+  status?: "ACTIVE" | "WITHDRAWN" | "ARCHIVED";
+  idIn?: string[];
+  sectionId?: string;
+}) {
   return prisma.student.findMany({
-    where: { status: filter.status },
+    where: {
+      status: filter.status,
+      id: filter.idIn ? { in: filter.idIn } : undefined,
+      enrollments: filter.sectionId ? { some: { sectionId: filter.sectionId, status: "ACTIVE" } } : undefined,
+    },
     orderBy: { createdAt: "desc" },
   });
 }
