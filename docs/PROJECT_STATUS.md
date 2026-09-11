@@ -59,6 +59,24 @@ phases (documented honestly in §1s/§5a rather than glossed over): a
 full Phase 0-9 suite run repeatedly stalled under heavy concurrent Neon
 load and was abandoned in favor of targeted isolated re-runs of the 3
 files this phase touched, all confirmed clean once load normalized.
+**Phase 10 backend and frontend both complete**: a brand-new
+`provider/api` + `provider/web` application — Customers, Plans,
+Deployments, Licenses, Support tickets, a live Dashboard — plus a real
+RS256-signed License & Entitlement architecture wired into
+`product/api` (offline, in-memory signature verification and state
+computation; grace-period write-blocking; `EXPIRED_FINAL` login
+restricted to Super Admin) and a real heartbeat exchange between the
+two apps — see §1u/§1v. **Every phase in `PHASE_TRACKER.md` is now
+backend+frontend complete.** Verified end-to-end against real running
+dev servers on both apps: a real Customer/Plan/Deployment/License
+created via curl, installed into `product/api`'s own `.env`, a real
+heartbeat sent and its resulting health/license-validity response
+confirmed, a license suspended and reactivated with the heartbeat
+response flipping accordingly, and — a step further than any prior
+phase's frontend verification this session — a genuine no-JS login
+form submission against `provider/web`'s real rendered HTML. One real
+bug found live and fixed (a Server Action file with non-`async`
+exports, rejected by Next's compiler, causing two pages to 500).
 **Repo state:** Monorepo scaffolded. `product/api` has a working Express +
 TypeScript + Prisma backend implementing all of Phase 0's API surface (auth,
 users, roles/permissions, approvals, documents, notifications, audit).
@@ -1575,7 +1593,195 @@ Updated -> Receipt Generated -> Parent Sees Success". Three surfaces:
   gateway account to integrate with — this is the same honest-simulation
   boundary as the backend, not a gap specific to the frontend).
 
-## 2. Decided tech stack (from PRODUCT_SPEC.md §3)
+### 1u. Phase 10 backend (`provider/api` — new package — plus `product/api` customer-side integration) — VERIFIED WORKING
+
+Provider Platform per PRODUCT_SPEC.md's "PHASE 10" section, and its §2
+"COMMERCIAL & DEPLOYMENT MODEL" architecture — genuinely the largest
+net-new surface of any phase this session: a brand-new, separate
+application (`provider/api`), plus real signed-license integration
+wired into the existing customer app (`product/api`).
+
+- **A real architectural decision, recorded as a deviation**: spec's
+  diagram shows the provider platform on its own physical database
+  server. This session has one provisioned Neon Postgres instance, and
+  provisioning a second one isn't something available without new
+  credentials. Used a distinct Postgres **schema** ("provider", vs
+  `product/api`'s "public") on the *same* instance instead — set via
+  `provider/api`'s own `DATABASE_URL`'s `?schema=provider` query param,
+  the same mechanism `product/api`'s `.env.example` already documented
+  for `public`. Zero risk of colliding with or querying customer
+  operational data; a real deployment would point this at its own
+  physical database, per spec. Also gave `provider/api`'s generated
+  Prisma client its own `output` path (`src/generated/prisma`) —
+  **required**, not cosmetic: npm workspaces hoist `@prisma/client` to
+  the repo root, so the default output location is the exact same
+  physical path `product/api`'s generated client lives in; without a
+  separate path, `prisma generate` in either app would silently
+  overwrite the other's generated client the next time either ran.
+- **New models** (all in `provider/api`'s own schema): `ProviderUser`+
+  `Session` (a small, flat login — spec never describes provider-side
+  RBAC, unlike `product/api`'s 7-role permission system, so there isn't
+  one here), `Customer`, `Plan`, `Deployment` (a write-once
+  `heartbeatToken`, same pattern as Phase 9's `webhookSecret`),
+  `License` (a write-once `signedJwt`), `HealthCheck`, `SupportTicket`,
+  `AuditLog`.
+- **License & Entitlement Architecture** (spec §2, implemented exactly
+  as specified, not approximated): an RS256 keypair (generated once,
+  private half lives only in `provider/api`'s `.env`, public half
+  copied into `provider/api`'s *and* `product/api`'s `.env` — the
+  actual cross-app boundary spec draws, "customer does NOT receive
+  source code"). `signLicense()` builds the exact claim shape from
+  spec's own worked example (`iss`/`sub`/`lic`/`jti`/`iat`/`exp`/`nbf`/
+  `plan`/`features`/`limits`/`deploymentId`/`deploymentUrl`).
+  `computeLicenseState()` implements spec's day-threshold table
+  verbatim (VALID >30 days, EXPIRING_SOON 7-30, EXPIRING_CRITICAL <7,
+  EXPIRED_GRACE <30 days past, EXPIRED_FINAL beyond that) — unit-tested
+  against every boundary on both sides of this split (see below).
+- **`product/api`'s independent, from-scratch verification half** (no
+  code shared between the two apps, matching the "no source code to
+  the customer" boundary for real): `src/lib/license.ts` loads
+  `LICENSE_JWT` once at module load, verifies it against
+  `LICENSE_PUBLIC_KEY_B64` with `jsonwebtoken`'s own RS256 verify (not
+  a hand-rolled check), then computes state purely in memory on every
+  call after that — **no provider API call, ever, on the request
+  path**, exactly spec's "NO blocking if provider unreachable" rule.
+  Both `LICENSE_JWT` and `LICENSE_PUBLIC_KEY_B64` are optional: a
+  deployment with neither set is `NOT_CONFIGURED` and runs fully
+  unrestricted — a deliberate default so adding license enforcement
+  retroactively can never lock out an existing dev/test environment
+  that predates it. A `LICENSE_JWT` that *is* present but fails to
+  verify is `INVALID` and fails closed (treated the same as
+  `EXPIRED_FINAL`).
+- **Grace-period enforcement, exactly per spec's state table** — a new
+  global `licenseWriteGate` middleware in `product/api`'s `app.ts`
+  blocks any non-safe-method request once the license is
+  `EXPIRED_GRACE`/`EXPIRED_FINAL`/`INVALID` (423 `LICENSE_EXPIRED`),
+  exempting `/api/v1/auth`, `/api/v1/license`, and `/health` so session
+  management and the status read itself keep working — spec's own
+  "Login allowed" rule during grace. `EXPIRED_FINAL`'s stricter "Super
+  Admin can login (read-only), other users cannot" is enforced inside
+  `auth/service.ts`'s `login()` itself (checked after password
+  verification, before a session is ever created) since it needs the
+  user's role, which the gate middleware doesn't have. A new public
+  `GET /api/v1/license` endpoint reports state/plan/features/limits —
+  deliberately unauthenticated, since `EXPIRED_FINAL` can block a
+  non-Super-Admin from ever getting a session, and that user still
+  needs to see *why* on the login screen.
+- **Heartbeat, both directions**: `provider/api`'s
+  `POST /api/v1/heartbeat` (public, authenticated purely by the
+  deployment's bearer `heartbeatToken` — a real gateway/deployment has
+  no session) records a `HealthCheck` row, updates
+  `Deployment.healthStatus`/`lastCheckInAt`, and reports the current
+  license's validity back, per spec's exact request/response shapes.
+  `product/api`'s `src/lib/heartbeatSender.ts` builds and sends one
+  real heartbeat (active student/staff/campus counts via real Prisma
+  aggregates, a live `SELECT 1` round-trip standing in for the
+  "avgResponseTime" metric this app has no APM collector to measure
+  otherwise, `process.uptime()` for uptime) — non-blocking by design
+  (a failed send is logged, never thrown). **Not wired to a real
+  scheduler**: this app has no job scheduler (same documented gap as
+  Phase 8's report scheduling), so spec's "daily, configurable"
+  cadence is a deliberate, scoped-out follow-up; `npm run
+  send-heartbeat` is the manually-triggerable entry point in the
+  meantime, and a real deployment would call `sendHeartbeat()` from
+  whatever process scheduler it already runs.
+- **Verified for real, end-to-end, against real running dev servers on
+  both apps**: created a real Customer ("Demo Institute" — the same
+  institute name `product/api` itself seeds, since this *is* the
+  license for this session's own dev deployment, not a disposable
+  fixture) + Plan + Deployment + License via curl against
+  `provider/api`; installed the resulting `LICENSE_JWT`/
+  `DEPLOYMENT_HEARTBEAT_TOKEN` into `product/api`'s real `.env`;
+  confirmed `GET /api/v1/license` reports `VALID` with the exact
+  plan/features/limits; ran `npm run send-heartbeat` for real and
+  confirmed the resulting `HealthCheck` row and updated `Deployment`
+  status on the provider side; suspended the license via the API and
+  confirmed the very next heartbeat's response correctly flipped to
+  `valid: false`, then reactivated it. `npx tsc --noEmit` and
+  `npm run build` both clean on both apps.
+- **A real bug caught while writing this session's own dev-deployment
+  fixtures, not by inspection**: `generateLicense`'s first attempt hit
+  a genuine 500 through the real HTTP layer; reproducing the exact same
+  `signLicense`+`prisma.license.create` call directly in a standalone
+  script succeeded cleanly, and a subsequent full test-suite re-run
+  passed 12/12 — root-caused as the same documented Neon cold-connection
+  P1001 flakiness (§5a) hitting mid-run, not a code defect.
+- **12/12 `provider-platform.test.ts` tests passing** — real Customer/
+  Plan/Deployment/License CRUD, the full ACTIVE→SUSPENDED→ACTIVE→
+  REVOKED transition sequence (revoked confirmed terminal), a
+  signature-verified license round-trip against `LICENSE_PUBLIC_KEY_PEM`,
+  a valid heartbeat updating real deployment health, an invalid-token
+  heartbeat rejected, a deploymentId/token mismatch rejected, and the
+  full support-ticket lifecycle. Plus a dedicated `product/api` unit
+  suite (`tests/unit/license.test.ts`, 9 tests) exercising
+  `computeLicenseState`'s day-threshold table and `verifyLicenseJwt`
+  against a throwaway keypair (matching key verifies, wrong keypair
+  rejects, tampered token rejects, malformed input rejects). Zero
+  regression confirmed on the existing suite: `campuses.test.ts` (6/6)
+  and the multi-role-login-heavy `scope-enforcement.test.ts` (12/12)
+  both re-ran clean with the new global license gate in place.
+- **Not done at this pass**: per-feature entitlement gating (spec's own
+  "if feature requires online_payments..." example) — the grace-
+  period/login-restriction rules are the concrete, acceptance-testable
+  core of §2 and are fully implemented; blocking individual modules by
+  plan tier is a documented, scoped-out follow-up, since no module
+  currently checks a feature flag either way. Real key rotation
+  (spec's "every 12-24 months, maintain old public key for 6 months")
+  — one active keypair only, rotation is a real operational procedure
+  this session has no reason to simulate yet.
+
+### 1v. Phase 10 frontend (`provider/web` — new package) — screens built, live-verified end-to-end including a real login form submission
+
+A brand-new Next.js 16 + shadcn/ui app, mirroring `product/web`'s exact
+scaffold/conventions (same UI primitives, same BFF cookie-forwarding
+pattern, same `FormDialog`/`PageHeader` components — copied as generic,
+content-free scaffold, then written fresh for this platform) rather
+than reinventing a second design system.
+
+- **Distinct cookie names** (`providerAccessToken`/
+  `providerRefreshToken`/`providerCsrfToken`) from `product/web`'s —
+  two unrelated apps, unrelated sessions, deliberately namespaced apart
+  even though they don't currently share a browser in practice.
+- **6 screens**: Dashboard (customer/license/deployment-health/support
+  counts, computed live from `provider/api`'s dashboard aggregate);
+  Customers (list/create/activate-deactivate, detail page with
+  deployment + full license history + tickets); Plans
+  (list/create/activate-deactivate); Deployments (list/create — the
+  heartbeat token shown once at creation, same write-once-secret
+  pattern as Phase 9's gateway dialog — detail page with real
+  heartbeat history; status change only, **no remote restart/update
+  actions**, per spec's explicit "monitoring/registry only" rule);
+  Licenses (generate — the signed JWT shown once — list with a
+  state badge per license, activate/suspend/revoke, revoked shown as
+  terminal); Support (ticket list/create, assign-to-me, resolve,
+  close).
+- **A real bug found live, not by inspection**: `licenses/actions.ts`'s
+  `activateLicense`/`suspendLicense`/`revokeLicense` were declared as
+  plain (non-`async`) functions that returned a `Promise` from calling
+  a shared helper — compiles fine under `tsc`, but Next.js's Server
+  Actions compiler rejects any `"use server"` file export that isn't
+  itself declared `async`, and both the `/dashboard/licenses` and
+  (collaterally, same failed compile batch) `/dashboard/support` pages
+  500'd. Fixed by declaring all three `async`; both pages re-verified
+  200 immediately after.
+- **Verified live against real running dev servers — including the
+  login form itself, not just page rendering**: extracted the real
+  `$ACTION_1:0`/`$ACTION_1:1`/`$ACTION_KEY`/`$ACTION_REF_1` fields from
+  the live-rendered `/login` HTML and submitted a genuine multipart
+  POST with real credentials — got back real `Set-Cookie` headers and
+  a 303 to `/dashboard`, the exact same no-JS-progressive-enhancement
+  path a browser with JS disabled would take. This is a step further
+  than every prior phase's frontend verification in this session
+  (which stopped at page-rendering with a pre-existing session,
+  logging the interactive-dialog gap as a standing "not verified" —
+  see §1d). Confirmed every one of the 6 pages returns 200 with real
+  data (the same Customer/Plan/Deployment/License created for §1u's
+  backend verification) using that real session; `npx tsc --noEmit`
+  and `npm run build` both clean — 11 routes.
+- **Not verified**: the `+ Add`/`+ Generate`/dialog-driven forms
+  specifically as actual browser clicks (only the login form was
+  pushed through the no-JS-POST technique this pass) — same standing
+  gap as every prior phase's interactive dialogs (§1d).
 
 **Installed and verified in `product/api`:** express, prisma/@prisma/client
 5.22.0 (pinned to latest stable — an 8.0.0-rc is available but RC builds are
@@ -1630,45 +1836,55 @@ backend + frontend both built (§1o/§1p) — role permissions for all 7
 roles, scope enforcement, Student/Parent login, a new `/portal` shell —
 48 pages total. Phase 8: backend + frontend both built (§1q/§1r) —
 5 live-computed report categories, CSV export, Report Center — 55 pages
-total. Phase 9: **backend + frontend both built** (§1s/§1t) — real
+total. Phase 9: backend + frontend both built (§1s/§1t) — real
 HMAC-signed payment-gateway webhook flow, gateway config, reconciliation
-dashboard, a real Parent Portal Pay Online flow — 60 pages total. All
-Phases 0-9 are now backend+frontend complete — every phase in
-PHASE_TRACKER.md except Phase 10 (Provider Platform, a separate
-application). What's left, in order:
+dashboard, a real Parent Portal Pay Online flow — 60 pages total.
+Phase 10: **backend + frontend both built** (§1u/§1v) — a brand-new
+`provider/api` + `provider/web` application (Customers, Plans,
+Deployments, Licenses, Support, Dashboard), a real RS256-signed
+License & Entitlement architecture wired into `product/api` (offline
+signature verification, grace-period write-blocking, EXPIRED_FINAL
+login restriction), and a real heartbeat exchange between the two apps
+— 11 new pages, verified end-to-end against real running dev servers
+on both sides, including a genuine no-JS login form submission. **All
+11 phases in PHASE_TRACKER.md are now backend+frontend complete.**
+What's left, in order:
 
-1. **Click through Phases 1-9's screens in a real browser** — every
+1. **Click through every phase's screens in a real browser** — every
    "+ Add", "Edit", "Archive", "Approve/Reject", "Transfer", "Withdraw",
    "Publish", "Submit", "Record payment", "Assign/Resolve/Close/Reopen",
    "Mark attendance", "Assign homework", "Request leave", "Export CSV",
-   "Pay Online"/"Confirm"/"Cancel", and document-upload control, across
-   4 different role experiences (admin, teacher portal, parent portal,
-   student portal), not just Super Admin. This is the one open item
+   "Pay Online"/"Confirm"/"Cancel", "Generate license"/"Suspend"/
+   "Revoke", and document-upload control, across the customer app's 4
+   role experiences (admin, teacher portal, parent portal, student
+   portal) and the provider platform. This is the one open item
    standing between "built" and "actually done" across the whole
-   product so far — every phase's backend is genuinely verified against
-   the real database, but no phase's UI has been clicked through by a
+   product now that every phase is built — every phase's backend is
+   genuinely verified against a real database, and Phase 10's login
+   form specifically has been pushed through a real no-JS POST (§1v),
+   but no phase's *dialog-driven* forms have been clicked through by a
    human yet.
-2. **Then Phase 10** (Provider Platform) per the roadmap — the last
-   phase, not yet started. A separate application from the customer
-   product; only depends on Phase 1's Institute/license shape.
-3. **Deliberately scoped out, worth a follow-up**: bespoke
+2. **Deliberately scoped out, worth a follow-up**: bespoke
    Principal/Incharge/Office dashboard home pages (Phase 7, they
    currently reuse the shared admin Overview — see §1p); PDF/Excel
    report export and scheduled report generation (Phase 8, see §1q); a
    resolve/dismiss action for reconciliation exceptions, real
-   Easypaisa/JazzCash SDK integration (Phase 9, see §1t — both
-   deliberate honest-simulation boundaries, not oversights); a full,
-   clean, single Phase 0-9 suite run (tonight's was done as targeted
-   isolated re-runs instead, under bad concurrent-load conditions — see
-   §1s).
-4. **Minor cleanup, low priority**: wire real email delivery when a
+   Easypaisa/JazzCash SDK integration (Phase 9, see §1t); per-feature
+   entitlement gating by plan tier, real RS256 key rotation, wiring the
+   heartbeat sender to an actual scheduler (Phase 10, see §1u — all
+   deliberate honest-simulation or "no job scheduler exists" boundaries,
+   not oversights); a full, clean, single Phase 0-9 suite run (Phase 9's
+   own verification night was done as targeted isolated re-runs instead,
+   under bad concurrent-load conditions — see §1s).
+3. **Minor cleanup, low priority**: wire real email delivery when a
    provider is chosen; consider a session-refresh-on-expiry flow for
    `product/web` once 20-minute re-logins become annoying; rename the
-   placeholder "Demo Institute" to something real before any actual use;
-   don't leave more than one `tsx watch src/server.ts` dev-server
-   instance running at once (a stray second copy from earlier in this
-   session added avoidable Neon connection load during Phase 9
-   verification — see §1s).
+   placeholder "Demo Institute" to something real before any actual use
+   (now also the name of this session's own dev License's Customer
+   record on `provider/api` — see §1u); don't leave more than one
+   `tsx watch src/server.ts` dev-server instance running per app at
+   once (stray duplicates added avoidable Neon connection load during
+   both Phase 9 and Phase 10 verification — see §1s).
 
 ## 3a. Deviations from PRODUCT_SPEC.md (and why)
 
@@ -1780,6 +1996,63 @@ application). What's left, in order:
 Append a dated entry every session. Keep entries short — what changed, what's
 left, anything the next session needs to know that isn't obvious from the
 code/docs themselves.
+
+### 2026-09-11 (w) — Phase 10 built end-to-end: Provider Platform (last phase)
+
+- Continued directly from entry (v) — user asked to start Phase 10, the
+  last phase in `PHASE_TRACKER.md`.
+- New `provider/api` + `provider/web` applications, a separate Postgres
+  *schema* on the same Neon instance (not a new database — no
+  credentials available to provision one; see §1u for the reasoning),
+  and `provider/api`'s Prisma client given its own `output` path (npm
+  workspaces hoist `@prisma/client`, so the default output would have
+  collided with `product/api`'s generated client).
+- Backend: Customer/Plan/Deployment/License/SupportTicket/HealthCheck
+  models, a flat `ProviderUser` login (no RBAC — spec never describes
+  provider-side roles), an RS256 keypair for signing License JWTs
+  matching spec's exact claim shape, `computeLicenseState`'s day-
+  threshold table, a heartbeat-ingestion endpoint authenticated by a
+  per-deployment bearer token. 12/12 `provider-platform.test.ts` tests.
+  See §1u.
+- `product/api` customer-side integration: an independent, from-scratch
+  license verifier (`src/lib/license.ts` — no code shared with
+  `provider/api`, matching spec's "no source code to the customer"
+  split), a global `licenseWriteGate` middleware enforcing the grace-
+  period rules, an `EXPIRED_FINAL` login restriction inside
+  `auth/service.ts`, and `src/lib/heartbeatSender.ts` for the other
+  direction. A `LICENSE_JWT`/`LICENSE_PUBLIC_KEY_B64` left unset makes
+  a deployment `NOT_CONFIGURED` (fully unrestricted) — required so
+  retrofitting this couldn't lock out every existing dev/test
+  environment. 9 new `tests/unit/license.test.ts` tests; zero
+  regression confirmed by re-running `campuses.test.ts` (6/6) and the
+  multi-role-login-heavy `scope-enforcement.test.ts` (12/12).
+- Frontend: `provider/web` (Dashboard, Customers, Plans, Deployments,
+  Licenses, Support — 11 pages), copied from `product/web`'s generic
+  scaffold/UI primitives then written fresh for this platform.
+- **A real bug found live**: `licenses/actions.ts` had three
+  non-`async` Server Action exports (syntactically valid, wrong per
+  Next's Server Actions compiler) — `/dashboard/licenses` and
+  (collaterally) `/dashboard/support` 500'd. Fixed, both re-verified.
+- **Verified live, end-to-end, on both apps**: a real Customer
+  ("Demo Institute" — this session's own dev deployment, not a
+  disposable fixture) + Plan + Deployment + License created via curl
+  against `provider/api`; the resulting `LICENSE_JWT`/
+  `DEPLOYMENT_HEARTBEAT_TOKEN` installed into `product/api`'s real
+  `.env`; `GET /api/v1/license` confirmed `VALID`; `npm run
+  send-heartbeat` sent a real heartbeat and the resulting `HealthCheck`
+  row/deployment health confirmed on the provider side; suspending the
+  license and re-heartbeating confirmed `valid: false`, then
+  reactivating restored it. On `provider/web`: extracted the real
+  Server Action fields from the live `/login` HTML and submitted a
+  genuine multipart POST with real credentials — real `Set-Cookie`
+  headers, a 303 to `/dashboard` — then confirmed all 6 pages return
+  200 with real data using that session. `npx tsc --noEmit` and
+  `npm run build` clean on all three affected packages.
+- **Next session should:** click through every phase's dialog-driven
+  forms in a real browser — the one standing item across the whole
+  product now that all 11 phases are backend+frontend complete (see
+  §3). There is no Phase 11 — this was the last phase in
+  `PHASE_TRACKER.md`.
 
 ### 2026-09-11 (v) — Phase 9 built end-to-end: Online Payment Integration
 

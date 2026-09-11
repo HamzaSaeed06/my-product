@@ -1,0 +1,270 @@
+// Phase 10 — Provider Platform, per docs/PRODUCT_SPEC.md → "PHASE 10:
+// PROVIDER PLATFORM" and its "Provider Database (Platform DB - Separate)"
+// architecture (§2 "COMMERCIAL & DEPLOYMENT MODEL").
+//
+// DEVIATION FROM SPEC, recorded per docs/README.md convention: spec's
+// diagram shows the provider platform on a fully separate database server.
+// This session has one provisioned Neon Postgres instance; a brand-new
+// database/project isn't something this agent can provision without new
+// credentials. Used a distinct Postgres SCHEMA ("provider", vs product/api's
+// "public") on the SAME instance instead — set via this app's own
+// DATABASE_URL's `?schema=provider` query param (the same convention
+// product/api's .env.example already documents for `public`), so every
+// table below lives in its own namespace with zero risk of colliding with
+// or querying customer operational data, without requiring new
+// infrastructure. See docs/PROJECT_STATUS.md §1u for the full reasoning. A
+// real production deployment would point this at its own physical
+// database, per spec.
+//
+// No roles/permissions system here — spec never describes provider-side
+// RBAC (unlike product/api's ROLE+PERMISSION+SCOPE model for 7 customer
+// roles), just "provider staff." ProviderUser is deliberately flat: any
+// authenticated row can do anything on this platform.
+
+// A custom output path is REQUIRED here, not cosmetic: npm workspaces
+// hoist @prisma/client to the repo root, so Prisma's default output
+// (node_modules/.prisma/client) is the exact same physical location
+// product/api's generated client lives in. Without this, `prisma generate`
+// in either app would silently overwrite the other's generated client
+// (wrong models, wrong types) the next time either ran. Each app's own
+// generated client, at its own path, is what actually keeps them isolated
+// — the separate Postgres schema (see header comment) keeps the *data*
+// isolated, this keeps the *generated code* isolated.
+generator client {
+  provider = "prisma-client-js"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// Identity (provider staff — small and flat, not the customer app's model)
+// ─────────────────────────────────────────────────────────────────────────
+
+model ProviderUser {
+  id           String   @id @default(uuid())
+  email        String   @unique
+  passwordHash String
+  fullName     String
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  sessions         Session[]
+  auditLogsAsActor AuditLog[]      @relation("ProviderAuditActor")
+  ticketsAssigned  SupportTicket[] @relation("TicketAssignedTo")
+
+  @@map("provider_users")
+}
+
+model Session {
+  id               String    @id @default(uuid())
+  providerUserId   String
+  refreshTokenHash String
+  deviceInfo       String?
+  ipAddress        String?
+  createdAt        DateTime  @default(now())
+  expiresAt        DateTime
+  lastUsedAt       DateTime  @default(now())
+  revokedAt        DateTime?
+
+  providerUser ProviderUser @relation(fields: [providerUserId], references: [id], onDelete: Cascade)
+
+  @@index([providerUserId])
+  @@map("sessions")
+}
+
+model AuditLog {
+  id        String   @id @default(uuid())
+  actorId   String?
+  action    String
+  resource  String
+  recordId  String?
+  oldValue  Json?
+  newValue  Json?
+  reason    String?
+  ipAddress String?
+  userAgent String?
+  createdAt DateTime @default(now())
+
+  actor ProviderUser? @relation("ProviderAuditActor", fields: [actorId], references: [id])
+
+  @@index([resource, recordId])
+  @@index([actorId])
+  @@map("audit_logs")
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// Customer, Plan, Deployment, License
+// ─────────────────────────────────────────────────────────────────────────
+
+enum CustomerStatus {
+  ACTIVE
+  INACTIVE
+}
+
+model Customer {
+  id           String         @id @default(uuid())
+  customerCode String         @unique
+  name         String
+  contactName  String
+  contactEmail String
+  contactPhone String?
+  status       CustomerStatus @default(ACTIVE)
+  notes        String?
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+
+  deployments Deployment[]
+  licenses    License[]
+  tickets     SupportTicket[]
+
+  @@map("customers")
+}
+
+model Plan {
+  id           String   @id @default(uuid())
+  name         String   @unique
+  tier         String   @unique
+  features     String[]
+  maxStudents  Int
+  maxCampuses  Int
+  maxStaff     Int
+  maxStorageMb Int
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  licenses License[]
+
+  @@map("plans")
+}
+
+enum DeploymentStatus {
+  PROVISIONING
+  ACTIVE
+  SUSPENDED
+  DECOMMISSIONED
+}
+
+enum HealthStatus {
+  UNKNOWN
+  HEALTHY
+  DEGRADED
+  DOWN
+}
+
+model Deployment {
+  id             String           @id @default(uuid())
+  customerId     String
+  version        String
+  url            String
+  status         DeploymentStatus @default(PROVISIONING)
+  heartbeatToken String           @unique
+  healthStatus   HealthStatus     @default(UNKNOWN)
+  lastCheckInAt  DateTime?
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+
+  customer     Customer      @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  licenses     License[]
+  healthChecks HealthCheck[]
+
+  @@index([customerId])
+  @@map("deployments")
+}
+
+enum LicenseStatus {
+  ACTIVE
+  SUSPENDED
+  REVOKED
+}
+
+model License {
+  id            String        @id @default(uuid())
+  licenseNumber String        @unique
+  customerId    String
+  planId        String
+  deploymentId  String
+  jti           String        @unique
+  status        LicenseStatus @default(ACTIVE)
+  issuedAt      DateTime      @default(now())
+  expiresAt     DateTime
+  signedJwt     String
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  customer   Customer   @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  plan       Plan       @relation(fields: [planId], references: [id])
+  deployment Deployment @relation(fields: [deploymentId], references: [id], onDelete: Cascade)
+
+  @@index([customerId])
+  @@index([deploymentId])
+  @@map("licenses")
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// Health monitoring (passive heartbeat — spec §2 "Heartbeat Mechanism")
+// ─────────────────────────────────────────────────────────────────────────
+
+model HealthCheck {
+  id                String   @id @default(uuid())
+  deploymentId      String
+  receivedAt        DateTime @default(now())
+  version           String
+  uptimeSeconds     Int
+  studentCount      Int
+  staffCount        Int
+  campusCount       Int
+  storageUsedMb     Int
+  apiStatus         String
+  dbStatus          String
+  avgResponseTimeMs Int
+  errorRatePercent  Float
+
+  deployment Deployment @relation(fields: [deploymentId], references: [id], onDelete: Cascade)
+
+  @@index([deploymentId, receivedAt])
+  @@map("health_checks")
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// Support
+// ─────────────────────────────────────────────────────────────────────────
+
+enum TicketPriority {
+  LOW
+  MEDIUM
+  HIGH
+  URGENT
+}
+
+enum TicketStatus {
+  OPEN
+  IN_PROGRESS
+  RESOLVED
+  CLOSED
+}
+
+model SupportTicket {
+  id           String         @id @default(uuid())
+  ticketNumber String         @unique
+  customerId   String
+  subject      String
+  description  String
+  priority     TicketPriority @default(MEDIUM)
+  status       TicketStatus   @default(OPEN)
+  assignedToId String?
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+  resolvedAt   DateTime?
+
+  customer   Customer      @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  assignedTo ProviderUser? @relation("TicketAssignedTo", fields: [assignedToId], references: [id])
+
+  @@index([customerId])
+  @@map("support_tickets")
+}

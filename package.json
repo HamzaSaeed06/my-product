@@ -5,6 +5,7 @@
   "description": "White-label, single-tenant education institution management platform. See docs/PRODUCT_SPEC.md.",
   "workspaces": [
     "product/*",
+    "provider/*",
     "packages/*"
   ],
   "scripts": {
@@ -13,7 +14,11 @@
     "test:api": "npm run test --workspace=product/api",
     "test:api:integration": "npm run test:integration --workspace=product/api",
     "prisma:generate": "npm run prisma:generate --workspace=product/api",
-    "prisma:migrate": "npm run prisma:migrate --workspace=product/api"
+    "prisma:migrate": "npm run prisma:migrate --workspace=product/api",
+    "dev:provider-api": "npm run dev --workspace=provider/api",
+    "build:provider-api": "npm run build --workspace=provider/api",
+    "test:provider-api": "npm run test --workspace=provider/api",
+    "test:provider-api:integration": "npm run test:integration --workspace=provider/api"
   },
   "overrides": {
     "qs": "6.16.0"

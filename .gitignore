@@ -19,6 +19,11 @@ Thumbs.db
 
 # Prisma
 product/api/prisma/migrations/dev.db
+# provider/api's Prisma client has a custom output path (a separate
+# workspace's generated client can't share product/api's node_modules
+# location — see schema.prisma's header comment) — regenerated via
+# `prisma generate`, never hand-edited, never committed.
+provider/api/src/generated/
 
 # Uploaded documents (local disk storage in dev)
 product/api/storage/

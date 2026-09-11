@@ -49,8 +49,10 @@ import { complaintsRouter } from "./modules/complaints/routes.js";
 import { reportsRouter } from "./modules/reports/routes.js";
 import { paymentGatewaysRouter } from "./modules/payment-gateways/routes.js";
 import { onlinePaymentRouter, paymentCallbackRouter, paymentReconciliationRouter } from "./modules/online-payment/routes.js";
+import { licenseRouter } from "./modules/license/routes.js";
 import { errorHandler, notFoundHandler } from "./middleware/errorHandler.js";
 import { readRateLimiter } from "./middleware/rateLimiter.js";
+import { licenseWriteGate } from "./middleware/licenseGate.js";
 
 export function createApp(): Express {
   const app = express();
@@ -78,11 +80,18 @@ export function createApp(): Express {
     })
   );
   app.use(readRateLimiter);
+  // Phase 10: blocks non-safe-method requests once the license is
+  // expired/invalid, per PRODUCT_SPEC.md §2's grace-period rules. Mounted
+  // globally, ahead of every module router, so no route needs to remember
+  // to add it individually — the exemptions (auth, license status, health)
+  // live inside the gate itself.
+  app.use(licenseWriteGate);
 
   app.get("/health", (_req, res) => {
     res.status(200).json({ status: "ok" });
   });
 
+  app.use("/api/v1/license", licenseRouter);
   app.use("/api/v1/auth", authRouter);
   app.use("/api/v1/users", usersRouter);
   app.use("/api/v1/roles", rolesRouter);

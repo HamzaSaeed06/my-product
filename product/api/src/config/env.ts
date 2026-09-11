@@ -13,6 +13,21 @@ const envSchema = z.object({
   WEB_APP_ORIGIN: z.string().url().default("http://localhost:3000"),
   DOCUMENT_STORAGE_DIR: z.string().default("storage/documents"),
   MAX_UPLOAD_SIZE_MB: z.coerce.number().int().positive().default(10),
+
+  // Phase 10 (Provider Platform) license validation — both optional. A
+  // deployment with neither set is treated as "not yet licensed" (a local/
+  // dev instance that hasn't been issued one) and runs fully unrestricted,
+  // per this session's own reasoning: it must never be the case that adding
+  // license enforcement retroactively locks out every existing dev/test
+  // environment that predates it. A LICENSE_JWT that IS present but fails
+  // to verify (wrong key, tampered) is treated as invalid and fails closed
+  // — see src/lib/license.ts.
+  LICENSE_JWT: z.string().optional(),
+  LICENSE_PUBLIC_KEY_B64: z.string().optional(),
+  // Where this deployment sends its daily heartbeat — see
+  // src/lib/heartbeatSender.ts. Optional for the same reason as above.
+  PROVIDER_API_URL: z.string().url().default("http://localhost:4100"),
+  DEPLOYMENT_HEARTBEAT_TOKEN: z.string().optional(),
 });
 
 const parsed = envSchema.safeParse(process.env);

@@ -19,7 +19,7 @@ phase's state changes — this table is what a new agent scans first.
 | 7 | Portals & Role-Based Experiences | Principal / Incharge / Office / Teacher / Parent / Student UIs on top of the above | all prior | 4-5 wk | 🟡 |
 | 8 | Reports & Analytics | Cross-module reporting (academic, attendance, finance, staff) | all prior | 3-4 wk | 🟡 |
 | 9 | Online Payment Integration | Payment gateway (Easypaisa/JazzCash-style), webhook idempotency, reconciliation | 5 | 3-4 wk | 🟢 |
-| 10 | Provider Platform | Provider-side control plane: customer/license/deployment management, heartbeat, support tickets | 1 | 4-5 wk | 🔴 |
+| 10 | Provider Platform | Provider-side control plane: customer/license/deployment management, heartbeat, support tickets | 1 | 4-5 wk | 🟢 |
 
 **Total estimated: ~6-9 months** for a single developer working sequentially;
 faster with parallelization across independent branches (e.g., Phase 6 can run
@@ -137,10 +137,32 @@ documented honestly rather than glossed over: a 40+ file run stalled
 repeatedly under heavy concurrent Neon load (two API dev servers plus
 this session's own smoke testing all hitting the database at once) and
 was abandoned in favor of targeted isolated re-runs of the 3 files this
-phase touched, all confirmed clean once load normalized. All Phases
-0-9 backends and frontends are now built — every phase except Phase 10
-(Provider Platform, a separate application). See also
-§1c/§1d/§1e/§1f/§1g/§1h/§1i/§1j/§1k/§1l/§1m/§1n/§1o/§1p/§1q/§1r/§1s/§1t
+phase touched, all confirmed clean once load normalized. **Phase 10
+backend built**: two brand-new applications, `provider/api` and
+`provider/web`, on a separate Postgres schema (same Neon instance —
+no credentials to provision a truly separate database, see §1u) with
+its own isolated generated Prisma client. A real RS256-signed License
+& Entitlement architecture matching spec's exact claim shape and
+day-threshold state table, a heartbeat-ingestion endpoint authenticated
+by a per-deployment bearer token, and Customer/Plan/Deployment/
+SupportTicket/Dashboard modules — 12/12 new tests. **Phase 10 customer-
+side integration** wired into `product/api`: an independent, from-
+scratch license verifier (no code shared with `provider/api`, matching
+spec's "no source code to the customer" split), a global write-gate
+enforcing grace-period rules, an `EXPIRED_FINAL` login restriction, and
+a heartbeat sender — 9 new unit tests, zero regression on the existing
+suite. **Phase 10 frontend built**: `provider/web`'s 6 screens
+(Dashboard, Customers, Plans, Deployments, Licenses, Support) — 11
+pages total. A real bug (non-`async` Server Action exports) found and
+fixed live. Verified end-to-end on both apps against real running dev
+servers: a real Customer/Plan/Deployment/License created, installed
+into `product/api`'s own `.env`, a real heartbeat sent and confirmed,
+a license suspended/reactivated with the heartbeat response flipping
+accordingly — and, a step further than any prior phase, a genuine
+no-JS login form submission against `provider/web`'s real rendered
+HTML. **All 11 phases in this table are now backend+frontend
+complete.** See also
+§1c/§1d/§1e/§1f/§1g/§1h/§1i/§1j/§1k/§1l/§1m/§1n/§1o/§1p/§1q/§1r/§1s/§1t/§1u/§1v
 for full detail.
 
 ## Notes on dependency ordering

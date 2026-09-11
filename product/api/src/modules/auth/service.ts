@@ -11,6 +11,7 @@ import { writeAuditLog } from "../../lib/audit.js";
 import { env } from "../../config/env.js";
 import { HttpError } from "../../middleware/errorHandler.js";
 import { getActorProfile } from "../../lib/scope.js";
+import { getLicenseInfo } from "../../lib/license.js";
 import type { Request } from "express";
 
 interface LoginInput {
@@ -77,6 +78,20 @@ export async function login(input: LoginInput): Promise<{ user: PublicUser; toke
     }
     if (!user.mfaSecret || !verifyMfaToken(user.mfaSecret, input.mfaCode)) {
       throw new HttpError(401, "MFA_INVALID", "Invalid MFA code");
+    }
+  }
+
+  // PRODUCT_SPEC.md §2 EXPIRED_FINAL: "Super Admin can login (read-only),
+  // Other users cannot login." An INVALID license (present but failed
+  // signature verification) fails closed the same way. Every other state
+  // (including NOT_CONFIGURED, EXPIRED_GRACE, and everything short of
+  // final) still allows login for everyone — grace period explicitly says
+  // "Login allowed."
+  const { state } = getLicenseInfo();
+  if (state === "EXPIRED_FINAL" || state === "INVALID") {
+    const profile = await getActorProfile(user.id);
+    if (!profile.roles.includes("SUPER_ADMIN")) {
+      throw new HttpError(423, "LICENSE_EXPIRED", "License expired. Contact the provider to renew — only Super Admin may log in until then.");
     }
   }
 

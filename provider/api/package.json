@@ -1,5 +1,5 @@
 {
-  "name": "@product/api",
+  "name": "@provider/api",
   "private": true,
   "version": "0.0.0",
   "type": "module",
@@ -14,13 +14,7 @@
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
     "prisma:studio": "prisma studio",
-    "prisma:seed": "tsx prisma/seed.ts",
-    "create-super-admin": "tsx scripts/create-super-admin.ts",
-    "create-institute": "tsx scripts/create-institute.ts",
-    "send-heartbeat": "tsx scripts/send-heartbeat.ts"
-  },
-  "prisma": {
-    "seed": "tsx prisma/seed.ts"
+    "create-provider-admin": "tsx scripts/create-provider-admin.ts"
   },
   "dependencies": {
     "@prisma/client": "^5.20.0",
@@ -32,8 +26,6 @@
     "express-rate-limit": "^7.4.1",
     "helmet": "^7.1.0",
     "jsonwebtoken": "^9.0.2",
-    "multer": "^2.3.0",
-    "otplib": "^12.0.1",
     "zod": "^3.23.8"
   },
   "devDependencies": {
@@ -41,7 +33,6 @@
     "@types/cors": "^2.8.17",
     "@types/express": "^4.17.21",
     "@types/jsonwebtoken": "^9.0.7",
-    "@types/multer": "^1.4.12",
     "@types/node": "^22.7.4",
     "@types/supertest": "^6.0.2",
     "prisma": "^5.20.0",
