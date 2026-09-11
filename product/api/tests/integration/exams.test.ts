@@ -60,6 +60,18 @@ describe("Exams API (real database)", () => {
     expect(res.body).toHaveLength(1);
   });
 
+  it("gets a single exam by id", async () => {
+    const res = await asSuperAdmin().get(`/api/v1/exams/${examId}`);
+    expect(res.status).toBe(200);
+    expect(res.body.name).toBe("Midterm");
+  });
+
+  it("404s for a non-existent exam id", async () => {
+    const res = await asSuperAdmin().get("/api/v1/exams/00000000-0000-0000-0000-000000000000");
+    expect(res.status).toBe(404);
+    expect(res.body.error).toBe("EXAM_NOT_FOUND");
+  });
+
   it("publishes the exam", async () => {
     const res = await asSuperAdmin().post(`/api/v1/exams/${examId}/publish`);
     expect(res.status).toBe(200);

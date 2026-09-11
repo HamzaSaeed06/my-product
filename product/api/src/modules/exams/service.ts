@@ -7,6 +7,12 @@ export async function listExams(filter: { academicYearId?: string }) {
   return prisma.exam.findMany({ where: filter, orderBy: { createdAt: "desc" } });
 }
 
+export async function getExam(id: string) {
+  const exam = await prisma.exam.findUnique({ where: { id } });
+  if (!exam) throw new HttpError(404, "EXAM_NOT_FOUND", "Exam not found");
+  return exam;
+}
+
 export async function createExam(input: { academicYearId: string; name: string }, actorId: string) {
   const academicYear = await prisma.academicYear.findUnique({ where: { id: input.academicYearId } });
   if (!academicYear) throw new HttpError(400, "ACADEMIC_YEAR_NOT_FOUND", "Academic year not found");

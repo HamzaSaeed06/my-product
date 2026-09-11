@@ -8,6 +8,7 @@ import { writeRateLimiter } from "../../middleware/rateLimiter.js";
 export const examsRouter = Router();
 
 examsRouter.get("/", ...requirePermission("exam.view"), asyncHandler(controller.listExamsHandler));
+examsRouter.get("/:examId", ...requirePermission("exam.view"), asyncHandler(controller.getExamHandler));
 
 examsRouter.post(
   "/",

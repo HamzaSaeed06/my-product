@@ -10,6 +10,10 @@ export async function listExamsHandler(req: Request, res: Response): Promise<voi
   res.status(200).json(await service.listExams(query));
 }
 
+export async function getExamHandler(req: Request, res: Response): Promise<void> {
+  res.status(200).json(await service.getExam(req.params.examId!));
+}
+
 export async function createExamHandler(req: Request, res: Response): Promise<void> {
   const body = createSchema.parse(req.body);
   res.status(201).json(await service.createExam(body, req.user!.id));

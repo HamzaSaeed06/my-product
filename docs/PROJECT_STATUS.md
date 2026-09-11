@@ -851,6 +851,35 @@ tests (§1i), no frontend yet.** What's left, in order:
   (Prisma, argon2, esbuild, native modules) after checking what the script
   actually does — don't blanket-approve without looking.
 
+## 5a. Known environment flakiness — Neon connection drops during long test runs
+
+- The full integration suite (~210 tests, ~15 minutes against the live
+  Neon database) has, across several runs in the same session, shown a
+  **random single test file** failing with `PrismaClientInitializationError:
+  Can't reach database server at ep-autumn-bar...neon.tech (P1001)`. It hit
+  a different, unrelated file each time (students, then parents, then
+  promotions' `beforeAll`) — never the same file twice, and never as an
+  assertion failure (wrong status code, wrong body) — always this exact
+  connection-level error. That pattern (random file, identical low-level
+  error, zero logic failures) is the signature of a real, external,
+  intermittent connectivity drop to the database itself, not a code defect.
+- **Do not treat a lone `P1001` failure as a sign the code is broken.**
+  Re-run just that file (or the full suite) once; if the rest of the suite
+  is otherwise green, the code is fine. Only investigate further if the
+  *same* test fails with an *assertion* error (not a connection error), or
+  if `P1001` failures become frequent enough to block normal work.
+- **Real gap this exposed, worth fixing eventually (not done yet)**: when a
+  test file's `beforeAll` throws before its fixture variables are assigned,
+  that file's `afterAll` still runs and can throw a second, confusing error
+  (e.g. `Prisma...deleteMany({ where: { id: { in: [undefined, undefined] } } })`)
+  that masks the real root cause in the output. Every Phase 3/4 integration
+  test file's `afterAll` assumes `beforeAll` fully succeeded. Not fixed
+  because it only surfaces on the rare `beforeAll`-fails case and didn't
+  cause any actual data leakage this session (the crashes all happened
+  before any fixture rows were created) — but a future session tightening
+  up test hygiene should guard `afterAll` bodies (e.g. skip cleanup for any
+  variable that's still `undefined`) so the real error is never hidden.
+
 ## 6. Session log
 
 Append a dated entry every session. Keep entries short — what changed, what's

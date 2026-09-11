@@ -43,6 +43,15 @@ const NAV_GROUPS = [
       { href: "/dashboard/assessments", label: "Assessments" },
     ],
   },
+  {
+    label: "Results & Promotion",
+    items: [
+      { href: "/dashboard/exams", label: "Exams" },
+      { href: "/dashboard/results", label: "Results" },
+      { href: "/dashboard/report-cards", label: "Report Cards" },
+      { href: "/dashboard/promotions", label: "Promotions" },
+    ],
+  },
 ] as const;
 
 export function DashboardSidebar() {
