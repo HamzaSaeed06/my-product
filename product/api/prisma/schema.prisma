@@ -51,6 +51,11 @@ model User {
   teacherProfile            Teacher?
   admissionsDecided         Admission[]
 
+  attendanceMarked            Attendance[]        @relation("AttendanceMarkedBy")
+  teacherAttendanceMarked     TeacherAttendance[]  @relation("TeacherAttendanceMarkedBy")
+  substitutionsCreated        Substitution[]
+  curriculumProgressCompleted CurriculumProgress[]
+
   @@map("users")
 }
 
@@ -215,6 +220,7 @@ model Document {
 
   uploadedBy      User             @relation("DocumentUploadedBy", fields: [uploadedById], references: [id])
   studentDocument StudentDocument?
+  homework        Homework?
 
   @@index([ownerType, ownerId])
   @@map("documents")
@@ -364,6 +370,10 @@ model AcademicYear {
   enrollments        Enrollment[]
   teacherAssignments TeacherAssignment[]
 
+  timetables  Timetable[]
+  curricula   Curriculum[]
+  assessments Assessment[]
+
   @@unique([instituteId, name])
   @@map("academic_years")
 }
@@ -386,6 +396,10 @@ model Class {
   admissions         Admission[]
   enrollments        Enrollment[]
   teacherAssignments TeacherAssignment[]
+
+  curricula   Curriculum[]
+  homework    Homework[]
+  assessments Assessment[]
 
   @@unique([instituteId, name])
   @@map("classes")
@@ -412,6 +426,12 @@ model Section {
   inchargeScopes     InchargeScopeSection[]
   enrollments        Enrollment[]
   teacherAssignments TeacherAssignment[]
+
+  timetables          Timetable[]
+  attendance          Attendance[]
+  curriculumProgress  CurriculumProgress[]
+  homework            Homework[]
+  assessments         Assessment[]
 
   @@unique([classId, campusId, academicYearId, name])
   @@map("sections")
@@ -507,10 +527,12 @@ model Student {
   createdAt   DateTime      @default(now())
   updatedAt   DateTime      @updatedAt
 
-  parents     StudentParent[]
-  admissions  Admission[]
-  enrollments Enrollment[]
-  documents   StudentDocument[]
+  parents           StudentParent[]
+  admissions        Admission[]
+  enrollments       Enrollment[]
+  documents         StudentDocument[]
+  attendance        Attendance[]
+  assessmentResults AssessmentResult[]
 
   @@map("students")
 }
@@ -571,6 +593,13 @@ model Teacher {
   user        User                @relation(fields: [userId], references: [id], onDelete: Cascade)
   assignments TeacherAssignment[]
 
+  timetableEntries           TimetableEntry[]
+  teacherAttendances         TeacherAttendance[]
+  substitutionsAsOriginal    Substitution[]      @relation("SubstitutionOriginal")
+  substitutionsAsSubstitute  Substitution[]      @relation("SubstitutionSubstitute")
+  homework                   Homework[]
+  assessments                Assessment[]
+
   @@map("teachers")
 }
 
@@ -586,6 +615,11 @@ model Subject {
 
   institute   Institute           @relation(fields: [instituteId], references: [id], onDelete: Cascade)
   assignments TeacherAssignment[]
+
+  timetableEntries TimetableEntry[]
+  curricula        Curriculum[]
+  homework         Homework[]
+  assessments      Assessment[]
 
   @@unique([instituteId, name])
   @@map("subjects")
@@ -698,4 +732,286 @@ model StudentDocument {
   document Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
 
   @@map("student_documents")
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// Phase 3 — Academic Operations (Timetable, Attendance, Substitution,
+// Curriculum, Homework, Assessments). See docs/PRODUCT_SPEC.md → "PHASE 3:
+// ACADEMIC OPERATIONS".
+//
+// Attendance/Assessment corrections reuse Phase 0's generic ApprovalRequest
+// engine (type "ATTENDANCE_CORRECTION" / "ASSESSMENT_MARKS_CORRECTION")
+// rather than bespoke correction tables — but the actual side effect
+// (updating the Attendance row / AssessmentResult row on approval) is
+// applied by dedicated decide functions in attendance/service.ts and
+// assessments/service.ts, not by the generic approvals module, to avoid a
+// circular dependency (approvals module would otherwise need to import
+// every phase that defines a correction type).
+//
+// "Approved leave auto-marks attendance as Leave" (spec's Attendance
+// workflow #2) is NOT implemented yet — it depends on a Leave Request
+// model that doesn't exist until Phase 6 (Operations). Attendance.status
+// can still be set to LEAVE manually; the auto-detection hook is deferred,
+// not silently dropped. Logged in docs/PROJECT_STATUS.md.
+// ─────────────────────────────────────────────────────────────────────────
+
+enum DayOfWeek {
+  MONDAY
+  TUESDAY
+  WEDNESDAY
+  THURSDAY
+  FRIDAY
+  SATURDAY
+  SUNDAY
+}
+
+enum TimetableStatus {
+  DRAFT
+  PUBLISHED
+}
+
+// One timetable per section per academic year. Entries are the actual
+// period-by-period schedule; the timetable itself is just the draft/publish
+// envelope (spec: "Publish timetable" as a distinct, audited action).
+model Timetable {
+  id             String          @id @default(uuid())
+  sectionId      String
+  academicYearId String
+  status         TimetableStatus @default(DRAFT)
+  publishedAt    DateTime?
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+
+  section      Section          @relation(fields: [sectionId], references: [id], onDelete: Cascade)
+  academicYear AcademicYear     @relation(fields: [academicYearId], references: [id])
+  entries      TimetableEntry[]
+
+  @@unique([sectionId, academicYearId])
+  @@map("timetables")
+}
+
+// periodNumber is a simple integer slot (Period 1, 2, 3...), not a real
+// clock time — schools vary too much on actual bell timings for this to be
+// worth modeling precisely; startTime/endTime are optional display-only
+// strings. Conflict detection (same teacher/class double-booked) is a
+// service-layer check across ALL of an academic year's timetables, not a DB
+// constraint, since it spans multiple Timetable rows.
+model TimetableEntry {
+  id           String    @id @default(uuid())
+  timetableId  String
+  dayOfWeek    DayOfWeek
+  periodNumber Int
+  subjectId    String
+  teacherId    String
+  startTime    String?
+  endTime      String?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  timetable     Timetable      @relation(fields: [timetableId], references: [id], onDelete: Cascade)
+  subject       Subject        @relation(fields: [subjectId], references: [id])
+  teacher       Teacher        @relation(fields: [teacherId], references: [id])
+  substitutions Substitution[]
+
+  // Same section can't have 2 subjects in the same day+period slot.
+  @@unique([timetableId, dayOfWeek, periodNumber])
+  @@map("timetable_entries")
+}
+
+enum AttendanceStatus {
+  PRESENT
+  ABSENT
+  LEAVE
+}
+
+// One row per student per calendar date, regardless of which section they
+// were enrolled in that day — a student only has one attendance status per
+// day. Corrections go through ApprovalRequest, never a direct overwrite of
+// an existing row (spec: "Corrections require approval").
+model Attendance {
+  id         String           @id @default(uuid())
+  studentId  String
+  sectionId  String
+  date       DateTime
+  status     AttendanceStatus
+  markedById String
+  createdAt  DateTime         @default(now())
+  updatedAt  DateTime         @updatedAt
+
+  student  Student @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  section  Section @relation(fields: [sectionId], references: [id])
+  markedBy User    @relation("AttendanceMarkedBy", fields: [markedById], references: [id])
+
+  @@unique([studentId, date])
+  @@index([sectionId, date])
+  @@map("attendance")
+}
+
+// Same shape as Attendance but for teachers — kept as a separate model
+// (not a polymorphic owner) since spec gives it its own permission set
+// (teacher_attendance.*) and its own screen. Correction here is a direct
+// permission-gated update (teacher_attendance.correct), not a full
+// approval workflow — spec only details an approval-workflow diagram for
+// STUDENT attendance corrections, not teacher attendance.
+model TeacherAttendance {
+  id         String           @id @default(uuid())
+  teacherId  String
+  date       DateTime
+  status     AttendanceStatus
+  markedById String
+  createdAt  DateTime         @default(now())
+  updatedAt  DateTime         @updatedAt
+
+  teacher  Teacher @relation(fields: [teacherId], references: [id], onDelete: Cascade)
+  markedBy User    @relation("TeacherAttendanceMarkedBy", fields: [markedById], references: [id])
+
+  @@unique([teacherId, date])
+  @@map("teacher_attendance")
+}
+
+// Covers one specific TimetableEntry (one class period) on one date —
+// "cancel" instead of delete, per the no-hard-delete policy.
+model Substitution {
+  id                  String    @id @default(uuid())
+  timetableEntryId    String
+  date                DateTime
+  originalTeacherId   String
+  substituteTeacherId String
+  reason              String?
+  createdById         String
+  cancelledAt         DateTime?
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+
+  timetableEntry    TimetableEntry @relation(fields: [timetableEntryId], references: [id], onDelete: Cascade)
+  originalTeacher   Teacher        @relation("SubstitutionOriginal", fields: [originalTeacherId], references: [id])
+  substituteTeacher Teacher        @relation("SubstitutionSubstitute", fields: [substituteTeacherId], references: [id])
+  createdBy         User           @relation(fields: [createdById], references: [id])
+
+  @@unique([timetableEntryId, date])
+  @@map("substitutions")
+}
+
+// Curriculum = the expected syllabus (one row per topic/chapter), scoped to
+// Subject+Class+AcademicYear (shared across a class's sections, since the
+// syllabus itself doesn't vary by section). CurriculumProgress = the actual
+// per-section teaching record against it (different sections/teachers move
+// at different paces).
+model Curriculum {
+  id                     String    @id @default(uuid())
+  subjectId              String
+  classId                String
+  academicYearId         String
+  topic                  String
+  sortOrder              Int       @default(0)
+  expectedCompletionDate DateTime?
+  archivedAt             DateTime?
+  createdAt              DateTime  @default(now())
+  updatedAt              DateTime  @updatedAt
+
+  subject      Subject              @relation(fields: [subjectId], references: [id])
+  klass        Class                @relation(fields: [classId], references: [id])
+  academicYear AcademicYear         @relation(fields: [academicYearId], references: [id])
+  progress     CurriculumProgress[]
+
+  @@map("curricula")
+}
+
+model CurriculumProgress {
+  id            String    @id @default(uuid())
+  curriculumId  String
+  sectionId     String
+  completedAt   DateTime?
+  completedById String?
+  notes         String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  curriculum  Curriculum @relation(fields: [curriculumId], references: [id], onDelete: Cascade)
+  section     Section    @relation(fields: [sectionId], references: [id])
+  completedBy User?      @relation(fields: [completedById], references: [id])
+
+  @@unique([curriculumId, sectionId])
+  @@map("curriculum_progress")
+}
+
+enum HomeworkStatus {
+  DRAFT
+  PUBLISHED
+}
+
+model Homework {
+  id          String         @id @default(uuid())
+  subjectId   String
+  sectionId   String
+  classId     String
+  teacherId   String
+  title       String
+  description String?
+  dueDate     DateTime
+  documentId  String?        @unique
+  status      HomeworkStatus @default(DRAFT)
+  publishedAt DateTime?
+  archivedAt  DateTime?
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+
+  subject  Subject   @relation(fields: [subjectId], references: [id])
+  section  Section   @relation(fields: [sectionId], references: [id])
+  klass    Class     @relation(fields: [classId], references: [id])
+  teacher  Teacher   @relation(fields: [teacherId], references: [id])
+  document Document? @relation(fields: [documentId], references: [id])
+
+  @@map("homework")
+}
+
+enum AssessmentStatus {
+  DRAFT
+  SUBMITTED
+}
+
+// DRAFT → SUBMITTED is a one-way lock (spec: "After submission, editing
+// requires approval"). Editing an AssessmentResult while SUBMITTED must go
+// through ApprovalRequest (type "ASSESSMENT_MARKS_CORRECTION"), enforced in
+// assessments/service.ts, never a bare Prisma update.
+model Assessment {
+  id             String           @id @default(uuid())
+  subjectId      String
+  sectionId      String
+  classId        String
+  academicYearId String
+  teacherId      String
+  title          String
+  totalMarks     Int
+  assessmentDate DateTime
+  status         AssessmentStatus @default(DRAFT)
+  submittedAt    DateTime?
+  archivedAt     DateTime?
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+
+  subject      Subject            @relation(fields: [subjectId], references: [id])
+  section      Section            @relation(fields: [sectionId], references: [id])
+  klass        Class              @relation(fields: [classId], references: [id])
+  academicYear AcademicYear       @relation(fields: [academicYearId], references: [id])
+  teacher      Teacher            @relation(fields: [teacherId], references: [id])
+  results      AssessmentResult[]
+
+  @@map("assessments")
+}
+
+model AssessmentResult {
+  id            String   @id @default(uuid())
+  assessmentId  String
+  studentId     String
+  marksObtained Float
+  remarks       String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  assessment Assessment @relation(fields: [assessmentId], references: [id], onDelete: Cascade)
+  student    Student    @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  @@unique([assessmentId, studentId])
+  @@map("assessment_results")
 }

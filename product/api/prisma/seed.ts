@@ -96,7 +96,46 @@ const PHASE_2_PERMISSIONS = [
   ["teacher_assignment.edit", "Edit teacher assignments"],
 ] as const;
 
-const ALL_PERMISSIONS = [...PHASE_0_PERMISSIONS, ...PHASE_1_PERMISSIONS, ...PHASE_2_PERMISSIONS];
+// Phase 3: Timetable, Attendance, Substitution, Curriculum, Homework,
+// Assessments. `*.correct` permissions gate DECIDING a correction request
+// (Incharge/Principal), separate from the `.mark`/`.enter_marks` permission
+// that gates REQUESTING one (Teacher) — see attendance/service.ts and
+// assessments/service.ts.
+const PHASE_3_PERMISSIONS = [
+  ["timetable.view", "View timetables"],
+  ["timetable.create", "Create/edit timetable entries"],
+  ["timetable.edit", "Edit timetable entries"],
+  ["timetable.publish", "Publish a timetable"],
+  ["attendance.view", "View student attendance"],
+  ["attendance.mark", "Mark student attendance"],
+  ["attendance.correct", "Decide student attendance correction requests"],
+  ["teacher_attendance.view", "View teacher attendance"],
+  ["teacher_attendance.mark", "Mark teacher attendance"],
+  ["teacher_attendance.correct", "Correct teacher attendance"],
+  ["substitution.view", "View substitutions"],
+  ["substitution.create", "Assign a substitute teacher"],
+  ["substitution.cancel", "Cancel a substitution"],
+  ["curriculum.view", "View curriculum/syllabus"],
+  ["curriculum.create", "Create curriculum topics"],
+  ["curriculum.edit", "Edit curriculum topics / mark progress"],
+  ["homework.view", "View homework"],
+  ["homework.create", "Create homework"],
+  ["homework.edit", "Edit homework"],
+  ["homework.publish", "Publish homework"],
+  ["assessment.view", "View assessments/tests"],
+  ["assessment.create", "Create assessments/tests"],
+  ["assessment.edit", "Edit assessments/tests"],
+  ["assessment.enter_marks", "Enter/request-correction of assessment marks"],
+  ["assessment.submit", "Submit (lock) an assessment's marks"],
+  ["assessment.correct", "Decide assessment marks correction requests"],
+] as const;
+
+const ALL_PERMISSIONS = [
+  ...PHASE_0_PERMISSIONS,
+  ...PHASE_1_PERMISSIONS,
+  ...PHASE_2_PERMISSIONS,
+  ...PHASE_3_PERMISSIONS,
+];
 
 async function main(): Promise<void> {
   for (const roleName of CORE_ROLES) {

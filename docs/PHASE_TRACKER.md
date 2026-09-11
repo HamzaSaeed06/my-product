@@ -12,7 +12,7 @@ phase's state changes — this table is what a new agent scans first.
 | 0 | Foundation | Authorization, Audit, Approval workflow, Notifications, File storage — the substrate every other phase needs | — | 1-2 wk | 🟡 |
 | 1 | Core Authorization & Super Admin | Institute config, Campuses, Academic Years, Classes/Sections, Users, dynamic Incharge scopes | 0 | 2-3 wk | 🟡 |
 | 2 | Academic Structure | Students, Parents, Teachers, Subjects, Admission → Enrollment workflow | 1 | 3-4 wk | 🟡 |
-| 3 | Academic Operations | Timetable, Attendance (student+teacher), Substitution, Curriculum, Homework, Assessments | 2 | 4-5 wk | 🔴 |
+| 3 | Academic Operations | Timetable, Attendance (student+teacher), Substitution, Curriculum, Homework, Assessments | 2 | 4-5 wk | 🟡 |
 | 4 | Results & Promotion | Exams, Result workflow (Draft→Submitted→Reviewed→Finalized→Published), Report cards, Promotion/Class jump | 3 | 3-4 wk | 🔴 |
 | 5 | Finance Module | Fee structures, Invoicing, Payments (cash+gateway), Receipts, Refunds, Reconciliation, Cash closing | 2 | 4-5 wk | 🔴 |
 | 6 | Operations | Leave management, Complaints | 0, 2, 3 | 2-3 wk | 🔴 |
@@ -32,16 +32,21 @@ integration tests; 6 screens under the dashboard sidebar). **Phase 2 —
 backend and frontend both built**: Students (list/search/detail/enroll/
 transfer/withdraw/documents), Parents (+ child linking), Teachers, Subjects,
 Admissions (+ approve/reject/withdraw), Teacher Assignments — 116
-integration tests total, 18 pages across both phases. Server-rendered data
-verified live on every page; the interactive dialogs across BOTH Phase 1
-and Phase 2 are built on the same proven cookie/CSRF pattern as login/logout
-but have not been individually click-tested in a real browser (a genuine
-attempt to reproduce the JS-invoked Server Action protocol via curl hit real
+integration tests total, 18 pages across both phases. **Phase 3 — backend
+built and passing**: Timetable (+conflict detection), Attendance
+(+correction workflow), Teacher Attendance, Substitution, Curriculum/
+Progress, Homework, Assessments (+marks lock/correction) — 168 integration
+tests total (52 new), all confirmed passing in a real, watched test run
+(not assumed). No Phase 3 frontend yet. Server-rendered data verified live
+on every Phase 1/2 page; the interactive dialogs across Phase 1 and Phase 2
+are built on the same proven cookie/CSRF pattern as login/logout but have
+not been individually click-tested in a real browser (a genuine attempt to
+reproduce the JS-invoked Server Action protocol via curl hit real
 complexity — React Flight's multipart argument encoding, not just field
 names — documented as a known gap rather than pursued further). Incharge
-scope checks (`checkInchargeScope`) still have no route consumer —
-correctly so, nothing exists for an Incharge to act on until Phase 3. See
-`PROJECT_STATUS.md` §1c/§1d/§1e/§1f for full detail.
+scope checks (`checkInchargeScope`) still have no route consumer — Phase 3's
+routes are gated by plain permission checks only. See `PROJECT_STATUS.md`
+§1c/§1d/§1e/§1f/§1g for full detail.
 
 ## Notes on dependency ordering
 

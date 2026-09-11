@@ -2,12 +2,13 @@
 
 **Last updated:** 2026-09-11
 **Current phase:** Phase 0 complete. Phase 1 backend+frontend complete
-(interactive dialogs unverified in-browser — see §1d). **Phase 2 backend
-and frontend both complete**: Students (list/search/detail/enroll/transfer/
-withdraw/documents), Parents (+ child linking), Teachers, Subjects,
-Admissions (+ approve/reject/withdraw), Teacher Assignments — 116 passing
-integration tests, 18 total pages, typecheck+build clean. Interactive
-dialogs unverified in-browser, same caveat as Phase 1. See §1e/§1f.
+(interactive dialogs unverified in-browser — see §1d). Phase 2 backend and
+frontend both complete (116 passing integration tests, 18 pages — see
+§1e/§1f). **Phase 3 backend now built and passing**: Timetable (+conflict
+detection), Attendance (+correction workflow), Teacher Attendance,
+Substitution, Curriculum/Progress, Homework, Assessments (+marks lock and
+correction workflow) — 168 integration tests total (52 new), all passing
+against the real database. No Phase 3 frontend yet. See §1g.
 **Repo state:** Monorepo scaffolded. `product/api` has a working Express +
 TypeScript + Prisma backend implementing all of Phase 0's API surface (auth,
 users, roles/permissions, approvals, documents, notifications, audit).
@@ -485,6 +486,85 @@ reasonable, but **this is inference, not verification.** Click through
 every dialog across both Phase 1 and Phase 2 in an actual browser before
 treating either phase as fully done in a visual/interaction sense.
 
+### 1g. Phase 3 backend (`product/api`) — VERIFIED WORKING
+
+Academic Operations per PRODUCT_SPEC.md's "PHASE 3" section — Timetable,
+TimetableEntry, Attendance, TeacherAttendance, Substitution, Curriculum,
+CurriculumProgress, Homework, Assessment, AssessmentResult. 52 new
+integration tests (168 total with Phase 0/1/2's 116), all passing against
+the real database.
+
+- **Schema**: `Timetable` (one per section+academic year, DRAFT/PUBLISHED
+  envelope) + `TimetableEntry` (day-of-week + integer period number, not a
+  real clock time — schools vary too much on bell timings for that to be
+  worth modeling). `Attendance`/`TeacherAttendance` (one row per student or
+  teacher per calendar date). `Substitution` (covers one specific
+  TimetableEntry on one date). `Curriculum` (expected syllabus, scoped to
+  Subject+Class+AcademicYear) + `CurriculumProgress` (actual per-section
+  completion record). `Homework` and `Assessment`+`AssessmentResult`
+  (DRAFT/PUBLISHED and DRAFT/SUBMITTED lock states respectively).
+- **Attendance/Assessment corrections reuse Phase 0's `ApprovalRequest`
+  engine** (types `ATTENDANCE_CORRECTION` / `ASSESSMENT_MARKS_CORRECTION`)
+  rather than bespoke correction tables. The actual side effect (updating
+  the Attendance/AssessmentResult row on approval) is applied by dedicated
+  `decide*Correction` functions in each module's own service, not by the
+  generic approvals module — avoids a circular dependency the generic
+  engine would otherwise need (importing every phase that defines a
+  correction type).
+- **Business rules actually enforced, not just documented**:
+  - Timetable: same teacher can't be double-booked at the same day/period
+    across the *whole academic year* (service-layer check spanning
+    multiple Timetable rows — `TEACHER_CONFLICT`); same section can't have
+    two subjects in one slot (DB unique constraint — `SECTION_SLOT_CONFLICT`).
+  - Attendance: a teacher can only mark attendance for a section they're
+    actually assigned to (checked via `TeacherAssignment`, skipped for
+    non-teacher actors like Office/Principal); already-marked days require
+    a correction request, never a silent overwrite.
+  - Substitution: the original teacher must actually be marked ABSENT for
+    that date first; the substitute must be free at that exact day/period
+    (checked against both other `TimetableEntry` rows AND other active
+    `Substitution` rows, so a substitute can't be double-booked either way).
+  - Assessment: marks can be entered/edited freely while DRAFT; once
+    SUBMITTED, marks are locked and any change must go through the
+    correction-approval workflow (`ASSESSMENT_LOCKED` on a direct attempt).
+- **DEVIATION from spec**: "approved leave auto-marks attendance as Leave"
+  (spec's Attendance workflow #2) is **not implemented** — it depends on a
+  Leave Request model that doesn't exist until Phase 6 (Operations).
+  `Attendance.status` can still be set to `LEAVE` manually; the
+  auto-detection hook is deferred, not silently dropped.
+- **DEVIATION from spec**: `TimetableEntry` removal is a genuine hard
+  delete, not archive — an explicit, narrow exception to the no-hard-delete
+  policy. A schedule slot is configuration, not a financial/academic/
+  identity record with its own history; the audit log permanently retains
+  the old value on removal, so traceability isn't lost.
+- **Verified for real**: all 168 integration tests pass, covering (per
+  module) — Timetable: get-or-create-idempotent/add-entry/section-slot-
+  conflict-refused/teacher-conflict-refused/update-entry/publish/
+  publish-twice-refused/remove-entry. Attendance: student-not-enrolled-
+  refused/teacher-not-assigned-refused (direct service check)/mark/
+  already-marked-refused/list/no-change-correction-refused/request-
+  correction/approve-correction-updates-row/re-decide-refused. Teacher
+  Attendance: mark/duplicate-refused/list/correct. Substitutions:
+  original-not-absent-refused/substitute-not-free-refused/assign/
+  duplicate-refused/list/cancel/re-cancel-refused. Curriculum: create/
+  list/section-class-mismatch-refused/mark-progress/un-mark-progress/
+  update/archive. Homework: create-with-attachment/list/update/publish/
+  publish-twice-refused/archive. Assessments: create/marks-out-of-range-
+  refused/student-not-enrolled-refused/enter-marks/re-enter-overwrites/
+  submit-locks/edit-after-lock-refused/request-correction/approve-
+  correction-updates-locked-row/re-decide-refused/archive. Verified this
+  full 168-test run end-to-end in real time (not assumed from a stale log)
+  after an earlier confusing silent-output run turned out to be verbose
+  Prisma query logging plus real network latency, not a hang.
+- **Not done**: no `product/web` screens for any of Phase 3 yet (Timetable
+  Builder, Attendance marking, Substitution, Curriculum Tracker, Homework,
+  Assessment/marks entry — all unbuilt, per PRODUCT_SPEC.md's Phase 3
+  "Screens" list). `checkInchargeScope` (Phase 1) still has no route
+  consumer — Phase 3's routes are gated by plain permission checks, not
+  Incharge scope, since the spec's Phase 3 acceptance criteria only says
+  "All authorization scoped correctly" without mandating Incharge-scope
+  gating specifically on these routes; revisit if a future phase needs it.
+
 ### How this was verified (not just "should work")
 
 In this session, with dependencies actually installed against a real npm
@@ -554,17 +634,19 @@ docs/
 ## 3. Immediate next action
 
 Phase 0: fully done. Phase 1: backend + frontend built (§1c/§1d). Phase 2:
-backend + frontend built (§1e/§1f). Both phases' interactive dialogs are
-still unverified in a real browser. What's left, in order:
+backend + frontend built (§1e/§1f). Phase 3: **backend built and passing
+168 tests (§1g), no frontend yet.** What's left, in order:
 
-1. **Click through Phase 1 and Phase 2's screens in a real browser** —
-   every "+ Add", "Edit", "Archive", "Approve/Reject", "Transfer",
-   "Withdraw", and document-upload control. This is the one open item
-   standing between "built" and "actually done" for both phases.
-2. **Then Phase 3** (Timetable, Attendance, Curriculum, Homework,
-   Assessments) — this is also where `checkInchargeScope` finally gets a
-   real route to gate.
-3. **Minor cleanup, low priority**: wire real email delivery when a
+1. **Build Phase 3's frontend** (Timetable Builder, Attendance marking +
+   correction request, Substitution, Curriculum Tracker, Homework,
+   Assessment/marks entry) — matches the "finish a phase fully before the
+   next" approach used for Phase 1 and Phase 2.
+2. **Click through Phase 1, 2, and 3's screens in a real browser** — every
+   "+ Add", "Edit", "Archive", "Approve/Reject", "Transfer", "Withdraw",
+   "Publish", "Submit", and document-upload control. This is the one open
+   item standing between "built" and "actually done" for all three phases.
+3. **Then Phase 4** (Exams, Result workflow, Report cards, Promotion).
+4. **Minor cleanup, low priority**: wire real email delivery when a
    provider is chosen; consider a session-refresh-on-expiry flow for
    `product/web` once 20-minute re-logins become annoying; rename the
    placeholder "Demo Institute" to something real before any actual use.
@@ -621,6 +703,44 @@ still unverified in a real browser. What's left, in order:
 Append a dated entry every session. Keep entries short — what changed, what's
 left, anything the next session needs to know that isn't obvious from the
 code/docs themselves.
+
+### 2026-09-11 (l) — Phase 3 backend built: Academic Operations
+
+- User confirmed to continue with own judgment, with a standing instruction
+  to test thoroughly and not declare anything done until verified — kept to
+  that literally: did not report Phase 3 as done until an actual full test
+  run's pass/fail summary was read, not assumed.
+- Added Phase 3's schema (10 models — see §1g), Phase 3 permissions to the
+  seed script, and ran the migration + seed against the live database.
+- Built and wired 7 new API modules: timetable, attendance,
+  teacher-attendance, substitutions, curriculum, homework, assessments.
+- Implemented the real business rules, not just the CRUD shell: timetable
+  teacher/section conflict detection, attendance correction via the
+  existing Phase 0 ApprovalRequest engine (with the actual row-update
+  effect applied by dedicated decide functions to avoid a circular import),
+  substitution's absence + free-teacher checks, assessment marks locking
+  after submit with its own correction workflow.
+- Wrote 52 new integration tests (168 total). Hit a real diagnostic
+  detour: a full-suite background run appeared to hang with zero output
+  for many minutes. Investigated properly instead of assuming failure —
+  ran one new test file directly (not backgrounded) and watched it
+  complete in ~60s with heavy verbose Prisma query-log output, which
+  explained the "silence": output was being piped/buffered, not stuck.
+  Re-ran the full suite with output redirected straight to a log file and
+  a proper poll-until-summary background watcher — confirmed for real:
+  **25 test files, 168 tests, all passing**, ~715s (real network round
+  trips to Neon plus verbose query logging, not a bug).
+- **Deviations logged**: "approved leave auto-marks attendance" deferred to
+  Phase 6 (no Leave model yet); `TimetableEntry` removal is a genuine hard
+  delete (schedule config, not a financial/academic/identity record) —
+  both documented in schema.prisma and §1g.
+- **Not done**: no `product/web` screens for Phase 3 yet. Phase 1 and
+  Phase 2's interactive dialogs are still not click-tested in a browser
+  (carried over).
+- **Next session should**: build Phase 3's frontend (Timetable Builder,
+  Attendance, Substitution, Curriculum Tracker, Homework, Assessments) to
+  bring Phase 3 to the same complete state as Phase 1/2, then move to
+  Phase 4.
 
 ### 2026-09-11 (k) — Phase 2 frontend built: Students, Parents, Teachers, Subjects, Admissions, Teacher Assignments
 

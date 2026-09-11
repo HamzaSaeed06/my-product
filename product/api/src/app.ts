@@ -23,6 +23,13 @@ import { subjectsRouter } from "./modules/subjects/routes.js";
 import { admissionsRouter } from "./modules/admissions/routes.js";
 import { enrollmentsRouter } from "./modules/enrollments/routes.js";
 import { teacherAssignmentsRouter } from "./modules/teacher-assignments/routes.js";
+import { timetableRouter } from "./modules/timetable/routes.js";
+import { attendanceRouter } from "./modules/attendance/routes.js";
+import { teacherAttendanceRouter } from "./modules/teacher-attendance/routes.js";
+import { substitutionsRouter } from "./modules/substitutions/routes.js";
+import { curriculumRouter } from "./modules/curriculum/routes.js";
+import { homeworkRouter } from "./modules/homework/routes.js";
+import { assessmentsRouter } from "./modules/assessments/routes.js";
 import { errorHandler, notFoundHandler } from "./middleware/errorHandler.js";
 import { readRateLimiter } from "./middleware/rateLimiter.js";
 
@@ -65,6 +72,13 @@ export function createApp(): Express {
   app.use("/api/v1/admissions", admissionsRouter);
   app.use("/api/v1/enrollments", enrollmentsRouter);
   app.use("/api/v1/teacher-assignments", teacherAssignmentsRouter);
+  app.use("/api/v1/timetables", timetableRouter);
+  app.use("/api/v1/attendance", attendanceRouter);
+  app.use("/api/v1/teacher-attendance", teacherAttendanceRouter);
+  app.use("/api/v1/substitutions", substitutionsRouter);
+  app.use("/api/v1/curriculum", curriculumRouter);
+  app.use("/api/v1/homework", homeworkRouter);
+  app.use("/api/v1/assessments", assessmentsRouter);
 
   app.use(notFoundHandler);
   app.use(errorHandler);
