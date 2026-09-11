@@ -33,20 +33,20 @@ backend and frontend both built**: Students (list/search/detail/enroll/
 transfer/withdraw/documents), Parents (+ child linking), Teachers, Subjects,
 Admissions (+ approve/reject/withdraw), Teacher Assignments — 116
 integration tests total, 18 pages across both phases. **Phase 3 — backend
-built and passing**: Timetable (+conflict detection), Attendance
+and frontend both built**: Timetable (+conflict detection), Attendance
 (+correction workflow), Teacher Attendance, Substitution, Curriculum/
 Progress, Homework, Assessments (+marks lock/correction) — 168 integration
-tests total (52 new), all confirmed passing in a real, watched test run
-(not assumed). No Phase 3 frontend yet. Server-rendered data verified live
-on every Phase 1/2 page; the interactive dialogs across Phase 1 and Phase 2
-are built on the same proven cookie/CSRF pattern as login/logout but have
-not been individually click-tested in a real browser (a genuine attempt to
-reproduce the JS-invoked Server Action protocol via curl hit real
-complexity — React Flight's multipart argument encoding, not just field
-names — documented as a known gap rather than pursued further). Incharge
-scope checks (`checkInchargeScope`) still have no route consumer — Phase 3's
-routes are gated by plain permission checks only. See `PROJECT_STATUS.md`
-§1c/§1d/§1e/§1f/§1g for full detail.
+tests total (52 new, all confirmed passing in a real watched test run, not
+assumed), 25 pages total, all smoke-tested authenticated-200. Server-
+rendered data verified live on every page; the interactive dialogs across
+Phase 1, 2, and 3 are built on the same proven cookie/CSRF pattern as
+login/logout but have not been individually click-tested in a real browser
+(a genuine attempt to reproduce the JS-invoked Server Action protocol via
+curl hit real complexity — React Flight's multipart argument encoding, not
+just field names — documented as a known gap rather than pursued further).
+Incharge scope checks (`checkInchargeScope`) still have no route consumer —
+Phase 3's routes are gated by plain permission checks only. See
+`PROJECT_STATUS.md` §1c/§1d/§1e/§1f/§1g/§1h for full detail.
 
 ## Notes on dependency ordering
 

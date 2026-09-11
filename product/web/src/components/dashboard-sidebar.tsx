@@ -31,6 +31,18 @@ const NAV_GROUPS = [
       { href: "/dashboard/subjects", label: "Subjects" },
     ],
   },
+  {
+    label: "Academic Operations",
+    items: [
+      { href: "/dashboard/timetable", label: "Timetable" },
+      { href: "/dashboard/attendance", label: "Attendance" },
+      { href: "/dashboard/teacher-attendance", label: "Teacher Attendance" },
+      { href: "/dashboard/substitutions", label: "Substitutions" },
+      { href: "/dashboard/curriculum", label: "Curriculum" },
+      { href: "/dashboard/homework", label: "Homework" },
+      { href: "/dashboard/assessments", label: "Assessments" },
+    ],
+  },
 ] as const;
 
 export function DashboardSidebar() {

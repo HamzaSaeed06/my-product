@@ -4,11 +4,13 @@
 **Current phase:** Phase 0 complete. Phase 1 backend+frontend complete
 (interactive dialogs unverified in-browser — see §1d). Phase 2 backend and
 frontend both complete (116 passing integration tests, 18 pages — see
-§1e/§1f). **Phase 3 backend now built and passing**: Timetable (+conflict
-detection), Attendance (+correction workflow), Teacher Attendance,
-Substitution, Curriculum/Progress, Homework, Assessments (+marks lock and
-correction workflow) — 168 integration tests total (52 new), all passing
-against the real database. No Phase 3 frontend yet. See §1g.
+§1e/§1f). **Phase 3 backend and frontend both complete**: Timetable
+(+conflict detection), Attendance (+correction workflow), Teacher
+Attendance, Substitution, Curriculum/Progress, Homework, Assessments
+(+marks lock and correction workflow) — 168 integration tests (52 new, all
+confirmed passing in a real watched run), 25 pages total, typecheck+build
+clean, all 7 new pages smoke-tested authenticated-200. Interactive dialogs
+unverified in-browser, same caveat as Phase 1/2. See §1g/§1h.
 **Repo state:** Monorepo scaffolded. `product/api` has a working Express +
 TypeScript + Prisma backend implementing all of Phase 0's API surface (auth,
 users, roles/permissions, approvals, documents, notifications, audit).
@@ -565,6 +567,71 @@ the real database.
   "All authorization scoped correctly" without mandating Incharge-scope
   gating specifically on these routes; revisit if a future phase needs it.
 
+### 1h. Phase 3 frontend (`product/web`) — screens built, server-rendering verified
+
+Seven new screens/flows added under a new "Academic Operations" sidebar
+group: Timetable (grid builder with conflict-aware add/remove/publish),
+Attendance (mark-or-correct per section/date + a pending-corrections
+inbox), Teacher Attendance (mark/correct per teacher/date), Substitutions
+(dynamic section→timetable-entry picker, assign/cancel), Curriculum
+(class+year scoped topics with a per-section progress toggle), Homework
+(file-attached, draft/publish/archive), Assessments (list + a detail page
+with per-student marks entry, submit-to-lock, and a correction-request/
+decide flow).
+
+**New patterns worth knowing about** (beyond the shared `FormDialog`/
+`ConfirmActionButton`/`SectionPicker` reused from Phase 1/2):
+- **URL-driven filter selects** (Timetable's section picker, Attendance's
+  section+date, Curriculum's class+year, Teacher Attendance's date) —
+  plain client `<Select>`/`<Input type="date">` components that
+  `router.push()` a new `?query=` on change, mirroring the Students search
+  box pattern rather than introducing local component state that could
+  drift from the URL.
+- **A dynamic, fetch-on-change dialog** (`substitutions/assign-dialog.tsx`):
+  picking a section calls a new Server Action (`getEntriesForSection`) via
+  `startTransition` to populate a second, dependent dropdown (that
+  section's timetable entries) — the first case in this app of one dialog
+  field's options depending on another field's live selection rather than
+  being fully known at page-render time.
+- **A second hand-rolled (non-`FormDialog`) upload dialog**
+  (`homework/create-dialog.tsx`), for the same reason as the student
+  document upload dialog: a real file input plus `apiUpload` (multipart)
+  instead of `apiRequest` (JSON), combined here with several other
+  regular fields in the same form.
+- **Base UI's `Select` `onValueChange` is typed `(value: string | null, ...)
+  => void`**, not `(value: string) => void` — every handler needs an
+  explicit null-guard (`value && ...` or `value ?? fallback`). Caught by
+  `tsc`, not silently wrong; six call sites fixed across Attendance,
+  Curriculum, Substitutions, and Teacher Attendance.
+- Both "pending corrections" inboxes (Attendance and Assessments) reuse the
+  same generic `GET /approvals?status=PENDING` Phase 0 endpoint, filtering
+  client-side by `type` — no new backend endpoint needed for this.
+
+**Verified for real**: `npm run typecheck` and `npm run build` both pass
+(25 routes total, up from 18). Logged in via the established no-JS-form-
+fallback curl technique and hit all 7 new pages — **all return 200 with
+correct empty states** ("No sections yet", "No teachers yet", "No
+substitutions yet", "Create a class and an academic year first", etc. —
+accurate given the database is currently empty of Phase 1-3 data after
+integration test cleanup). This session's login reproduction hit a new,
+previously-unencountered wrinkle worth recording: the no-JS form fallback
+requires an `$ACTION_REF_<n>` field to be present in the multipart body
+(even with an empty value) — Next.js's `areAllActionIdsValid` check keys
+off that field's *name* to locate the paired `$ACTION_<n>:0` descriptor
+field; omitting it (as an earlier attempt did) fails closed with "Failed to
+find Server Action," not a helpful "missing field" error. Confirmed by
+reading Next's own `action-handler.js` source rather than guessing.
+
+**Not verified**: the interactive dialogs and controls — timetable add/
+remove/publish, attendance marking/correction, substitution assign/cancel,
+curriculum progress toggle, homework upload/publish/archive, assessment
+marks entry/submit/correction — have not been individually click-tested in
+a real browser, same standing caveat as Phase 1/2. The complex ones
+(Timetable's grid, Substitution's dependent dropdown, Assessment's marks
+table) are the highest-value candidates to click through first, since they
+have the most client-side state/interaction logic that a server-rendered
+smoke test can't exercise.
+
 ### How this was verified (not just "should work")
 
 In this session, with dependencies actually installed against a real npm
@@ -634,19 +701,18 @@ docs/
 ## 3. Immediate next action
 
 Phase 0: fully done. Phase 1: backend + frontend built (§1c/§1d). Phase 2:
-backend + frontend built (§1e/§1f). Phase 3: **backend built and passing
-168 tests (§1g), no frontend yet.** What's left, in order:
+backend + frontend built (§1e/§1f). Phase 3: **backend + frontend both
+built** (§1g/§1h) — 168 tests passing, 25 pages, all smoke-tested. What's
+left, in order:
 
-1. **Build Phase 3's frontend** (Timetable Builder, Attendance marking +
-   correction request, Substitution, Curriculum Tracker, Homework,
-   Assessment/marks entry) — matches the "finish a phase fully before the
-   next" approach used for Phase 1 and Phase 2.
-2. **Click through Phase 1, 2, and 3's screens in a real browser** — every
+1. **Click through Phase 1, 2, and 3's screens in a real browser** — every
    "+ Add", "Edit", "Archive", "Approve/Reject", "Transfer", "Withdraw",
    "Publish", "Submit", and document-upload control. This is the one open
    item standing between "built" and "actually done" for all three phases.
-3. **Then Phase 4** (Exams, Result workflow, Report cards, Promotion).
-4. **Minor cleanup, low priority**: wire real email delivery when a
+   Phase 3's Timetable grid, Substitution's dependent dropdown, and
+   Assessment's marks table are the highest-value ones to check first.
+2. **Then Phase 4** (Exams, Result workflow, Report cards, Promotion).
+3. **Minor cleanup, low priority**: wire real email delivery when a
    provider is chosen; consider a session-refresh-on-expiry flow for
    `product/web` once 20-minute re-logins become annoying; rename the
    placeholder "Demo Institute" to something real before any actual use.
@@ -703,6 +769,48 @@ backend + frontend built (§1e/§1f). Phase 3: **backend built and passing
 Append a dated entry every session. Keep entries short — what changed, what's
 left, anything the next session needs to know that isn't obvious from the
 code/docs themselves.
+
+### 2026-09-11 (m) — Phase 3 frontend built: Timetable, Attendance, Substitutions, Curriculum, Homework, Assessments
+
+- Continued directly from entry (l) once the backend's 168-test pass was
+  confirmed for real — user's standing instruction was "test thoroughly,
+  tell me before starting the next thing, don't call it done until you're
+  sure," followed literally throughout this session.
+- Added a new "Academic Operations" sidebar group and built all 7
+  screens/flows: Timetable (day×period grid, add/remove/publish, teacher/
+  section conflict errors surfaced from the backend), Attendance (mark or
+  view+correct per section/date, plus a pending-corrections inbox),
+  Teacher Attendance (mark/correct per teacher/date), Substitutions
+  (a dialog where picking a section dynamically fetches that section's
+  timetable entries via a new Server Action before the period dropdown
+  populates — the first dependent-dropdown dialog in this app), Curriculum
+  (class+year scoped topic list with a per-section progress toggle),
+  Homework (hand-rolled upload dialog, mirroring the student-document
+  pattern, for the optional file attachment), Assessments (list + detail
+  page with per-student marks entry, submit-to-lock, and its own
+  correction-request/decide flow).
+- Fixed a real, tsc-caught type mismatch across four files: Base UI's
+  `Select` `onValueChange` is `(value: string | null, ...) => void`, not
+  `(value: string) => void` as every other Select usage in this app had
+  assumed until now — added explicit null-guards at each of the 6 call
+  sites this affected.
+- **Verified for real**: `npm run typecheck` and `npm run build` both pass
+  (25 routes, up from 18). Logged in via the established curl no-JS-form
+  technique and confirmed all 7 new pages return 200 with correct,
+  accurate empty states.
+- **Diagnostic note for future sessions**: hit a new wrinkle in the curl
+  login reproduction — omitting the empty `$ACTION_REF_1` hidden field
+  makes Next.js's `areAllActionIdsValid` check fail closed with "Failed to
+  find Server Action," even though the actual action ID/bound-args fields
+  were both correct. That field's presence (not its value) is what the
+  check keys off. Confirmed by reading Next's `action-handler.js` source.
+  Documented in §1h so this doesn't need re-discovering.
+- **Not done**: interactive dialogs across Phase 1, 2, and 3 still not
+  click-tested in a real browser — the single largest remaining open item
+  across the whole product so far. See §3.
+- **Next session should**: click through all three phases' dialogs in a
+  real browser (§3 item 1), then start Phase 4 (Exams, Result workflow,
+  Report cards, Promotion).
 
 ### 2026-09-11 (l) — Phase 3 backend built: Academic Operations
 
