@@ -15,7 +15,8 @@
     "prisma:migrate": "prisma migrate dev",
     "prisma:studio": "prisma studio",
     "prisma:seed": "tsx prisma/seed.ts",
-    "create-super-admin": "tsx scripts/create-super-admin.ts"
+    "create-super-admin": "tsx scripts/create-super-admin.ts",
+    "create-institute": "tsx scripts/create-institute.ts"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"

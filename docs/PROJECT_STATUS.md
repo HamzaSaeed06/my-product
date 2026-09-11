@@ -1,10 +1,10 @@
 # Project Status
 
-**Last updated:** 2026-09-10
-**Current phase:** Phase 0 — Foundation, essentially complete. Backend built,
-live-verified, and covered by an automated integration suite. `product/web`
-now exists with a working login page and a protected dashboard shell, both
-verified end-to-end against the real backend. See §1.
+**Last updated:** 2026-09-11
+**Current phase:** Phase 0 essentially complete (backend + login/dashboard
+frontend, verified). **Phase 1 backend now built and integration-tested**:
+Institute, Campuses, Academic Years, Classes, Sections, dynamic Incharge
+scopes. No Phase 1 frontend screens exist yet. See §1/§1c.
 **Repo state:** Monorepo scaffolded. `product/api` has a working Express +
 TypeScript + Prisma backend implementing all of Phase 0's API surface (auth,
 users, roles/permissions, approvals, documents, notifications, audit).
@@ -243,6 +243,72 @@ Also worked around a separate, real memory issue where `next build`'s
 gate. **A green `npm run build` alone does not prove types are correct** —
 always run `npm run typecheck` too.
 
+### 1c. Phase 1 backend (`product/api`) — VERIFIED WORKING
+
+Institute Structure per PRODUCT_SPEC.md's "PHASE 1" section. All of it is
+built, integration-tested against the real database (38 new tests, on top
+of Phase 0's 30 — 68 total, all passing), and live-smoke-tested.
+
+- **Schema**: `Institute` (singleton — service layer refuses a second row,
+  no DB constraint for it), `InstituteSettings` (kept separate per spec's
+  explicit rule), `Campus`, `AcademicYear` (institute-scoped, deliberately
+  allowed to overlap), `Class` (institute-wide catalog, configurable
+  names/order), `Section` (the actual campus+year-specific instance
+  students will enroll into in Phase 2 — has `classTeacherId`, a real FK,
+  distinct from the TEACHER role itself), `InchargeScope` +
+  `InchargeScopeClass` + `InchargeScopeSection` (normalized junction
+  tables, `version` field for optimistic concurrency, exactly as the spec's
+  Authorization Architecture section specifies).
+- **Completed a Phase 0 deviation**: `UserRole.campusId` was a bare
+  nullable string in Phase 0 (Campus didn't exist yet, deviation logged at
+  the time). Now a real FK to `Campus`, as promised.
+- **APIs**: `/institute` (+`/institute/settings`), `/campuses`,
+  `/academic-years`, `/classes`, `/sections`, `/incharge-scopes`. Same
+  pattern as every Phase 0 module: authenticate → authorize(permission) →
+  csrf → rate-limit → zod validation → service → writeAuditLog.
+- **Business rules actually enforced, not just documented**: closed
+  academic years are read-only (edits refused); campus/class archive is
+  refused while active (non-archived) sections exist under them — the
+  closest available proxy for spec's "cannot delete campus with active
+  students/staff" until Phase 2's Student/Staff models exist; sections
+  can't be created in a closed academic year; duplicate names refused
+  (institute-scoped for Class/AcademicYear, class+campus+year-scoped for
+  Section).
+- **Incharge scope**: `createInchargeScope` refuses a user without the
+  INCHARGE role. `updateInchargeScope` implements real optimistic
+  concurrency — an update with a stale `expectedVersion` gets a 409
+  `VERSION_CONFLICT`, never silent last-write-wins, exactly per spec.
+  `checkInchargeScope()` (in `src/modules/incharge-scopes/service.ts`) is
+  the reusable ALLOW/DENY function future phases' `authorize()` calls will
+  layer on top of permission checks once there's an actual resource
+  (Timetable, Attendance, ...) for an Incharge to act on — **not wired into
+  any route yet**, since Phase 1 has nothing else for it to gate. Tested
+  directly (not just via HTTP): assign scope to Class A → ALLOW for A, DENY
+  for B → expand scope to A+B → ALLOW for B too → revoke → DENY again.
+- **Bootstrap script** (`scripts/create-institute.ts`, mirrors
+  `create-super-admin.ts`) — Institute is a singleton, so seeding one is a
+  real one-time deployment action, not disposable test data. Run once
+  against the dev database with a placeholder name ("Demo Institute",
+  type SCHOOL) — **rename this via `PATCH /institute` before any real use.**
+- **Verified for real**: all 68 integration tests pass (institute
+  singleton/duplicate-refused/update/settings-update; campus create/list/
+  update/archive/archive-refused-with-active-section/edit-after-archive-
+  refused; academic year date-validation/create/duplicate-refused/update/
+  close/edit-after-close-refused; class create/duplicate-refused/update/
+  archive; section create/duplicate-refused/closed-year-refused/update/
+  archiving-parent-campus-or-class-blocked-then-unblocked-after-section-
+  archived; incharge scope non-incharge-user-refused/create/scope-check-
+  allow/scope-check-deny/stale-version-refused/version-conflict-free-
+  update/expanded-scope-now-allows/revoke/revoke-twice-refused). Live
+  server smoke test confirms all 6 new route groups are mounted and
+  correctly require authentication. Row-count check after the full test
+  run confirms zero residue beyond the real bootstrapped Institute, Super
+  Admin, roles, and permissions.
+- **Not done**: no `product/web` screens exist for any of Phase 1 (Institute
+  Profile, Campuses List, Academic Years, Classes/Sections Management,
+  Incharge Scope Assignment — all unbuilt). `checkInchargeScope` has no
+  route consumer yet (expected — nothing to gate until Phase 2/3).
+
 ### How this was verified (not just "should work")
 
 In this session, with dependencies actually installed against a real npm
@@ -311,23 +377,23 @@ docs/
 
 ## 3. Immediate next action
 
-Phase 0 is now essentially complete: backend built and integration-tested
-(§1), login + dashboard shell built and verified end-to-end (§1b). What's
-left, in order:
+Phase 0 (backend + login/dashboard) and Phase 1's backend (§1c) are both
+built and verified. User has visually confirmed login works in a real
+browser. What's left, in order:
 
-1. **Look at it in an actual browser.** Nobody has visually verified
-   `product/web` yet (§1b's "Not verified" note) — no browser automation
-   tool was available in this environment. Run `npm run dev:api` and
-   `cd product/web && npm run dev`, open `http://localhost:3000/login`,
-   sign in as `admin@myproduct.local`, confirm it actually looks right
-   before trusting the design-system decisions in DESIGN.md.
-2. **Then either**: move on to Phase 1 (Institute/Campus/AcademicYear/
-   Class/Section + InchargeScope) — there's a real login to build the next
-   screens behind now — or add automated tests for the new API modules
-   listed in §3 of the previous entries if that feels like the bigger gap.
+1. **Phase 1 frontend screens** (none exist yet): Institute Profile,
+   Campuses List, Academic Years, Classes/Sections Management, Incharge
+   Scope Assignment — per PRODUCT_SPEC.md's Phase 1 "Screens" list. All the
+   backend APIs these need already exist and are tested (§1c).
+2. **Or move on to Phase 2** (Student, Parent, Teacher, Subject, Admission
+   → Enrollment) if backend-first is preferred over catching the frontend
+   up first — Phase 2 doesn't depend on Phase 1's frontend existing, only
+   its backend (Institute/Campus/AcademicYear/Class/Section rows to enroll
+   students into).
 3. **Minor cleanup, low priority**: wire real email delivery when a
    provider is chosen; consider a session-refresh-on-expiry flow for
-   `product/web` once 20-minute re-logins become annoying.
+   `product/web` once 20-minute re-logins become annoying; rename the
+   placeholder "Demo Institute" to something real before any actual use.
 
 ## 3a. Deviations from PRODUCT_SPEC.md (and why)
 
@@ -381,6 +447,42 @@ left, in order:
 Append a dated entry every session. Keep entries short — what changed, what's
 left, anything the next session needs to know that isn't obvious from the
 code/docs themselves.
+
+### 2026-09-11 (h) — Phase 1 backend built: Institute Structure + Incharge scopes
+
+- User visually confirmed login works in a real browser (the one open item
+  from entry (g)). Then asked to proceed to whatever's next per my own
+  judgment, explained in text first.
+- Added Phase 1's schema: `Institute` (singleton, service-enforced),
+  `InstituteSettings`, `Campus`, `AcademicYear`, `Class`, `Section`,
+  `InchargeScope`/`InchargeScopeClass`/`InchargeScopeSection` (normalized
+  junctions + `version` field for optimistic concurrency, exactly matching
+  the spec's Authorization Architecture section). Completed the Phase 0
+  deviation note's promise: `UserRole.campusId` is now a real FK to
+  `Campus`.
+- Built and wired 6 new API modules (institute, campuses, academic-years,
+  classes, sections, incharge-scopes) — full CRUD + archive/close/revoke,
+  business rules enforced (closed years read-only, archive blocked while
+  active sections exist, duplicate names refused, INCHARGE-role required
+  for scope assignment, real optimistic-concurrency conflict on stale
+  scope updates).
+- Added `scripts/create-institute.ts` (mirrors `create-super-admin.ts`) and
+  ran it for real — Institute is a singleton, so this was a genuine
+  one-time bootstrap action, not test setup. Created a placeholder "Demo
+  Institute" — rename before real use.
+- Wrote 38 new integration tests (68 total with Phase 0's) against the live
+  database, all passing. Verified zero residue afterward via real row
+  counts.
+- Hit and fixed a Windows file-lock issue: `prisma migrate dev`'s
+  auto-generate step failed with `EPERM` renaming the query engine DLL
+  because the still-running dev servers (from the previous session) had it
+  loaded. Killed them, regenerated cleanly.
+- **Not done**: no frontend screens for any of this yet. `checkInchargeScope`
+  is implemented and tested directly but has no route consumer yet —
+  correctly so, nothing exists for an Incharge to act on until Phase 2/3.
+- **Next session should**: build Phase 1's frontend screens, or move to
+  Phase 2 backend (Student/Parent/Teacher/Subject/Admission→Enrollment) —
+  see §3.
 
 ### 2026-09-10 (g) — product/web built: login + dashboard, verified end-to-end
 

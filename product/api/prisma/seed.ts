@@ -39,6 +39,35 @@ const PHASE_0_PERMISSIONS = [
   ["notification.manage", "Manage notification templates/preferences"],
 ] as const;
 
+// Phase 1: Institute/Campus/AcademicYear/Class/Section + Incharge scopes.
+const PHASE_1_PERMISSIONS = [
+  ["institute.view", "View institute configuration"],
+  ["institute.edit", "Edit institute profile"],
+  ["institute.configure", "Configure institute settings (timezone, terminology, ...)"],
+  ["campus.view", "View campuses"],
+  ["campus.create", "Create campuses"],
+  ["campus.edit", "Edit campuses"],
+  ["campus.archive", "Archive campuses"],
+  ["academic_year.view", "View academic years"],
+  ["academic_year.create", "Create academic years"],
+  ["academic_year.edit", "Edit academic years"],
+  ["academic_year.close", "Close academic years"],
+  ["class.view", "View classes"],
+  ["class.create", "Create classes"],
+  ["class.edit", "Edit classes"],
+  ["class.archive", "Archive classes"],
+  ["section.view", "View sections"],
+  ["section.create", "Create sections"],
+  ["section.edit", "Edit sections"],
+  ["section.archive", "Archive sections"],
+  ["incharge_scope.view", "View Incharge scope assignments"],
+  ["incharge_scope.create", "Create Incharge scope assignments"],
+  ["incharge_scope.edit", "Edit Incharge scope assignments"],
+  ["incharge_scope.revoke", "Revoke Incharge scope assignments"],
+] as const;
+
+const ALL_PERMISSIONS = [...PHASE_0_PERMISSIONS, ...PHASE_1_PERMISSIONS];
+
 async function main(): Promise<void> {
   for (const roleName of CORE_ROLES) {
     await prisma.role.upsert({
@@ -49,14 +78,14 @@ async function main(): Promise<void> {
   }
   console.log(`Seeded ${CORE_ROLES.length} core roles.`);
 
-  for (const [key, description] of PHASE_0_PERMISSIONS) {
+  for (const [key, description] of ALL_PERMISSIONS) {
     await prisma.permission.upsert({
       where: { key },
       update: { description },
       create: { key, description },
     });
   }
-  console.log(`Seeded ${PHASE_0_PERMISSIONS.length} Phase 0 permissions.`);
+  console.log(`Seeded ${ALL_PERMISSIONS.length} permissions.`);
 
   const superAdminRole = await prisma.role.findUniqueOrThrow({ where: { name: "SUPER_ADMIN" } });
   const allPermissions = await prisma.permission.findMany();
@@ -68,7 +97,7 @@ async function main(): Promise<void> {
       create: { roleId: superAdminRole.id, permissionId: permission.id },
     });
   }
-  console.log(`Granted all ${allPermissions.length} Phase 0 permissions to SUPER_ADMIN.`);
+  console.log(`Granted all ${allPermissions.length} permissions to SUPER_ADMIN.`);
 }
 
 main()

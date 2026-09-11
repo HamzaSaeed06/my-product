@@ -42,10 +42,12 @@ model User {
   sessions                  Session[]
   notifications             Notification[]
   notificationPreference    NotificationPreference?
-  documentsUploaded         Document[]        @relation("DocumentUploadedBy")
-  auditLogsAsActor          AuditLog[]        @relation("AuditActor")
-  approvalRequestsRequested ApprovalRequest[] @relation("ApprovalRequestedBy")
-  approvalRequestsDecided   ApprovalRequest[] @relation("ApprovalDecidedBy")
+  documentsUploaded         Document[]              @relation("DocumentUploadedBy")
+  auditLogsAsActor          AuditLog[]              @relation("AuditActor")
+  approvalRequestsRequested ApprovalRequest[]       @relation("ApprovalRequestedBy")
+  approvalRequestsDecided   ApprovalRequest[]       @relation("ApprovalDecidedBy")
+  inchargeScopes            InchargeScope[]
+  classTeacherOfSections    Section[]               @relation("SectionClassTeacher")
 
   @@map("users")
 }
@@ -97,14 +99,15 @@ model UserRole {
   id        String   @id @default(uuid())
   userId    String
   roleId    String
-  // Campus scope hook — Campus model itself arrives in Phase 1.
-  // No FK yet on purpose; will be replaced by a real relation then.
+  // Was a bare nullable string in Phase 0 (Campus didn't exist yet) — now a
+  // real FK, per the deviation note that promised this in Phase 1.
   campusId  String?
   createdAt DateTime @default(now())
   createdBy String?
 
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
-  role Role @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  user   User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role   Role    @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  campus Campus? @relation(fields: [campusId], references: [id])
 
   @@unique([userId, roleId, campusId])
   @@map("user_roles")
@@ -248,4 +251,210 @@ model NotificationPreference {
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@map("notification_preferences")
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// Phase 1 — Institute Structure
+// See docs/PRODUCT_SPEC.md → "PHASE 1: CORE AUTHORIZATION & SUPER ADMIN".
+//
+// Campus/Class/Section assignment for Principal/Office/Teacher/etc. reuses
+// Phase 0's UserRole.campusId (now a real FK, completing that deferred
+// relation). A dedicated FK per role (e.g. Campus.principalId) would
+// duplicate what UserRole already models — one mechanism for "who has what
+// role, in what scope," not two.
+// ─────────────────────────────────────────────────────────────────────────
+
+enum InstituteType {
+  SCHOOL
+  ACADEMY
+  COACHING_CENTER
+  INSTITUTE
+}
+
+// Singleton by convention (one deployment = one institute) — enforced at the
+// service layer (refuse to create a second row), not by a DB constraint,
+// since Prisma/Postgres have no clean "at most one row" constraint.
+model Institute {
+  id        String        @id @default(uuid())
+  name      String
+  type      InstituteType @default(SCHOOL)
+  logoUrl   String?
+  address   String?
+  phone     String?
+  email     String?
+  website   String?
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
+
+  settings InstituteSettings?
+  campuses Campus[]
+  classes  Class[]
+
+  @@map("institutes")
+}
+
+// Kept separate from Institute per spec's explicit "Institute Settings
+// stored separately for clarity" business rule.
+model InstituteSettings {
+  id           String   @id @default(uuid())
+  instituteId  String   @unique
+  timezone     String   @default("UTC")
+  locale       String   @default("en")
+  currency     String   @default("USD")
+  // Configurable terminology (spec: "Student Label: Student" etc. — schools
+  // vs. academies vs. coaching centers use different words for the same
+  // concepts).
+  studentLabel String   @default("Student")
+  teacherLabel String   @default("Teacher")
+  classLabel   String   @default("Class")
+  sectionLabel String   @default("Section")
+  updatedAt    DateTime @updatedAt
+
+  institute Institute @relation(fields: [instituteId], references: [id], onDelete: Cascade)
+
+  @@map("institute_settings")
+}
+
+model Campus {
+  id          String    @id @default(uuid())
+  instituteId String
+  name        String
+  address     String?
+  phone       String?
+  archivedAt  DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  institute      Institute       @relation(fields: [instituteId], references: [id], onDelete: Cascade)
+  userRoles      UserRole[]
+  sections       Section[]
+  inchargeScopes InchargeScope[]
+
+  @@map("campuses")
+}
+
+enum AcademicYearStatus {
+  ACTIVE
+  CLOSED
+}
+
+// Institute-scoped, not per-campus — an institute's academic calendar is
+// shared across its campuses. Deliberately allowed to overlap (spec:
+// "Academic years can overlap, e.g. session-based") — no uniqueness
+// constraint on date ranges.
+model AcademicYear {
+  id          String             @id @default(uuid())
+  instituteId String
+  name        String // e.g. "2026-27"
+  startDate   DateTime
+  endDate     DateTime
+  status      AcademicYearStatus @default(ACTIVE)
+  closedAt    DateTime?
+  createdAt   DateTime           @default(now())
+  updatedAt   DateTime           @updatedAt
+
+  sections       Section[]
+  inchargeScopes InchargeScope[]
+
+  @@unique([instituteId, name])
+  @@map("academic_years")
+}
+
+// Institute-wide catalog (e.g. "Montessori", "Class 5") — configurable
+// names, never hardcoded grade numbers, per spec. Campus/year-specific
+// instances live on Section, not here.
+model Class {
+  id          String    @id @default(uuid())
+  instituteId String
+  name        String
+  sortOrder   Int       @default(0)
+  archivedAt  DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  institute      Institute            @relation(fields: [instituteId], references: [id], onDelete: Cascade)
+  sections       Section[]
+  inchargeScopes InchargeScopeClass[]
+
+  @@unique([instituteId, name])
+  @@map("classes")
+}
+
+// The actual campus+year-specific instance of a Class — this is what
+// students enroll into (Phase 2) and what Incharge scopes reference.
+model Section {
+  id             String    @id @default(uuid())
+  classId        String
+  campusId       String
+  academicYearId String
+  name           String // configurable, not fixed A/B/C, per spec
+  capacity       Int?
+  classTeacherId String? // a specific responsibility, distinct from the TEACHER role itself
+  archivedAt     DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  class          Class                  @relation(fields: [classId], references: [id], onDelete: Cascade)
+  campus         Campus                 @relation(fields: [campusId], references: [id], onDelete: Cascade)
+  academicYear   AcademicYear           @relation(fields: [academicYearId], references: [id], onDelete: Cascade)
+  classTeacher   User?                  @relation("SectionClassTeacher", fields: [classTeacherId], references: [id])
+  inchargeScopes InchargeScopeSection[]
+
+  @@unique([classId, campusId, academicYearId, name])
+  @@map("sections")
+}
+
+// Dynamic Incharge assignment — see PRODUCT_SPEC.md §5 Authorization
+// Architecture. Deliberately NOT exclusive: multiple InchargeScope rows can
+// cover the same class/section (overlap is allowed by design, for workload
+// sharing). `version` is for optimistic concurrency (spec: reject on
+// mismatch, never silently last-write-wins).
+model InchargeScope {
+  id             String    @id @default(uuid())
+  userId         String
+  campusId       String
+  academicYearId String
+  effectiveFrom  DateTime  @default(now())
+  effectiveTo    DateTime?
+  revokedAt      DateTime?
+  createdBy      String
+  approvedBy     String?
+  version        Int       @default(0)
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  user         User                   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  campus       Campus                 @relation(fields: [campusId], references: [id], onDelete: Cascade)
+  academicYear AcademicYear           @relation(fields: [academicYearId], references: [id], onDelete: Cascade)
+  classes      InchargeScopeClass[]
+  sections     InchargeScopeSection[]
+
+  @@index([userId])
+  @@map("incharge_scopes")
+}
+
+model InchargeScopeClass {
+  id              String   @id @default(uuid())
+  inchargeScopeId String
+  classId         String
+  createdAt       DateTime @default(now())
+
+  inchargeScope InchargeScope @relation(fields: [inchargeScopeId], references: [id], onDelete: Cascade)
+  class         Class         @relation(fields: [classId], references: [id], onDelete: Cascade)
+
+  @@unique([inchargeScopeId, classId])
+  @@map("incharge_scope_classes")
+}
+
+model InchargeScopeSection {
+  id              String   @id @default(uuid())
+  inchargeScopeId String
+  sectionId       String
+  createdAt       DateTime @default(now())
+
+  inchargeScope InchargeScope @relation(fields: [inchargeScopeId], references: [id], onDelete: Cascade)
+  section       Section       @relation(fields: [sectionId], references: [id], onDelete: Cascade)
+
+  @@unique([inchargeScopeId, sectionId])
+  @@map("incharge_scope_sections")
 }

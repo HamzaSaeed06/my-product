@@ -10,7 +10,7 @@ phase's state changes — this table is what a new agent scans first.
 | # | Phase | Goal | Depends On | Est. Duration | Status |
 |---|-------|------|------------|----------------|--------|
 | 0 | Foundation | Authorization, Audit, Approval workflow, Notifications, File storage — the substrate every other phase needs | — | 1-2 wk | 🟡 |
-| 1 | Core Authorization & Super Admin | Institute config, Campuses, Academic Years, Classes/Sections, Users, dynamic Incharge scopes | 0 | 2-3 wk | 🔴 |
+| 1 | Core Authorization & Super Admin | Institute config, Campuses, Academic Years, Classes/Sections, Users, dynamic Incharge scopes | 0 | 2-3 wk | 🟡 |
 | 2 | Academic Structure | Students, Parents, Teachers, Subjects, Admission → Enrollment workflow | 1 | 3-4 wk | 🔴 |
 | 3 | Academic Operations | Timetable, Attendance (student+teacher), Substitution, Curriculum, Homework, Assessments | 2 | 4-5 wk | 🔴 |
 | 4 | Results & Promotion | Exams, Result workflow (Draft→Submitted→Reviewed→Finalized→Published), Report cards, Promotion/Class jump | 3 | 3-4 wk | 🔴 |
@@ -27,14 +27,16 @@ alongside Phase 4/5 once Phase 0/2/3 are done).
 
 ## Current focus
 
-**Phase 0 — essentially complete.** Backend built, live-verified against a
-real Postgres database, covered by a passing 30-test integration suite
-(Users, Roles/Permissions, Approvals, Documents, Notifications) plus 16 unit
-tests. `product/web` now has a working login page and protected dashboard
-shell, verified end-to-end (HTTP/data level) against the real backend. See
-`PROJECT_STATUS.md` §1/§1a/§1b. Still missing: real email delivery, and
-nobody has visually checked `product/web` in an actual browser yet — that's
-the next concrete step (§3).
+**Phase 0 — essentially complete** (backend + login/dashboard frontend,
+verified). **Phase 1 backend — built and integration-tested**: Institute
+(singleton), Campuses, Academic Years, Classes, Sections, and dynamic
+Incharge scopes (with optimistic concurrency) all have working APIs, 38
+passing integration tests against the real database, on top of Phase 0's 30.
+Not yet done for Phase 1: no `product/web` screens for any of this (Institute
+Profile, Campuses List, etc. are all unbuilt), and Incharge scope checks
+aren't wired into any protected resource route yet (nothing exists for an
+Incharge to act on besides the scope assignment itself — that comes with
+Phase 2/3). See `PROJECT_STATUS.md` §1c for full detail.
 
 ## Notes on dependency ordering
 

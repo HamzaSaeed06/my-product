@@ -10,6 +10,12 @@ import { approvalsRouter } from "./modules/approvals/routes.js";
 import { documentsRouter } from "./modules/documents/routes.js";
 import { notificationsRouter } from "./modules/notifications/routes.js";
 import { auditRouter } from "./modules/audit/routes.js";
+import { instituteRouter } from "./modules/institute/routes.js";
+import { campusesRouter } from "./modules/campuses/routes.js";
+import { academicYearsRouter } from "./modules/academic-years/routes.js";
+import { classesRouter } from "./modules/classes/routes.js";
+import { sectionsRouter } from "./modules/sections/routes.js";
+import { inchargeScopesRouter } from "./modules/incharge-scopes/routes.js";
 import { errorHandler, notFoundHandler } from "./middleware/errorHandler.js";
 import { readRateLimiter } from "./middleware/rateLimiter.js";
 
@@ -39,6 +45,12 @@ export function createApp(): Express {
   app.use("/api/v1/documents", documentsRouter);
   app.use("/api/v1/notifications", notificationsRouter);
   app.use("/api/v1/audit", auditRouter);
+  app.use("/api/v1/institute", instituteRouter);
+  app.use("/api/v1/campuses", campusesRouter);
+  app.use("/api/v1/academic-years", academicYearsRouter);
+  app.use("/api/v1/classes", classesRouter);
+  app.use("/api/v1/sections", sectionsRouter);
+  app.use("/api/v1/incharge-scopes", inchargeScopesRouter);
 
   app.use(notFoundHandler);
   app.use(errorHandler);
