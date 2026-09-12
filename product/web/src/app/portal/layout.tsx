@@ -37,6 +37,16 @@ export default async function PortalLayout({ children }: { children: React.React
       ? "PARENT"
       : "STUDENT";
 
+  // A TEACHER/STUDENT role login isn't the same as having the matching
+  // Teacher/Student profile — Users only creates the login + role; the
+  // profile itself is created separately (Teachers page, or Admissions).
+  // Every portal page under this layout assumes that id exists (several
+  // use `user.teacherId!` / `user.studentId!` directly), so gate here
+  // once rather than patching each page — this is the one shell every
+  // one of them renders inside.
+  const missingProfile =
+    (role === "TEACHER" && !user.teacherId) || (role === "STUDENT" && !user.studentId);
+
   return (
     <div className="flex min-h-svh flex-col bg-background">
       <header className="flex h-14 shrink-0 items-center justify-between border-b border-border px-4">
@@ -74,9 +84,19 @@ export default async function PortalLayout({ children }: { children: React.React
         </div>
       </header>
 
-      <PortalNav role={role} />
-
-      <main className="min-w-0 flex-1 p-4 sm:p-6">{children}</main>
+      {missingProfile ? (
+        <main className="min-w-0 flex-1 p-4 sm:p-6">
+          <p className="text-sm text-muted-foreground">
+            Your {role === "TEACHER" ? "Teacher" : "Student"} profile hasn&apos;t been set up yet. Ask your Super
+            Admin or Principal to add you on the {role === "TEACHER" ? "Teachers" : "Admissions"} page.
+          </p>
+        </main>
+      ) : (
+        <>
+          <PortalNav role={role} />
+          <main className="min-w-0 flex-1 p-4 sm:p-6">{children}</main>
+        </>
+      )}
     </div>
   );
 }

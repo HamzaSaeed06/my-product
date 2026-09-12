@@ -20,6 +20,9 @@ export default async function PortalOverviewPage() {
   if (!user) return null;
 
   if (user.roles.includes("TEACHER")) {
+    // portal/layout.tsx already renders a "profile not set up" message
+    // instead of {children} for a TEACHER with no teacherId, so this
+    // never runs in that state.
     const assignments = await apiRequest<TeacherAssignment[]>(
       `/api/v1/teacher-assignments?teacherId=${user.teacherId}`
     );

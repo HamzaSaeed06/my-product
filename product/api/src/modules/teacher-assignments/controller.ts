@@ -27,7 +27,15 @@ export async function listTeacherAssignmentsHandler(req: Request, res: Response)
     if (teacherId && teacherId !== profile.teacherId) {
       throw new HttpError(403, "OUT_OF_SCOPE", "You do not have access to this teacher's assignments");
     }
-    teacherId = profile.teacherId ?? undefined;
+    // A TEACHER-role login with no Teacher profile yet (created via Users,
+    // never linked on the Teachers page) has nothing to scope to — leaving
+    // teacherId undefined here would drop the filter entirely and leak
+    // every teacher's assignments instead.
+    if (!profile.teacherId) {
+      res.status(200).json([]);
+      return;
+    }
+    teacherId = profile.teacherId;
   }
 
   res.status(200).json(await assignmentsService.listTeacherAssignments({ ...query, teacherId }));

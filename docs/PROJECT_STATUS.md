@@ -2024,6 +2024,48 @@ Append a dated entry every session. Keep entries short — what changed, what's
 left, anything the next session needs to know that isn't obvious from the
 code/docs themselves.
 
+### 2026-09-12 (ae) — Real crash: TEACHER/STUDENT role with no matching profile broke /portal
+
+- User hit this directly with a real Next.js error overlay: `/portal`
+  threw `ApiError: Invalid request body` at `apiRequest`. Traced it, not
+  guessed: `portal/page.tsx` built
+  `/api/v1/teacher-assignments?teacherId=${user.teacherId}` for a TEACHER
+  role, and `user.teacherId` was `null` — a login created via the new
+  Users page has a role but no Teacher profile until someone separately
+  adds them on the Teachers page. The literal string `"null"` in the
+  query failed the backend's `z.string().uuid()` validation and 400'd.
+- This wasn't a one-page bug — grepped for the same pattern and found
+  `homework/page.tsx`, `attendance/page.tsx`, and `timetable/page.tsx`
+  all use `user.teacherId!` directly (a TypeScript non-null assertion
+  that does nothing at runtime), and the same shape of bug exists for
+  STUDENT role via `user.studentId!` in 4 more pages — any STUDENT-role
+  login with no actual Student record (created via Admissions) would hit
+  the identical crash.
+- Fixed once at the shared shell instead of patching every page:
+  `portal/layout.tsx` now checks `(role === "TEACHER" && !user.teacherId)
+  || (role === "STUDENT" && !user.studentId)` and renders a plain "your
+  profile hasn't been set up yet — ask your Super Admin" message in place
+  of `{children}` and the nav when true, so no page underneath ever
+  mounts in that state. Removed the redundant page-level guard this
+  replaced.
+- **Also fixed a real scope-leak risk found while in there**:
+  `teacher-assignments/controller.ts`'s handler, for a TEACHER-only actor
+  with `profile.teacherId === null`, fell through to
+  `teacherId = profile.teacherId ?? undefined` — an `undefined` filter on
+  a Prisma `where` clause drops that condition entirely, which would have
+  returned *every* teacher's assignments to an account with no teacher
+  profile at all. Now returns `[]` immediately in that case instead of
+  falling through.
+- **Verified live**: created a real TEACHER-role user with no Teacher
+  profile, logged in as it, hit `/portal` (200, showed the "profile not
+  set up" message) and separately `/portal/homework`,
+  `/portal/attendance`, `/portal/timetable`, `/portal/leave` (all 200,
+  no crash) — then hit `GET /api/v1/teacher-assignments` directly as that
+  same user and confirmed `[]`, not a leaked list. Deleted the test
+  account afterward.
+- `npx tsc --noEmit` and `npm run build` both clean on `product/api` and
+  `product/web`.
+
 ### 2026-09-12 (ad) — Real bug: a zero-role user could log in and land in a fake Student view
 
 - User created a login via the new Users page but deliberately assigned
