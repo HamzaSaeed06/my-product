@@ -6,7 +6,7 @@ import { HttpError } from "../../middleware/errorHandler.js";
 export async function listTeacherAssignments(filter: { teacherId?: string; sectionId?: string; academicYearId?: string }) {
   return prisma.teacherAssignment.findMany({
     where: { ...filter, archivedAt: null },
-    include: { teacher: { include: { user: true } }, subject: true, klass: true, section: true },
+    include: { teacher: { include: { user: true } }, subject: true, klass: true, section: true, academicYear: true },
     orderBy: { createdAt: "desc" },
   });
 }

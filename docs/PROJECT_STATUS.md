@@ -2024,6 +2024,29 @@ Append a dated entry every session. Keep entries short — what changed, what's
 left, anything the next session needs to know that isn't obvious from the
 code/docs themselves.
 
+### 2026-09-12 (af) — Real crash: /dashboard/teacher-assignments 500'd on `academicYear` undefined
+
+- User hit this directly: `Cannot read properties of undefined (reading
+  'name')` at `a.academicYear.name` in
+  `teacher-assignments/page.tsx:98`. The frontend's `Assignment`
+  interface has always declared `academicYear: { name: string }`, but
+  `teacher-assignments/service.ts`'s `listTeacherAssignments()` `include`
+  only ever fetched `teacher`/`subject`/`klass`/`section` — `academicYear`
+  was missing from the very first version of this include, so the field
+  was always `undefined` on every row; it only surfaced now because this
+  was the first real assignment the user created and viewed.
+- One-line fix: added `academicYear: true` to the `include`. The
+  create/archive Server Actions already discard their raw API response
+  and re-fetch the full list via `revalidatePath`, so no other code
+  needed touching.
+- **Verified live against the user's own real data**: `GET
+  /api/v1/teacher-assignments` now returns a populated `academicYear`
+  object (`"name":"2026-27"`) for their real "asad" → Mathematics → class
+  1 → Tipu Sultan assignment, and `/dashboard/teacher-assignments`
+  renders `200` with that row fully populated (Teacher, Subject, Class,
+  Section, Academic year all showing real values) instead of crashing.
+- `npx tsc --noEmit` and `npm run build` clean on `product/api`.
+
 ### 2026-09-12 (ae) — Real crash: TEACHER/STUDENT role with no matching profile broke /portal
 
 - User hit this directly with a real Next.js error overlay: `/portal`
