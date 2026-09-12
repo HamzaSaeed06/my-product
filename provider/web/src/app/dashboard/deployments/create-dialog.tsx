@@ -15,6 +15,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
+import { SecretReveal } from "@/components/secret-reveal";
 import { createDeployment } from "./actions";
 
 interface CustomerOption {
@@ -63,13 +64,13 @@ export function CreateDeploymentDialog({ customers }: { customers: CustomerOptio
         </DialogHeader>
 
         {heartbeatToken ? (
-          <div className="flex flex-col gap-3">
-            <p className="text-sm text-foreground">
-              Deployment created. Copy this heartbeat token and set it as the customer&apos;s
-              <code className="mx-1 rounded bg-muted px-1 py-0.5 text-xs">DEPLOYMENT_HEARTBEAT_TOKEN</code>
-              — it won&apos;t be shown again:
-            </p>
-            <code className="rounded-md border border-border bg-muted p-3 text-xs break-all">{heartbeatToken}</code>
+          <div className="flex flex-col gap-4">
+            <SecretReveal
+              label="Heartbeat token"
+              envVarName="DEPLOYMENT_HEARTBEAT_TOKEN"
+              value={heartbeatToken}
+              helpText="Deployment created. Copy this token now and set it as the customer's DEPLOYMENT_HEARTBEAT_TOKEN — it won't be shown again."
+            />
             <DialogFooter>
               <Button onClick={() => handleOpenChange(false)}>Done</Button>
             </DialogFooter>

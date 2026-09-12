@@ -15,6 +15,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
+import { SecretReveal } from "@/components/secret-reveal";
 import { generateLicense } from "./actions";
 
 interface CustomerOption {
@@ -84,13 +85,13 @@ export function GenerateLicenseDialog({
         </DialogHeader>
 
         {signedJwt ? (
-          <div className="flex flex-col gap-3">
-            <p className="text-sm text-foreground">
-              License generated. Copy this token and set it as the customer&apos;s
-              <code className="mx-1 rounded bg-muted px-1 py-0.5 text-xs">LICENSE_JWT</code>
-              — it won&apos;t be shown again:
-            </p>
-            <code className="max-h-40 overflow-y-auto rounded-md border border-border bg-muted p-3 text-xs break-all">{signedJwt}</code>
+          <div className="flex flex-col gap-4">
+            <SecretReveal
+              label="License token"
+              envVarName="LICENSE_JWT"
+              value={signedJwt}
+              helpText="License generated. Copy this token now and set it as the customer's LICENSE_JWT — it won't be shown again."
+            />
             <DialogFooter>
               <Button onClick={() => handleOpenChange(false)}>Done</Button>
             </DialogFooter>
