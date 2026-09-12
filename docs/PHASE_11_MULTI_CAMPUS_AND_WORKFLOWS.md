@@ -141,6 +141,48 @@ confirmed by reading the schema, this has no lighter-weight alternative today.
 
 ---
 
+### C-addendum. CNIC/B-Form capture, duplicate detection, and login without email
+
+Raised separately, but belongs here — it's the same admission/enrollment moment.
+
+**Current state (confirmed by reading the schema):** neither `Student` nor `Parent` has any national-ID
+field at all. Duplicate detection today (`searchStudents()`) only matches on name/phone/studentCode — two
+different children genuinely named "Ali Khan" are indistinguishable by name alone. Separately, `User.email`
+is a **required, unique** field — login is strictly by email today, so a Student/Parent with no real email
+needs a made-up one just to get a login, which is exactly the gap the user is pointing at.
+
+**Proposed changes:**
+- Add an optional `nationalId` field to both `Student` and `Parent` — the parent's CNIC, or the child's own
+  CNIC/B-Form number if they have one (many young children in Pakistan don't get a B-Form until later, so
+  this **must stay optional at the database level**, never a hard-required field that blocks enrollment).
+- Duplicate detection gets a third, stronger check: an exact `nationalId` match is treated as "almost
+  certainly the same person" (much stronger signal than name/phone), while a name/phone match with no
+  `nationalId` on either side stays today's softer "possible match — office user decides" behavior.
+- Login stops being email-only: `login()` accepts an `identifier` that can resolve to a User via **email OR
+  the linked Student's `nationalId`/`studentCode` OR the linked Parent's `nationalId`** — whichever one
+  actually has a value for that person. A family with no email at all can still log in with the parent's
+  CNIC; a student with neither email nor CNIC yet can still log in with their own `studentCode` (which
+  every student already has, unconditionally, per the existing `generateStudentCode()`).
+- **Which fields get collected is a hybrid, not fully global or fully per-campus:** a small fixed **core
+  set** (name, DOB, phone, address, `nationalId`) is collected everywhere, unconfigurable — this is what
+  duplicate-detection and reporting depend on, and letting one campus skip it would break both. Beyond that
+  core set, Super Admin can define **additional custom fields** — but at the **institute level, not
+  per-campus**. Two campuses of the same institute asking different questions of the same family (a sibling
+  applying to both) would be confusing and inconsistent; institute-wide keeps it coherent while still
+  letting different customers (schools) ask for what's relevant to them (e.g. a madrassa's "Hifz year" vs a
+  regular school not needing it).
+
+**Edge cases:**
+
+| Scenario | Problem | Solution |
+|---|---|---|
+| Neither parent nor student has a CNIC/B-Form on file | No unique ID at all for that family | Falls back to the student's own `studentCode` as the login identifier — always exists, never optional |
+| Two real siblings share the same address/phone (legitimately, not a duplicate) | Could false-positive as a duplicate | `nationalId` is the deciding signal precisely because it's per-person, not per-household — two siblings never share one |
+| A `nationalId` is mistyped during entry (transposed digits) | Could either miss a real duplicate or false-flag someone else's record | Not solvable perfectly by validation alone — surfaced as a "possible match, please verify" prompt either way (same UX as today's softer duplicate check), never a silent auto-merge |
+| A family later gets a CNIC/B-Form they didn't have at enrollment time | Record is now incomplete vs. reality | `nationalId` stays editable after creation (like any other identity-correction field, already an audited action per existing `updateStudent`) |
+
+---
+
 ## Phase D — Homework & Syllabus flexibility
 
 **Current state:** `Curriculum` (syllabus) already supports per-topic tracking with per-section completion
@@ -197,3 +239,57 @@ across the existing list pages incrementally (not a single giant rewrite, to kee
 1. Does the Phase-A campus-scoping change for `OFFICE` (not just `PRINCIPAL`) match what the user actually wants, given they only asked about Principal explicitly but their own description implies Office/Receptionist too?
 2. Confirm the QR-based staff check-in idea (phone camera, no dedicated hardware) is acceptable, versus actually wanting to buy dedicated scanner hardware.
 3. Confirm Phase ordering still stands: A → B → C → D → E → (Announcements/polish later).
+
+---
+
+## Appendix — one end-to-end scenario, tying every phase together
+
+Requested directly by the user: *"1 scenario bana kar samjhao"* — a customer, from first contact with the
+provider, all the way down to a single family's admission. Every numbered step below names which phase
+above it belongs to, so it's traceable back to a concrete design decision, not just a story.
+
+1. **A school ("Green Valley Grammar") contacts the provider**, wanting to buy the product.
+2. The **provider's own admin**, on `provider/web`, creates: a `Customer` record for Green Valley, a `Plan`
+   (say "Professional" — 1000 students, 3 campuses, 100 staff, 10GB storage), a `Deployment` (Green Valley's
+   hosting URL), and a `License` (a signed JWT carrying those limits). *(Already built, this session.)*
+3. Green Valley's own server gets `product/api` deployed, with the `LICENSE_JWT` and
+   `DEPLOYMENT_HEARTBEAT_TOKEN` from step 2 set in its `.env`, and `npm run onboard-customer` run once —
+   creating Green Valley's `Institute` and its first Super Admin login. *(Already built.)*
+4. **Green Valley's Super Admin** logs in, creates two `Campus` rows: "Main Campus" and "North Campus".
+5. Super Admin creates a login for each campus's Principal and assigns the `PRINCIPAL` role **scoped to
+   that one campus** *(Phase A)* — Main Campus's Principal from here on sees and manages only Main Campus;
+   North Campus's Principal only sees North Campus. Super Admin's own dashboard now shows both campuses
+   side-by-side as a monitoring view, not an operational one *(Phase A)*.
+6. **Main Campus's Principal** creates logins for their own Office/Receptionist, Incharge(s), and Teachers —
+   every one of them scoped to Main Campus *(Phase A's Office-scoping extension)*. North Campus's Principal
+   does the same independently, for North Campus's own staff — the two campuses' staff lists never overlap
+   or leak into each other.
+7. **A parent visits Main Campus's reception**, interested in admission but undecided. The Receptionist
+   creates an `AdmissionInquiry` *(Phase C)* — just the child's name and the parent's phone — no `Student`
+   row yet, since nothing is committed.
+8. **A week later, the parent decides to enroll.** Office converts the Inquiry into a real Admission: a
+   `Student` row is created, and this time the parent's **CNIC** is captured *(Phase C-addendum)*. The
+   system checks for duplicates by CNIC first (a much stronger signal than name), then falls back to the
+   existing name/phone search if no CNIC match exists. The child themselves is too young for a B-Form, so
+   their own `nationalId` is left blank — allowed, since it's optional at the database level.
+9. **Office (or, thanks to the Phase C permission fix, the Incharge too) assigns the child to a Class and
+   Section**, creating the `Enrollment`. The parent has no email — the system creates their Parent Portal
+   login using their **CNIC** as the identifier instead *(Phase C-addendum's login-without-email change)*.
+10. **Every morning**, Main Campus's Principal, Incharge, Teachers, and Office/Receptionist each scan the
+    campus's QR code with their own phone to check in *(Phase A3)*. The Receptionist's fee-collection screen
+    stays blocked until she's checked in for the day — a financial-action gate, not a network lock.
+11. **One week, the Receptionist goes on leave.** Main Campus's Principal grants a **temporary Delegation**
+    *(Phase A2)* to another staff member — Office-role access, time-boxed to exactly those days, logged as
+    "acting via delegation" on every action taken during that window, expiring automatically afterward.
+12. **A parent requests leave for their child** through the Parent Portal. The system auto-resolves the
+    child's current Section and routes the request to Main Campus's Incharge for that section *(Phase B)*.
+    The Incharge forwards it to the child's actual **Class Teacher** (`Section.classTeacherId`, already
+    modeled), who approves it — the matching Attendance row for those dates auto-flips from ABSENT to LEAVE
+    *(already built, Phase 6 — unchanged by any of this)*.
+13. **Meanwhile, back at the provider**, `product/api` keeps sending its scheduled heartbeat automatically
+    *(already built, this session)* — the provider's dashboard shows Green Valley's deployment as `HEALTHY`,
+    with aggregated counts only (student/staff/campus counts), never a single student's name, fee record, or
+    CNIC — the provider genuinely cannot see any of Green Valley's actual operational data, by design.
+14. If Green Valley later tries to enroll student #1001 on a 1000-student Plan, creation is blocked with a
+    clear "upgrade your plan" message *(already built, this session's license-limit enforcement)* — this
+    doesn't change with any of the above; it was already correct before this document existed.
