@@ -19,6 +19,10 @@ const NAV_GROUPS = [
     items: [{ href: "/dashboard", label: "Overview", roles: ["PRINCIPAL", "INCHARGE", "OFFICE"] as StaffRole[] }],
   },
   {
+    label: "Administration",
+    items: [{ href: "/dashboard/users", label: "Users", roles: [] as StaffRole[] }],
+  },
+  {
     label: "Institute Structure",
     items: [
       { href: "/dashboard/institute", label: "Institute", roles: ["PRINCIPAL"] as StaffRole[] },

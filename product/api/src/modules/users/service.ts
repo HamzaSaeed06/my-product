@@ -30,7 +30,12 @@ export async function listUsers() {
 
   return users.map((user) => ({
     ...toPublic(user),
-    roles: user.userRoles.map((ur) => ({ roleId: ur.roleId, roleName: ur.role.name, campusId: ur.campusId })),
+    roles: user.userRoles.map((ur) => ({
+      userRoleId: ur.id,
+      roleId: ur.roleId,
+      roleName: ur.role.name,
+      campusId: ur.campusId,
+    })),
   }));
 }
 

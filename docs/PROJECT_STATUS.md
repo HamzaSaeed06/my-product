@@ -2024,6 +2024,66 @@ Append a dated entry every session. Keep entries short — what changed, what's
 left, anything the next session needs to know that isn't obvious from the
 code/docs themselves.
 
+### 2026-09-12 (ac) — Closed a real Phase 0 gap: a Users/Roles admin page never got built
+
+- User onboarded a real customer themselves for the first time
+  (`onboard-customer`, institute "Karachi Superior College", a real Super
+  Admin login) and then hit a genuine wall: there was no screen anywhere
+  in `product/web` to create a Teacher/Incharge/Office login or assign it
+  a role. Checked, not assumed — `find src/app/dashboard -maxdepth 1`
+  listed 34 admin pages and not one was "users" or "roles". The backend
+  API has had full CRUD for this since Phase 0 (`POST /api/v1/users`,
+  `POST /:userId/roles`, `DELETE /:userId/roles/:userRoleId`, etc.) — the
+  frontend for it was simply never built, and nothing in
+  `PROJECT_STATUS.md` had ever flagged it as deferred. A real miss, not a
+  documented tradeoff.
+- Built `/dashboard/users` (Super-Admin-only in the sidebar, same pattern
+  as Incharge Scopes/Payment Gateways): create a login (name/email/temp
+  password), assign it any role with an optional campus scope, remove a
+  role, enable/disable the account — reusing the existing `FormDialog`/
+  `ConfirmActionButton` components rather than inventing new ones.
+- **Found and fixed a real backend gap while wiring this up**: `listUsers()`
+  in `src/modules/users/service.ts` returned each role assignment's
+  `roleId` but never the `UserRole` join row's own `id` — the exact id
+  `DELETE /:userId/roles/:userRoleId` needs to remove one. No frontend had
+  ever called this endpoint before, so the gap was invisible until this
+  page tried to render a working "Remove role" button. Added
+  `userRoleId: ur.id` to the response.
+- **Verified live against the user's own real database** — not a fixture:
+  logged in as their actual Super Admin (`karachi@gmail.comk`), created a
+  real "Test Teacher" user via the same API calls the new Server Actions
+  make, assigned it the TEACHER role, reloaded `/dashboard/users`, and
+  confirmed the row rendered correctly with the right badge — then
+  deleted that test user/role assignment afterward (the API has no
+  hard-delete route by design, so this went straight to Postgres) to
+  leave their real customer data exactly as they left it.
+- **A real environment problem surfaced and worked around, not a code
+  bug**: this page 500'd twice with a Turbopack `TurbopackInternalError`
+  ("node process exited ... 0xc0000142") compiling `globals.css` for the
+  new route. Root-caused before assuming it was the new code: this
+  machine has only **7.89GB RAM with under 1GB free** while running 4 dev
+  servers at once (`Get-CimInstance Win32_OperatingSystem`), and a
+  process audit turned up several fully orphaned `tsx watch` process
+  trees left over from earlier restarts this session (killing the
+  port-owning child without killing its supervisor) plus one truly stuck
+  `npx tsx -e` REPL process — cleaned up ~17 stray processes total. Fixed
+  by stopping `provider/api`/`provider/web` temporarily, clearing
+  `product/web/.next`, and restarting clean; the page then compiled and
+  served `200` on the first try. All 4 dev servers were restarted
+  afterward and confirmed listening on their normal ports with fresh,
+  non-orphaned PIDs.
+- `npx tsc --noEmit` and `npm run build` both clean on `product/api` and
+  `product/web` (the new `/dashboard/users` route appears in the build's
+  route table).
+- **Flag for future sessions**: this machine is genuinely memory-
+  constrained for 4 concurrent dev servers plus everything else the user
+  runs (VS Code, browser, WhatsApp desktop). A future Turbopack worker-
+  spawn crash on ANY route is more likely an environment symptom than a
+  code bug — check free memory and orphaned processes before assuming
+  the new code is wrong, and always kill dev servers by their top-level
+  `npm run dev` process (or its whole tree via `taskkill /T`), never just
+  the port-owning child, to avoid leaving another orphaned supervisor.
+
 ### 2026-09-12 (ab) — Heartbeat made real: auto-scheduled + a real wrong-port bug found and fixed
 
 - User tested the heartbeat setup for real (set `LICENSE_JWT` and
