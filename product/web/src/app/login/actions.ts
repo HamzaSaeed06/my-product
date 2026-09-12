@@ -100,8 +100,9 @@ export async function login(_prevState: LoginState, formData: FormData): Promise
   // desktop admin shell; TEACHER/PARENT/STUDENT get the separate,
   // mobile-first portal shell — see PRODUCT_SPEC.md's Phase 7
   // "Mobile-First: Parent & Student portals" / "Teacher: teaching-focused
-  // interface". A user with no roles at all (shouldn't happen) falls back
-  // to /dashboard, which will show an all-empty sidebar rather than crash.
+  // interface". A user with no roles at all can no longer reach this
+  // point — product/api's login() rejects it with NO_ROLE_ASSIGNED before
+  // issuing any cookies — but the fallback stays as defense in depth.
   const roles = body.user?.roles ?? [];
   const STAFF_ROLES = ["SUPER_ADMIN", "PRINCIPAL", "INCHARGE", "OFFICE"];
   const isStaff = roles.length === 0 || roles.some((r) => STAFF_ROLES.includes(r));

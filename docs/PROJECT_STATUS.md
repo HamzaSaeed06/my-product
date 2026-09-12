@@ -2024,6 +2024,38 @@ Append a dated entry every session. Keep entries short — what changed, what's
 left, anything the next session needs to know that isn't obvious from the
 code/docs themselves.
 
+### 2026-09-12 (ad) — Real bug: a zero-role user could log in and land in a fake Student view
+
+- User created a login via the new Users page but deliberately assigned
+  it no role, then logged in as it — and it still reached a working-
+  looking "Institution Management" screen instead of being turned away.
+  Traced the exact path, not guessed: `dashboard/layout.tsx` redirects a
+  non-staff-role user to `/portal`; `portal/layout.tsx`'s own role switch
+  (`user.roles.includes("TEACHER") ? ... : user.roles.includes("PARENT")
+  ? ... : "STUDENT"`) has no explicit "no roles" branch, so it silently
+  fell through to `"STUDENT"` — rendering the student portal shell for an
+  account with no student profile and no role at all. `login/actions.ts`
+  made it worse one layer up: its own comment admitted "a user with no
+  roles at all (shouldn't happen) falls back to /dashboard."
+- Fixed at the source instead of patching each fallback: `product/api`'s
+  `login()` now rejects a zero-role account outright — `403
+  NO_ROLE_ASSIGNED`, "Your account has no role assigned yet. Contact your
+  Super Admin." — before issuing any cookies at all. The dashboard/portal
+  fallback branches are now unreachable in practice and left in place
+  only as defense in depth, with comments updated to say so.
+- **Verified live**: created a real user with zero role assignments via
+  `POST /api/v1/users` (no `/roles` call after), attempted
+  `POST /api/v1/auth/login` — got exactly `403 NO_ROLE_ASSIGNED` with the
+  message above, confirmed no session/cookies were issued. Deleted the
+  test account afterward.
+- Separately, the user also asked for a visible logout — the only log-out
+  control on both `/dashboard` and `/portal` was buried inside the avatar
+  dropdown with no visible label next to it. Added a plain, always-
+  visible "Log out" button (with a `lucide-react` icon) in both headers,
+  next to the existing avatar/profile dropdown rather than replacing it.
+- `npx tsc --noEmit` and `npm run build` both clean on `product/api` and
+  `product/web`.
+
 ### 2026-09-12 (ac) — Closed a real Phase 0 gap: a Users/Roles admin page never got built
 
 - User onboarded a real customer themselves for the first time

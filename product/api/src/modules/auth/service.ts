@@ -81,6 +81,16 @@ export async function login(input: LoginInput): Promise<{ user: PublicUser; toke
     }
   }
 
+  // A user account with zero role assignments has nowhere real to go —
+  // the dashboard shell redirects it to /portal, which (having no
+  // TEACHER/PARENT/STUDENT match either) falls back to treating it as a
+  // STUDENT with no student profile at all. Reject at login instead of
+  // letting that silent, confusing fallback ever render.
+  const actorProfile = await getActorProfile(user.id);
+  if (actorProfile.roles.length === 0) {
+    throw new HttpError(403, "NO_ROLE_ASSIGNED", "Your account has no role assigned yet. Contact your Super Admin.");
+  }
+
   // PRODUCT_SPEC.md §2 EXPIRED_FINAL: "Super Admin can login (read-only),
   // Other users cannot login." An INVALID license (present but failed
   // signature verification) fails closed the same way. Every other state
@@ -89,8 +99,7 @@ export async function login(input: LoginInput): Promise<{ user: PublicUser; toke
   // "Login allowed."
   const { state } = getLicenseInfo();
   if (state === "EXPIRED_FINAL" || state === "INVALID") {
-    const profile = await getActorProfile(user.id);
-    if (!profile.roles.includes("SUPER_ADMIN")) {
+    if (!actorProfile.roles.includes("SUPER_ADMIN")) {
       throw new HttpError(423, "LICENSE_EXPIRED", "License expired. Contact the provider to renew — only Super Admin may log in until then.");
     }
   }

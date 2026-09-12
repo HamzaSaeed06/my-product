@@ -1,13 +1,12 @@
 import { redirect } from "next/navigation";
+import { LogOut } from "lucide-react";
 import { getCurrentUser } from "@/lib/session";
 import { logout } from "../dashboard/actions";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import {
   DropdownMenu,
   DropdownMenuContent,
-  DropdownMenuItem,
   DropdownMenuLabel,
-  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Button } from "@/components/ui/button";
@@ -48,29 +47,31 @@ export default async function PortalLayout({ children }: { children: React.React
           <span className="text-sm font-medium text-foreground">Institution Management</span>
         </div>
 
-        <DropdownMenu>
-          <DropdownMenuTrigger render={<Button variant="ghost" className="h-9 gap-2 px-2" />}>
-            <Avatar className="size-7">
-              <AvatarFallback className="bg-secondary text-xs text-secondary-foreground">
-                {initials(user.fullName)}
-              </AvatarFallback>
-            </Avatar>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-56">
-            <DropdownMenuLabel className="font-normal">
-              <div className="flex flex-col gap-0.5">
-                <span className="text-sm font-medium text-foreground">{user.fullName}</span>
-                <span className="text-xs text-muted-foreground">{user.email}</span>
-              </div>
-            </DropdownMenuLabel>
-            <DropdownMenuSeparator />
-            <form action={logout}>
-              <DropdownMenuItem render={<button type="submit" className="w-full cursor-pointer text-left" />}>
-                Log out
-              </DropdownMenuItem>
-            </form>
-          </DropdownMenuContent>
-        </DropdownMenu>
+        <div className="flex items-center gap-1">
+          <DropdownMenu>
+            <DropdownMenuTrigger render={<Button variant="ghost" className="h-9 gap-2 px-2" />}>
+              <Avatar className="size-7">
+                <AvatarFallback className="bg-secondary text-xs text-secondary-foreground">
+                  {initials(user.fullName)}
+                </AvatarFallback>
+              </Avatar>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-56">
+              <DropdownMenuLabel className="font-normal">
+                <div className="flex flex-col gap-0.5">
+                  <span className="text-sm font-medium text-foreground">{user.fullName}</span>
+                  <span className="text-xs text-muted-foreground">{user.email}</span>
+                </div>
+              </DropdownMenuLabel>
+            </DropdownMenuContent>
+          </DropdownMenu>
+          <form action={logout}>
+            <Button type="submit" variant="ghost" size="sm" className="gap-1.5 text-muted-foreground hover:text-foreground">
+              <LogOut className="size-3.5" />
+              <span className="hidden sm:inline">Log out</span>
+            </Button>
+          </form>
+        </div>
       </header>
 
       <PortalNav role={role} />
