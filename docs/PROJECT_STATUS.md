@@ -2024,6 +2024,51 @@ Append a dated entry every session. Keep entries short — what changed, what's
 left, anything the next session needs to know that isn't obvious from the
 code/docs themselves.
 
+### 2026-09-12 (ab) — Heartbeat made real: auto-scheduled + a real wrong-port bug found and fixed
+
+- User tested the heartbeat setup for real (set `LICENSE_JWT` and
+  `DEPLOYMENT_HEARTBEAT_TOKEN` in `product/api`'s `.env` per the earlier
+  step-by-step) and reported it wasn't arriving. **Root-caused, not
+  guessed**: `product/api/.env`'s `PROVIDER_API_URL` was set to
+  `http://localhost:3100` — `provider/web`'s (frontend) port, not
+  `provider/api`'s real `4100` — so every heartbeat request was going to
+  the wrong service entirely. `.env.example`'s own default was already
+  correct (4100); the live `.env` had drifted from it. Fixed, and the
+  server was restarted (`tsx watch` only watches `.ts` source files, not
+  `.env` — a `.env` edit needs a manual restart, which the user's own
+  message flagged as a suspected cause).
+- User then asked for the heartbeat to be **automatic and production-
+  grade**, explicitly declining to be asked further questions about how —
+  *"production mein kaise kaam hota hai waisi karo, ab karo"* (do it the
+  way it's done in production, do it now). PRODUCT_SPEC.md §2 already
+  specifies exactly this: *"Heartbeat Frequency: Daily (configurable: 6h,
+  12h, 24h, 48h) ... Asynchronous (runs in background job) ... Non-
+  blocking."* That had been deliberately deferred at Phase 10 (no
+  scheduler existed yet, `scripts/send-heartbeat.ts` was manual-only).
+- Built `src/lib/heartbeatScheduler.ts`: an in-process `setInterval`
+  (no external cron assumed — the spec's own architecture diagram lists
+  "Shared hosting" as a valid customer target, where cron/systemd-timer
+  access can't be assumed), started from `server.ts` right after the
+  server binds its port, sending one heartbeat immediately on boot rather
+  than waiting a full interval, with an in-flight guard against overlap
+  and a `stopHeartbeatScheduler()` wired into new `SIGTERM`/`SIGINT`
+  graceful-shutdown handlers in `server.ts`. Never schedules anything at
+  all when `DEPLOYMENT_HEARTBEAT_TOKEN` isn't configured — same
+  permissive-by-default rule as license enforcement, so a local/dev
+  instance with no provider account yet is unaffected.
+- New `HEARTBEAT_INTERVAL_HOURS` env var (default 24), validated against
+  the spec's exact allowed set `{6, 12, 24, 48}` via a zod `refine` — a
+  typo'd value fails loudly at boot instead of silently spamming the
+  provider.
+- **Verified live**: restarted `product/api` and watched its own console
+  output — `[heartbeat] scheduler started — every 24h` followed
+  immediately by `[heartbeat] sent — License VALID`, with no manual
+  command run. Confirmed on `provider/api`'s side too: the deployment's
+  `lastCheckInAt` carried a fresh timestamp matching that exact restart,
+  `healthStatus: "HEALTHY"` — not inferred, read directly off
+  `GET /api/v1/deployments`.
+- `npx tsc --noEmit` and `npm run build` both clean on `product/api`.
+
 ### 2026-09-12 (aa) — Real license-limit enforcement: maxStudents/maxCampuses/maxStaff/maxStorage
 
 - The License JWT has always declared per-plan limits

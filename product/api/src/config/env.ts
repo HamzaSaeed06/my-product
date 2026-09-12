@@ -13,7 +13,7 @@ const envSchema = z.object({
   WEB_APP_ORIGIN: z.string().url().default("http://localhost:3000"),
   DOCUMENT_STORAGE_DIR: z.string().default("storage/documents"),
   MAX_UPLOAD_SIZE_MB: z.coerce.number().int().positive().default(10),
-
+  
   // Phase 10 (Provider Platform) license validation — both optional. A
   // deployment with neither set is treated as "not yet licensed" (a local/
   // dev instance that hasn't been issued one) and runs fully unrestricted,
@@ -28,6 +28,17 @@ const envSchema = z.object({
   // src/lib/heartbeatSender.ts. Optional for the same reason as above.
   PROVIDER_API_URL: z.string().url().default("http://localhost:4100"),
   DEPLOYMENT_HEARTBEAT_TOKEN: z.string().optional(),
+  // PRODUCT_SPEC.md §2's own allowed cadence: "Daily (configurable: 6h,
+  // 12h, 24h, 48h)". Enforced as an enum, not just "any positive number",
+  // so a typo'd .env value fails loudly at boot instead of silently
+  // spamming the provider every minute.
+  HEARTBEAT_INTERVAL_HOURS: z.coerce
+    .number()
+    .int()
+    .default(24)
+    .refine((v) => [6, 12, 24, 48].includes(v), {
+      message: "HEARTBEAT_INTERVAL_HOURS must be one of 6, 12, 24, 48",
+    }),
 });
 
 const parsed = envSchema.safeParse(process.env);

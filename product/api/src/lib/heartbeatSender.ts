@@ -3,14 +3,12 @@ import { env } from "../config/env.js";
 import { getLicenseInfo } from "./license.js";
 
 // PRODUCT_SPEC.md §2 "Heartbeat Mechanism (Passive, Async, Non-Blocking)".
-// This module only builds and sends ONE heartbeat when called — it does
-// NOT schedule itself. This app has no job scheduler (same documented gap
-// as Phase 8's "scheduled report generation needs a job scheduler this app
-// doesn't have"), so wiring the spec's "daily, configurable 6h/12h/24h/48h"
-// cadence is a deliberate, scoped-out follow-up; a real deployment would
-// call sendHeartbeat() from whatever process scheduler it already runs
-// (cron, a systemd timer, etc.) — see scripts/send-heartbeat.ts for a
-// manually-triggerable entry point in the meantime.
+// This module only builds and sends ONE heartbeat when called — the actual
+// "daily, configurable 6h/12h/24h/48h" recurrence lives in
+// src/lib/heartbeatScheduler.ts, started once from server.ts. This function
+// stays a standalone, callable-on-its-own unit so scripts/send-heartbeat.ts
+// can still trigger one manually (useful right after setting up a new
+// license, without waiting for the next scheduled run).
 export interface HeartbeatResult {
   sent: boolean;
   reason?: string;
