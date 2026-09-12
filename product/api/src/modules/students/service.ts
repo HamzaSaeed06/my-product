@@ -4,6 +4,7 @@ import { writeAuditLog } from "../../lib/audit.js";
 import { generateStudentCode } from "../../lib/studentCode.js";
 import { HttpError } from "../../middleware/errorHandler.js";
 import { createDocumentRecord, listDocuments, type DocumentMeta } from "../documents/service.js";
+import { assertStudentLimit } from "../../lib/licenseLimits.js";
 
 // Spec: "Duplicate Prevention - check before creating new student." Search
 // by name, phone, or student code — the frontend calls this before letting
@@ -61,6 +62,8 @@ export async function createStudent(
   input: { fullName: string; dateOfBirth?: Date; gender?: string; phone?: string; address?: string },
   actorId: string
 ) {
+  await assertStudentLimit();
+
   // Retry on the rare race where two students are created concurrently and
   // both compute the same "next" code before either commits.
   for (let attempt = 0; attempt < 5; attempt++) {

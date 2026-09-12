@@ -1,6 +1,7 @@
 import { prisma } from "../../lib/prisma.js";
 import { writeAuditLog } from "../../lib/audit.js";
 import { HttpError } from "../../middleware/errorHandler.js";
+import { assertCampusLimit } from "../../lib/licenseLimits.js";
 
 async function requireInstitute() {
   const institute = await prisma.institute.findFirst();
@@ -16,6 +17,7 @@ export async function listCampuses() {
 
 export async function createCampus(input: { name: string; address?: string; phone?: string }, actorId: string) {
   const institute = await requireInstitute();
+  await assertCampusLimit();
 
   const campus = await prisma.campus.create({ data: { ...input, instituteId: institute.id } });
 

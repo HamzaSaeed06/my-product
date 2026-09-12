@@ -1,6 +1,7 @@
 import { prisma } from "../../lib/prisma.js";
 import { writeAuditLog } from "../../lib/audit.js";
 import { HttpError } from "../../middleware/errorHandler.js";
+import { assertStaffLimit } from "../../lib/licenseLimits.js";
 
 export async function listTeachers() {
   return prisma.teacher.findMany({
@@ -29,6 +30,8 @@ export async function createTeacher(
   if (existing) {
     throw new HttpError(409, "TEACHER_PROFILE_EXISTS", "This user already has a Teacher profile");
   }
+
+  await assertStaffLimit();
 
   const teacher = await prisma.teacher.create({ data: input });
 

@@ -1,7 +1,9 @@
 import path from "node:path";
+import fs from "node:fs/promises";
 import { prisma } from "../../lib/prisma.js";
 import { writeAuditLog } from "../../lib/audit.js";
 import { HttpError } from "../../middleware/errorHandler.js";
+import { assertStorageLimit } from "../../lib/licenseLimits.js";
 
 export interface DocumentMeta {
   category?: string;
@@ -15,6 +17,18 @@ export async function createDocumentRecord(
   meta: DocumentMeta,
   uploadedById: string
 ) {
+  // multer's disk storage already wrote this file before this function
+  // ever runs (it's middleware, ahead of the route handler) — a rejected
+  // upload must delete it, or the disk keeps growing past the license's
+  // storage limit even though no Document row (and no further storage)
+  // is recorded for it.
+  try {
+    await assertStorageLimit(file.size);
+  } catch (err) {
+    await fs.unlink(file.path).catch(() => {});
+    throw err;
+  }
+
   const document = await prisma.document.create({
     data: {
       fileName: file.filename,

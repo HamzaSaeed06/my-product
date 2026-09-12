@@ -1,6 +1,6 @@
 # Project Status
 
-**Last updated:** 2026-09-11
+**Last updated:** 2026-09-12
 **Current phase:** Phase 0 complete. Phase 1 backend+frontend complete
 (interactive dialogs unverified in-browser — see §1d). Phase 2 backend and
 frontend both complete (116 passing integration tests, 18 pages — see
@@ -2023,6 +2023,78 @@ What's left, in order:
 Append a dated entry every session. Keep entries short — what changed, what's
 left, anything the next session needs to know that isn't obvious from the
 code/docs themselves.
+
+### 2026-09-12 (aa) — Real license-limit enforcement: maxStudents/maxCampuses/maxStaff/maxStorage
+
+- The License JWT has always declared per-plan limits
+  (`maxStudents`/`maxCampuses`/`maxStaff`/`maxStorage`), but nothing ever
+  checked them — a customer on a 50-student plan could create student
+  #5000 with no complaint. User's own framing of why this matters: "agr
+  plan me jo likha h wo check bhi na ho to license ka faida kya h" (what's
+  the point of a license if what's written in the plan is never checked).
+  Explicit go-ahead given after asking for and getting an explanation of
+  what "real enforcement" means: *"ab khudu se dekho kaise hoga banao"*
+  (figure out how it should work yourself, build it).
+- New `src/lib/licenseLimits.ts`, wired into the one real creation entry
+  point for each resource — not a generic middleware, since each limit is
+  measured differently:
+  - `maxStudents` → count of `Student` rows with `status: "ACTIVE"`,
+    checked in `students/service.ts::createStudent`.
+  - `maxCampuses` → count of non-archived `Campus` rows, checked in
+    `campuses/service.ts::createCampus`.
+  - `maxStaff` → count of `Teacher` rows with `status: "ACTIVE"`, checked
+    in `teachers/service.ts::createTeacher`.
+  - `maxStorage` → sum of `Document.sizeBytes` across every stored
+    document, compared against `maxStorage` (MB) in
+    `documents/service.ts::createDocumentRecord`. multer's disk storage
+    already writes the file before this function runs, so a rejection
+    here explicitly `fs.unlink()`s the orphaned file — otherwise disk
+    usage would keep growing past the limit even though no `Document`
+    row (and no further storage) was ever recorded for it.
+  - Same permissive-by-default rule as the existing `licenseGate.ts`:
+    `getLicenseInfo().claims` is `null` on `NOT_CONFIGURED` (a local/dev
+    instance with no `LICENSE_JWT`), so nothing is enforced there. A
+    request can't reach these checks at all while in
+    `EXPIRED_GRACE`/`EXPIRED_FINAL`/`INVALID`, since `licenseWriteGate`
+    already blocks every non-safe-method request in those states first —
+    no redundant state-checking needed inside the new limit functions.
+- **Verified live against a real database**, not just read for
+  correctness: built a disposable `license_test` Postgres schema on the
+  shared Neon instance, migrated it, and — via `provider/api` — issued a
+  real signed test License JWT with deliberately low limits
+  (maxStudents=5, maxCampuses=2, maxStaff=3, maxStorageMb=1). Ran the real
+  `createCampus()` three times in a row against that schema with the test
+  license loaded: **Campus 1 created, Campus 2 created, Campus 3
+  rejected** with `"This license allows at most 2 campuses. Upgrade the
+  plan to add more."` Then called `assertStorageLimit()` directly: a
+  500KB request was allowed (well under the 1MB limit), a 2MB request was
+  rejected with the correct MB-denominated message. Both results are
+  exactly the designed behavior, not "should work."
+- Cleaned up everything created for this test afterward: dropped the
+  `license_test` schema, deleted the temporary test scripts, and deleted
+  the throwaway `LimitTestPlan`/"Limit Test Co" plan/customer/deployment/
+  license records from `provider/api`'s real database — leaving only the
+  real "Professional" plan the user created themselves and the provider
+  admin login, matching the clean state the user had just asked for.
+- `npx tsc --noEmit` and `npm run build` both clean on `product/api` for
+  the final 5-file change (`licenseLimits.ts` + the 4 service edits).
+- **Context for this session's data state:** immediately before this,
+  the user had the agent fully `TRUNCATE`-clean `product/api`'s real
+  database (all 67 tables, zero rows) and clear `provider/api`'s
+  Customer/Plan/Deployment/License/AuditLog tables (explicitly keeping
+  `provider_users`/`sessions` intact) so they could walk through creating
+  a customer themselves from scratch. The agent created the real
+  "Professional" plan on their behalf (`maxStudents=1000, maxCampuses=3,
+  maxStaff=100, maxStorageMb=10240`) per their explicit request ("plan
+  bnwao yar tum mujeh se khud hi"), then paused mid-walkthrough to build
+  and verify this license-limit feature before handing control back.
+- **Next session should:** hand back to the user's own paused
+  Customer→Deployment→License creation walkthrough (Plan already
+  created) — the step-by-step is: create Customer + Deployment +
+  License via `provider/web`, set the resulting `LICENSE_JWT` and
+  `DEPLOYMENT_HEARTBEAT_TOKEN` in `product/api`'s `.env`, restart
+  `product/api`, then run `npm run onboard-customer -- ...` on the
+  product side.
 
 ### 2026-09-11 (z) — Fixed a real, long-deferred gap: silent access-token refresh via Next.js Proxy
 
