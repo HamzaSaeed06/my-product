@@ -1,6 +1,13 @@
+import { Prisma } from "@prisma/client";
 import { prisma } from "../../lib/prisma.js";
 import { writeAuditLog } from "../../lib/audit.js";
 import { HttpError } from "../../middleware/errorHandler.js";
+
+// P2034 is Prisma's code for a Serializable transaction that lost a write
+// conflict — same helper/role as timetable/service.ts's isSerializationConflict.
+function isSerializationConflict(err: unknown): boolean {
+  return err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2034";
+}
 
 export async function listAdmissions(filter: {
   studentId?: string;
@@ -49,28 +56,50 @@ export async function createAdmission(
     throw new HttpError(409, "ACADEMIC_YEAR_CLOSED", "Cannot apply for admission in a closed academic year");
   }
 
-  // Duplicate-submission guard (Section 1.3 — verified this was missing,
-  // unlike online-payment/service.ts's webhook idempotency check). No
-  // schema-level unique constraint: a student legitimately CAN reapply for
-  // the same class/year after a REJECTED decision, so a hard constraint on
-  // (studentId, classId, academicYearId) would wrongly block that. This
-  // only blocks a second PENDING admission for the same triple — the
-  // actual double-click/duplicate-request case — inside a transaction so
-  // the check and the insert are atomic relative to each other.
-  const admission = await prisma.$transaction(async (tx) => {
-    const existingPending = await tx.admission.findFirst({
-      where: {
-        studentId: input.studentId,
-        classId: input.classId,
-        academicYearId: input.academicYearId,
-        status: "PENDING",
+  // Duplicate-submission guard. No schema-level unique constraint: a
+  // student legitimately CAN reapply for the same class/year after a
+  // REJECTED decision, so a hard constraint on (studentId, classId,
+  // academicYearId) would wrongly block that. This only blocks a second
+  // PENDING admission for the same triple — the actual double-click/
+  // duplicate-request case.
+  //
+  // The check-then-insert below needs Serializable isolation, not just a
+  // transaction, to actually close the race: under Postgres/Prisma's
+  // default Read Committed, two concurrent transactions can both run the
+  // findFirst before either commits its create, so neither sees the
+  // other's about-to-exist row and both insert — same race
+  // timetable/service.ts's assertNoTeacherConflict already documents and
+  // fixes the same way. A losing concurrent request gets Prisma P2034,
+  // mapped to the same ADMISSION_ALREADY_PENDING the sequential check gives.
+  let admission;
+  try {
+    admission = await prisma.$transaction(
+      async (tx) => {
+        const existingPending = await tx.admission.findFirst({
+          where: {
+            studentId: input.studentId,
+            classId: input.classId,
+            academicYearId: input.academicYearId,
+            status: "PENDING",
+          },
+        });
+        if (existingPending) {
+          throw new HttpError(409, "ADMISSION_ALREADY_PENDING", "A pending admission already exists for this student, class, and academic year");
+        }
+        return tx.admission.create({ data: input });
       },
-    });
-    if (existingPending) {
-      throw new HttpError(409, "ADMISSION_ALREADY_PENDING", "A pending admission already exists for this student, class, and academic year");
+      { isolationLevel: Prisma.TransactionIsolationLevel.Serializable }
+    );
+  } catch (err) {
+    if (isSerializationConflict(err)) {
+      throw new HttpError(
+        409,
+        "ADMISSION_ALREADY_PENDING",
+        "A pending admission for this student, class, and academic year was just created by another request — refresh and retry"
+      );
     }
-    return tx.admission.create({ data: input });
-  });
+    throw err;
+  }
 
   await writeAuditLog({
     actorId,

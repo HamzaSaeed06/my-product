@@ -2991,6 +2991,44 @@ code/docs themselves.
   list contains the former and not the latter.
 - Ran `scope-enforcement.test.ts`: **20/20 passing** (was 19/19 before this entry).
 
+### 2026-09-13 (bf) — Compliance-audit Task 3 (idempotency/concurrency): result-submit & timetable-slot confirmed already safe; found and fixed a real admission-submit race
+
+- **Result-submit — already safe, no change.** `results/service.ts`'s `advanceResultStatus` uses an atomic
+  conditional `prisma.result.updateMany({ where: { id, status: from }, data: { status: to, ... } })` — the
+  UPDATE statement's own atomicity closes the race (0 rows affected → `RESULT_STATE_CONFLICT`), no
+  transaction needed. Matches (ba)'s C3 fix, re-confirmed by direct code read.
+- **Timetable-slot — already safe, no change.** `@@unique([timetableId, dayOfWeek, periodNumber])` (DB
+  level, P2002 → `SECTION_SLOT_CONFLICT`) for same-section double-booking; `assertNoTeacherConflict` inside
+  a `{ isolationLevel: Serializable }` transaction (P2034 → `TEACHER_CONFLICT`) for cross-section teacher
+  double-booking, which can't be a single-table unique. Already re-assessed for this exact purpose in (bc)
+  ("app-level double-book check already guards this") — confirmed correct by direct code read, not
+  retaken on faith.
+- **Admission-submit — real gap, fixed.** `admissions/service.ts`'s duplicate-PENDING guard ran its
+  check-then-insert inside a plain `$transaction` with **no isolation level**, which under Postgres/Prisma's
+  default Read Committed does not prevent two concurrent requests from both passing the pre-insert check
+  before either commits. No DB-level unique constraint backstopped it either. Fixed by adding
+  `{ isolationLevel: Prisma.TransactionIsolationLevel.Serializable }` (mirrors `timetable/service.ts`'s
+  already-proven pattern exactly) with a `P2034` → `ADMISSION_ALREADY_PENDING` friendly-retry mapping.
+  **Empirically proved this was a real bug, not just theoretical**: firing 2 concurrent duplicate
+  submissions against the pre-fix code passed 4/4 runs (didn't reproduce — the request-handling middleware
+  apparently staggers just 2 requests enough in this environment), but firing **8** concurrent requests
+  reliably reproduced it — **4 of 8 succeeded**, creating 4 duplicate PENDING rows for the same
+  student/class/year. After the fix, the same 8-concurrent-request test passes: exactly 1 succeeds, 7 get
+  `409`, exactly 1 `PENDING` row exists. The committed regression test in `admissions.test.ts` uses 8
+  concurrent requests (not the 2 originally sketched) for exactly this reason — a 2-request version would
+  not reliably catch a regression if this fix were ever reverted.
+- Added a sequential test too (`admissions.test.ts` had **zero** coverage of `ADMISSION_ALREADY_PENDING`
+  firing at all before this — the existing "second admission" test only covered reapplying after the first
+  was already decided, a different, legitimate case).
+- **Also noticed, not fixed (flagging, not hiding):** `decideAdmission` (approve/reject) and
+  `withdrawAdmission` have the same read-then-write TOCTOU shape `results/service.ts` already fixed with
+  atomic `updateMany` — `findUnique` → check `status` → plain `update`, no conditional `where`. Two
+  concurrent decisions on the same admission could silently last-write-wins. Out of scope here (the task
+  was "admission **submission**," not decision) — same fix shape as Result's `advanceResultStatus`
+  (`updateMany({ where: { id, status: "PENDING" } })`) would close it, worth a follow-up.
+- Verified: `admissions.test.ts` **9/9 passing** (was 7 before this entry — 2 new tests), `tsc --noEmit`
+  clean.
+
 ### 2026-09-12 (ai) — Phase 11 Phase A (campus-scoping) implementation plan written; docs/archive deleted
 
 - User asked "what's next" after (ah)'s seed change. Sized up Phase A (removing `PRINCIPAL`/`OFFICE` from

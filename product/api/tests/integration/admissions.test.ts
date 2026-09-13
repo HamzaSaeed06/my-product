@@ -67,6 +67,44 @@ describe("Admissions API (real database)", () => {
     admissionId = res.body.id;
   });
 
+  it("refuses a second PENDING admission for the same student/class/year while one is already pending", async () => {
+    const res = await asSuperAdmin().post("/api/v1/admissions").send({ studentId, campusId, classId, academicYearId });
+    expect(res.status).toBe(409);
+    expect(res.body.error).toBe("ADMISSION_ALREADY_PENDING");
+  });
+
+  // Proves the Serializable-transaction fix, not just that the sequential
+  // check compiles. Measured directly against this suite: firing only 2
+  // concurrent requests did NOT reliably hit the race window in this test
+  // environment (passed even against the pre-fix code, 4/4 runs) — the
+  // middleware chain before the controller apparently staggers 2 requests
+  // just enough. 8 concurrent requests did reproduce it reliably (4/8
+  // succeeded against the pre-fix code, confirmed live before this fix was
+  // restored). Kept at 8 so this stays a real regression guard, not a test
+  // that would pass "by luck" if the isolation level were ever reverted.
+  it("under concurrent double-submission, exactly one request succeeds and no duplicate PENDING row is created", async () => {
+    const raceStudent = await prisma.student.create({
+      data: { studentCode: `STU-ADM-RACE-${suffix}`, fullName: `Admission Race ${suffix}` },
+    });
+    try {
+      const responses = await Promise.all(
+        Array.from({ length: 8 }, () =>
+          asSuperAdmin().post("/api/v1/admissions").send({ studentId: raceStudent.id, campusId, classId, academicYearId })
+        )
+      );
+      const statuses = responses.map((r) => r.status);
+      expect(statuses.filter((s) => s === 201)).toHaveLength(1);
+      expect(statuses.filter((s) => s === 409)).toHaveLength(7);
+      expect(statuses.every((s) => s === 201 || s === 409)).toBe(true);
+
+      const rows = await prisma.admission.findMany({ where: { studentId: raceStudent.id, status: "PENDING" } });
+      expect(rows).toHaveLength(1);
+    } finally {
+      await prisma.admission.deleteMany({ where: { studentId: raceStudent.id } }).catch(() => {});
+      await prisma.student.delete({ where: { id: raceStudent.id } }).catch(() => {});
+    }
+  });
+
   it("lists admissions filtered by student", async () => {
     const res = await asSuperAdmin().get(`/api/v1/admissions?studentId=${studentId}`);
     expect(res.status).toBe(200);
