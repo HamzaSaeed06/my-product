@@ -19,6 +19,9 @@ import {
   UserSquare2,
   BookMarked,
   UsersRound,
+  ClipboardList,
+  MessageCircleQuestion,
+  ClipboardCheck,
   type LucideIcon,
 } from "lucide-react";
 import {
@@ -62,6 +65,14 @@ const NAV_GROUPS: { label: string; items: NavItem[] }[] = [
       { href: "/dashboard/teacher-assignments", label: "Teacher Assignments", icon: UsersRound, anyOf: ["teacher_assignment.view"] },
       { href: "/dashboard/subjects", label: "Subjects", icon: BookMarked, anyOf: ["subject.view"] },
       { href: "/dashboard/users", label: "Users", icon: UsersIcon, anyOf: ["user.view"] },
+    ],
+  },
+  {
+    label: "Admissions & Enrollment",
+    items: [
+      { href: "/dashboard/admissions", label: "Admissions", icon: ClipboardList, anyOf: ["admission.view"] },
+      { href: "/dashboard/admission-inquiries", label: "Admission Inquiries", icon: MessageCircleQuestion, anyOf: ["admission_inquiry.view"] },
+      { href: "/dashboard/enrollments", label: "Enrollments", icon: ClipboardCheck, anyOf: ["enrollment.view"] },
     ],
   },
   {

@@ -1,5 +1,56 @@
 # web-v2 Progress
 
+## 2026-09-14 — Admissions & Enrollment batch complete (Phase B, batch 3) — first real multi-step flows
+
+All 3 concepts built on mock data, typecheck/lint clean, all 5 routes verified 200. This
+batch's headline: **the first two genuinely multi-step flows in this build**, exactly the
+case the interaction-pattern rules call out by name (a dedicated route with a real step
+indicator, not a form crammed into a modal) — the old frontend never built this pattern
+anywhere (its own Admission create was a single 4-field dialog), so this is a genuine
+upgrade, not a re-skin.
+
+- **`StepIndicator`** (`src/components/step-indicator.tsx`) — new shared component: numbered
+  circles connected by a progress line, done/active/upcoming states. Both wizards below use
+  it, same way every list page shares `DataTable`.
+- **Admissions** (`/dashboard/admissions` + `/dashboard/admissions/new`) — list (student,
+  campus, class, academic year, status, applied date) with Approve/Reject/Withdraw
+  (`ConfirmDialog`, all three terminal from `PENDING` — a rejected applicant reapplies as a
+  new row, this one never flips back) only enabled while `PENDING`. "New admission" is a
+  3-step flow at its own route: Applicant (search-then-results, same pattern as Parents'
+  Link Child) → Placement (campus/class/year) → Review & Submit. The UI states outright,
+  in both the page description and the Approve dialog, that **approving does not create an
+  enrollment** — a deliberate rule the real backend enforces, not a gap.
+- **Admission Inquiries** (`/dashboard/admission-inquiries` + `.../[inquiryId]/convert`) —
+  genuinely new UI; the real backend has had this entity since Phase 11 but the old frontend
+  never shipped a page for it at all. List + Create (Sheet, a lead-intake form) + a status
+  quick-edit (`Popover`: New/Contacted/Closed — `Converted` is deliberately not a plain
+  status option, it's reached only through Convert, since it carries a real
+  `convertedStudentId`). **Convert is a 4-step flow**: Student (search existing / create new
+  toggle) → Parent (same two-lane choice) → Placement (campus/class prefilled from the
+  inquiry) → Review. This models the real backend's heaviest action here — resolve-or-create
+  both Student and Parent, link them, create a Pending Admission, mark the inquiry
+  Converted — as an actual UI decision (which lane: search vs. new) rather than hiding it.
+- **Enrollments** (`/dashboard/enrollments`) — genuinely new page too (old frontend only had
+  Enroll/Transfer dialogs bolted onto the Student detail page, no list at all). Kept as a
+  Sheet, not a wizard — placing a student into one section is a 2-field job (section + roll
+  number) once the student is picked, not a genuinely multi-step decision. Transfer creates
+  a **new** Enrollment row and marks the old one `Transferred` rather than editing in
+  place, preserving history (the real backend's own rule: only one `ACTIVE` enrollment per
+  academic year, enforced at the service layer since a student legitimately accumulates
+  multiple historical rows across transfers).
+
+**New mock data**: `admissions.ts`, `admission-inquiries.ts`, `enrollments.ts`. Permissions
+mostly confirmed against the real backend during research (`admission.*`,
+`admission_inquiry.*`); `enrollment.view/create/transfer` are a reasonable inferred naming —
+Enrollment has no dedicated old-frontend page or documented permission string to check
+against, called out in `session.ts` the same way `feature_config.manage` was.
+
+**A structural note for future multi-step pages**: both wizards keep all steps in one
+route/URL with client-side step state, rather than giving each step its own URL segment
+(`?step=2` or similar). This already satisfies "a dedicated route, not a modal," but
+per-step bookmarking would be a reasonable further refinement if a specific flow (exam
+scheduling, promotion runs — still pending) turns out to need it.
+
 ## 2026-09-14 — Parents: table + a real detail page (correction round)
 
 Follow-up feedback on the just-shipped Parents table, three parts:

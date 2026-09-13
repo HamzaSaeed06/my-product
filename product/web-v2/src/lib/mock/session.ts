@@ -54,6 +54,19 @@ export const ALL_PERMISSIONS = [
   "student.create",
   "student.edit",
   "admission.view",
+  "admission.create",
+  "admission.approve",
+  "admission.reject",
+  "admission_inquiry.view",
+  "admission_inquiry.create",
+  "admission_inquiry.convert",
+  // Not confirmed backend permission names (Enrollment has no dedicated
+  // old-frontend page or documented permission string — it's only two
+  // dialogs on the Student detail page there) — named to match this
+  // codebase's own <resource>.<action> convention.
+  "enrollment.view",
+  "enrollment.create",
+  "enrollment.transfer",
   "parent.view",
   "parent.create",
   "parent.edit",
