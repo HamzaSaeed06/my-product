@@ -2956,6 +2956,24 @@ code/docs themselves.
   `Role.systemKey`. Grep confirms zero `role: { name: ... }` identity checks remain. `tsc` clean; leaves +
   teacher-attendance + teachers integration suites 19/19.
 
+### 2026-09-13 (bd) — Compliance-audit Task 1 (sections/teachers leak) re-verified against current code: already fixed, no change needed
+
+- User asked to work through `SPEC_COMPLIANCE_AUDIT.md`'s three ranked gaps one at a time, with an
+  explicit instruction to re-verify each against current code first (not trust the audit doc, since the
+  codebase may have moved on). Good instruction: it had. (ba)'s C1 fix already closed this — confirmed by
+  direct code read, not assumed from the doc.
+- Re-read `scope.ts`, `sections/{controller,service}.ts`, `teachers/{controller,service}.ts`,
+  `incharge-scopes/service.ts`'s `getInchargeScopedSectionIds()`: unrestricted → campus(es) → INCHARGE
+  (scoped section ids, `[]` when no active scope → matches nothing, never everything) → else nothing.
+  Matches the fix (ba) already documented.
+- Re-ran `scope-enforcement.test.ts` on current `HEAD`: **19/19 passing**, including the two regression
+  cases from (ba) (`"lists only sections within their scope..."`, `"lists only teachers assigned within
+  their scope..."`) — both assert `toContain(inScope)` **and** `not.toContain(outOfScope)` against a real
+  fixture with genuine out-of-scope data (a second section/teacher on a class outside the Incharge's
+  scope), not an empty fixture. Meets the bar asked for.
+- **No source changes this entry** — verification only, logged so a different agent doesn't redo this
+  check from the stale audit doc.
+
 ### 2026-09-12 (ai) — Phase 11 Phase A (campus-scoping) implementation plan written; docs/archive deleted
 
 - User asked "what's next" after (ah)'s seed change. Sized up Phase A (removing `PRINCIPAL`/`OFFICE` from
