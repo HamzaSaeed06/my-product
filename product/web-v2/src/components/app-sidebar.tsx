@@ -7,6 +7,14 @@ import {
   Users as UsersIcon,
   GraduationCap,
   School,
+  Landmark,
+  Building2,
+  CalendarRange,
+  Rows3,
+  UserCog,
+  UserCheck2,
+  Languages,
+  SlidersHorizontal,
   type LucideIcon,
 } from "lucide-react";
 import {
@@ -50,7 +58,17 @@ const NAV_GROUPS: { label: string; items: NavItem[] }[] = [
   },
   {
     label: "Institute & Structure",
-    items: [{ href: "/dashboard/campuses", label: "Campuses", icon: School, anyOf: ["campus.view"] }],
+    items: [
+      { href: "/dashboard/institute", label: "Institute", icon: Landmark, anyOf: ["institute.view"] },
+      { href: "/dashboard/campuses", label: "Campuses", icon: Building2, anyOf: ["campus.view"] },
+      { href: "/dashboard/academic-years", label: "Academic Years", icon: CalendarRange, anyOf: ["academic_year.view"] },
+      { href: "/dashboard/classes", label: "Classes", icon: School, anyOf: ["class.view"] },
+      { href: "/dashboard/sections", label: "Sections", icon: Rows3, anyOf: ["section.view"] },
+      { href: "/dashboard/incharge-scopes", label: "Incharge Scopes", icon: UserCog, anyOf: ["incharge_scope.view"] },
+      { href: "/dashboard/delegations", label: "Delegations", icon: UserCheck2, anyOf: ["delegation.view"] },
+      { href: "/dashboard/terminology", label: "Terminology", icon: Languages, anyOf: ["institute.configure"] },
+      { href: "/dashboard/feature-config", label: "Feature Config", icon: SlidersHorizontal, anyOf: ["feature_config.manage"] },
+    ],
   },
 ];
 

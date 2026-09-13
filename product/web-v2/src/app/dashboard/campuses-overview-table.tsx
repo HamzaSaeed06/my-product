@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { ChevronRight } from "lucide-react";
 import {
   Table,
@@ -34,7 +35,11 @@ export function CampusesOverviewTable({ campuses }: { campuses: CampusOverview[]
       <TableBody>
         {campuses.map((c) => (
           <TableRow key={c.id} className="group">
-            <TableCell className="font-medium text-foreground">{c.name}</TableCell>
+            <TableCell className="font-medium text-foreground">
+              <Link href={`/dashboard/campuses/${c.id}`} className="hover:underline">
+                {c.name}
+              </Link>
+            </TableCell>
             <TableCell className="font-mono tabular-nums">{c.students.toLocaleString()}</TableCell>
             <TableCell className="font-mono tabular-nums">{c.teachers}</TableCell>
             <TableCell>
@@ -54,8 +59,9 @@ export function CampusesOverviewTable({ campuses }: { campuses: CampusOverview[]
             </TableCell>
             <TableCell className="font-mono tabular-nums">{c.attendanceTodayPct}%</TableCell>
             <TableCell>
-              {/* Campus drill-down page lands in Phase B (Institute & Structure batch) — affordance shown now, not wired yet. */}
-              <ChevronRight className="ml-auto size-4 text-muted-foreground/40" />
+              <Link href={`/dashboard/campuses/${c.id}`} aria-label={`View ${c.name}`}>
+                <ChevronRight className="ml-auto size-4 text-muted-foreground/40 transition-colors group-hover:text-foreground" />
+              </Link>
             </TableCell>
           </TableRow>
         ))}

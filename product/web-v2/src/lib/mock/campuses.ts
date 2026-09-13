@@ -1,6 +1,8 @@
 export interface CampusOverview {
   id: string;
   name: string;
+  address: string | null;
+  phone: string | null;
   students: number;
   teachers: number;
   sections: number;
@@ -10,10 +12,10 @@ export interface CampusOverview {
 }
 
 export const mockCampuses: CampusOverview[] = [
-  { id: "cmp_main", name: "Main Campus", students: 1284, teachers: 62, sections: 38, pendingAdmissions: 14, feeCollectedPct: 91, attendanceTodayPct: 94 },
-  { id: "cmp_north", name: "North Town Campus", students: 742, teachers: 34, sections: 22, pendingAdmissions: 6, feeCollectedPct: 87, attendanceTodayPct: 91 },
-  { id: "cmp_riverside", name: "Riverside Campus", students: 519, teachers: 27, sections: 17, pendingAdmissions: 21, feeCollectedPct: 78, attendanceTodayPct: 89 },
-  { id: "cmp_hilltop", name: "Hilltop Campus", students: 366, teachers: 19, sections: 12, pendingAdmissions: 3, feeCollectedPct: 95, attendanceTodayPct: 96 },
+  { id: "cmp_main", name: "Main Campus", address: "14-C Gulberg III, Lahore", phone: "+92 42 3571 2200", students: 1284, teachers: 62, sections: 38, pendingAdmissions: 14, feeCollectedPct: 91, attendanceTodayPct: 94 },
+  { id: "cmp_north", name: "North Town Campus", address: "Sector B, North Town, Lahore", phone: "+92 42 3571 2201", students: 742, teachers: 34, sections: 22, pendingAdmissions: 6, feeCollectedPct: 87, attendanceTodayPct: 91 },
+  { id: "cmp_riverside", name: "Riverside Campus", address: "Riverside Road, Lahore", phone: "+92 42 3571 2202", students: 519, teachers: 27, sections: 17, pendingAdmissions: 21, feeCollectedPct: 78, attendanceTodayPct: 89 },
+  { id: "cmp_hilltop", name: "Hilltop Campus", address: "Hilltop Avenue, Lahore", phone: "+92 42 3571 2203", students: 366, teachers: 19, sections: 12, pendingAdmissions: 3, feeCollectedPct: 95, attendanceTodayPct: 96 },
 ];
 
 export const mockTotals = {

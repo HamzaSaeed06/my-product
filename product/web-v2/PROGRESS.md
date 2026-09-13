@@ -1,5 +1,97 @@
 # web-v2 Progress
 
+## 2026-09-14 — Institute & Structure batch complete (Phase B, batch 1 of many)
+
+All 9 concepts in this batch are built on mock data, typecheck/lint clean, all routes
+verified 200:
+
+- **Institute** (`/dashboard/institute`) — true singleton, two independent forms (Profile /
+  Settings) directly on the page, not a Sheet — there's no "row" to tie a Sheet to. Gated by
+  two separate permissions on the real backend (`institute.edit` / `institute.configure`).
+- **Campuses** (`/dashboard/campuses` + `/dashboard/campuses/[campusId]`) — list with
+  Create/Edit (Sheet) + Archive (Alert Dialog). The `[campusId]` hub is genuinely new
+  architecture: a tabbed page combining 4 independently-permissioned resources
+  (Sections/Incharge Scopes/Staff/Fee Structures) on one screen, each tab reusing the exact
+  same columns as its own top-level page (`sectionColumns`, `scopeColumns`), pre-filtered by
+  `campusId` — not a second table shape invented for the hub. Staff and Fee Structures show
+  honest `Empty` states pointing at the People/Finance batches, since those modules don't
+  exist yet. The dashboard overview's campus table and the Needs Attention panel both now
+  link here for real (they were static placeholders through the design-review rounds).
+- **Academic Years** (`/dashboard/academic-years`) — list + Create/Edit (Sheet, edit
+  disabled once `CLOSED`) + Close (Alert Dialog, irreversible). Sessions can overlap by
+  design — surfaced directly in the page copy so it doesn't read as a bug later.
+- **Classes** (`/dashboard/classes`) — list + Create/Edit (Sheet) + Archive (Alert Dialog).
+  Institute-wide catalog, campus-agnostic.
+- **Sections** (`/dashboard/sections`) — list + compound filters (Class/Campus/Academic
+  Year Combobox, defaults to the active year) + Create (Sheet with 3 required Combobox
+  pickers, disabled until all three are set) + Edit (Sheet, class/campus/year shown
+  read-only — immutable after creation per the real backend) + Archive.
+- **Incharge Scopes** (`/dashboard/incharge-scopes`) — the most structurally complex page in
+  this batch: Create (Sheet: Incharge Combobox filtered to `role === "INCHARGE"`,
+  campus/year Combobox, multi-select Class checkboxes, multi-select Section checkboxes
+  narrowed live by the selected classes+campus) + Edit (classes/sections only,
+  user/campus/year read-only) + Revoke (Alert Dialog). The "empty sectionIds means *all*
+  sections, not *no* sections" convention is called out directly in the Sheet's copy, not
+  left as a silent trap.
+- **Delegations** (`/dashboard/delegations`) — genuinely new UI with no old-frontend page to
+  reference (built from the backend contract only, see the research notes this batch
+  started from). Create (Sheet: delegate Combobox excluding Super Admin, role Combobox,
+  campus Combobox, date range, reason) + Revoke (Alert Dialog).
+- **Terminology** (`/dashboard/terminology`) — new page (the old frontend only had 4
+  hardcoded label inputs; the real backend has since moved to a generic
+  `TerminologyOverride[]` keyed by `canonicalKey`). A small fixed table, each row editable
+  via a 2-field Popover (singular/plural label) — matches the quick-edit rule for anything
+  this small. The canonical key itself stays visible in mono type deliberately: it's the
+  actual join key back to permissions/API fields, the one case where showing a raw-looking
+  identifier is operationally correct rather than a violation of the "never show a database
+  ID" rule.
+- **Feature Config** (`/dashboard/feature-config`) — new page, built around the one feature
+  actually wired end-to-end on the real backend (`ATTENDANCE_CHECKIN_METHODS`) rather than a
+  fake generic-editor-for-every-key, since each feature key's value shape genuinely differs.
+  Shows the institute-level policy mode + default, and — only when `CAMPUS_CONTROLLED` — a
+  per-campus override table (Sheet to edit each campus's allowed check-in methods).
+
+**New shared components from this batch**: `ConfirmDialog`
+(`src/components/confirm-dialog.tsx`) — one Alert Dialog wrapper reused for every
+archive/close/revoke action in this batch instead of a near-identical file per module.
+`Checkbox` (shadcn) — installed for the first time, needed for Incharge Scopes'
+class/section multi-select and Feature Config's method multi-select.
+
+**Sidebar** now lists the full Institute & Structure group (`src/components/app-sidebar.tsx`)
+gated by real-shaped permission keys added to the mock viewer's permission set
+(`src/lib/mock/session.ts`) — `feature_config.manage` is a guessed name (Feature Config has
+no old frontend or documented permission string to check against); everything else matches
+names confirmed against the real backend/docs during this batch's research pass.
+
+**Not done in this batch, on purpose**: Assign Principal/Campus Head on the Campus
+Create/Edit sheet (mentioned in `docs/PRODUCT_SPEC.md`'s screen list but not implemented in
+the old frontend either — needs the Users module to exist first, which lands in the People
+batch). No mock-data mutation persists across a page reload anywhere in this batch (same
+convention as Phase A's Student edit/status flows) — every save/archive/revoke shows a real
+toast but doesn't rewrite the underlying mock array; this is a Phase B convention throughout,
+not a bug, since Phase C replaces all of it with real API calls anyway.
+
+**Next**: stop here for review (per the brief's own process rule), then continue with the
+**People** batch (Users, Parents, Teachers, Subjects, Teacher Assignments — Students is
+already done from Phase A).
+
+## Current phase: B (all pages, mock data) — Institute & Structure batch done, awaiting review
+
+**Phase A reviewed and approved 2026-09-14.** All required Phase A deliverables exist:
+sidebar/nav shell, dashboard/overview, list+table (Students), create/edit flow (Edit Student
+Sheet), detail/drill-down (Student detail, rail+tabs). All required interaction patterns
+demonstrated: Popover quick-edit, Sheet medium-form, Alert Dialog destructive-confirm,
+Dropdown Menu row actions, Combobox filters, Data Table pattern, Empty states, Skeleton
+loading. Two design systems exist side by side via the top-right switcher
+(`src/lib/themes.ts`) — new Phase B pages must use semantic tokens (`bg-card`,
+`text-foreground`, `rounded-[var(--card-radius)]`, etc.), never hardcoded colors, so they
+render correctly under both without extra work, and under any theme added after.
+
+Starting Phase B with the **Institute & Structure** batch (per the Section 6 inventory):
+Institute settings, Campuses (+ drill-down), Academic years, Classes, Sections, Incharge
+scopes, Delegations, Terminology overrides, Feature config. Building on mock data, batched,
+stopping for review at the end of this batch per the brief's own process rule.
+
 ## 2026-09-13 — Second design system added: "Ventriloc"
 
 Second pasted design system (exact tokens from a scrape of ventriloc.ca) added as a second
