@@ -213,3 +213,18 @@
     font-weight: 500;
   }
 }
+
+/*
+ * Recharts v3 makes its root <svg> focusable (tabIndex 0, role="application")
+ * for keyboard accessibility, so clicking anywhere in a chart focuses it and
+ * the browser draws its default focus outline around the whole chart. The
+ * shadcn chart component's own `outline-hidden` utility on `.recharts-surface`
+ * doesn't reliably suppress this in every browser; a hard override does.
+ * Keyboard accessibility itself is unaffected — this only removes the *visual*
+ * ring, matching Vercel's own borders-not-shadows-not-rings-on-decorative-
+ * elements convention.
+ */
+.recharts-surface:focus,
+.recharts-surface:focus-visible {
+  outline: none !important;
+}
