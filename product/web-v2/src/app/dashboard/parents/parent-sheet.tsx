@@ -14,28 +14,37 @@ import {
 import { Button } from "@/components/ui/button";
 import { Field, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
+import type { Parent } from "@/lib/mock/parents";
 
-export function CreateParentSheet({ open, onOpenChange }: { open: boolean; onOpenChange: (open: boolean) => void }) {
-  const [fullName, setFullName] = useState("");
-  const [phone, setPhone] = useState("");
-  const [email, setEmail] = useState("");
-  const [address, setAddress] = useState("");
+// Handles both create and edit, same as every other module's Sheet in
+// this build. Linking/unlinking children stays out of this form — that's
+// its own Popover in the table row, unchanged.
+export function ParentSheet({
+  parent,
+  open,
+  onOpenChange,
+}: {
+  parent?: Parent;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+}) {
+  const [fullName, setFullName] = useState(parent?.fullName ?? "");
+  const [phone, setPhone] = useState(parent?.phone ?? "");
+  const [email, setEmail] = useState(parent?.email ?? "");
+  const [address, setAddress] = useState(parent?.address ?? "");
+  const isEdit = !!parent;
 
   function handleSave() {
     onOpenChange(false);
-    toast.success(`${fullName} added. Link their children next.`);
-    setFullName("");
-    setPhone("");
-    setEmail("");
-    setAddress("");
+    toast.success(isEdit ? `${fullName} updated.` : `${fullName} added. Link their children next.`);
   }
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent className="flex flex-col gap-0">
         <SheetHeader>
-          <SheetTitle>New parent / guardian</SheetTitle>
-          <SheetDescription>Link their children afterward from the parent&apos;s card.</SheetDescription>
+          <SheetTitle>{isEdit ? "Edit parent / guardian" : "New parent / guardian"}</SheetTitle>
+          <SheetDescription>Link their children from the table row afterward.</SheetDescription>
         </SheetHeader>
         <div className="flex flex-col gap-4 overflow-y-auto px-4 py-2">
           <Field>
@@ -58,7 +67,7 @@ export function CreateParentSheet({ open, onOpenChange }: { open: boolean; onOpe
         <SheetFooter className="mt-auto flex-row justify-end gap-2 border-t border-border pt-4">
           <SheetClose render={<Button variant="outline" />}>Cancel</SheetClose>
           <Button onClick={handleSave} disabled={!fullName || !phone}>
-            Create
+            {isEdit ? "Save changes" : "Create"}
           </Button>
         </SheetFooter>
       </SheetContent>

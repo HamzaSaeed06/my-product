@@ -4,9 +4,10 @@ import { useState } from "react";
 import { Plus } from "lucide-react";
 import { PageHeader } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
+import { DataTable } from "@/components/data-table";
 import { mockParents } from "@/lib/mock/parents";
-import { ParentCard } from "./parent-card";
-import { CreateParentSheet } from "./create-parent-sheet";
+import { parentColumns } from "./columns";
+import { ParentSheet } from "./parent-sheet";
 
 export default function ParentsPage() {
   const [createOpen, setCreateOpen] = useState(false);
@@ -23,12 +24,13 @@ export default function ParentsPage() {
           </Button>
         }
       />
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        {mockParents.map((parent) => (
-          <ParentCard key={parent.id} parent={parent} />
-        ))}
-      </div>
-      <CreateParentSheet open={createOpen} onOpenChange={setCreateOpen} />
+      <DataTable
+        columns={parentColumns}
+        data={mockParents}
+        emptyTitle="No parents yet"
+        emptyDescription="Add the institute's first parent, then link their children."
+      />
+      <ParentSheet open={createOpen} onOpenChange={setCreateOpen} />
     </div>
   );
 }
