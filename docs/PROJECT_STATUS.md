@@ -2874,6 +2874,88 @@ code/docs themselves.
   permission-gated from (ay)) now correctly shows Create/Edit/Archive for both roles with no code change
   needed there — exactly the point of driving the frontend off real permissions instead of role names.
 
+### 2026-09-13 (ba) — Master-spec audit + DB review, then resolved the real issues in one flow
+
+- User pasted a large master architecture spec (RBAC/authorization + a domain-neutral PostgreSQL design
+  request) and a deployment-model correction (single-tenant: ONE deployment = ONE Institute + campuses, not
+  multi-institution-in-one-DB). Rather than executing the spec's "Phase 1–15 build" verbatim (which its own
+  §0/§54 forbid — it would duplicate a working, ~90%-built architecture), produced three additive docs
+  (existing docs untouched): `docs/SPEC_COMPLIANCE_AUDIT.md` (every spec section → IMPLEMENTED/PARTIAL/
+  MISSING/BLOCKED with file evidence), `docs/IMPLEMENTATION_PLAN.md` (finish-and-harden phases A–F), and
+  `docs/DATABASE_DESIGN_REVIEW.md` (production PG rules applied table-by-table: schema is production-grade —
+  money all `Decimal(12,2)`, UUID keys, deliberate FK onDelete, selective soft-delete, optimistic locking;
+  the one systemic gap is query-driven FK/filter indexing). Confirmed the deployment model already matches
+  (single `Institute` model, no multi-tenant table).
+- Then, on the user's "resolve the issues, one flow" directive, fixed them production-grade with tests:
+  - **C1 (HIGH/security, §19/§50):** `GET /api/v1/sections` and `/teachers` were returning the *whole
+    institute* to a zero-`campusIds` actor (Incharge). Added `getInchargeScopedSectionIds()` (resolves an
+    Incharge's active InchargeScope → concrete section ids, expanding class-level scopes to their sections,
+    mirroring `checkInchargeScope`'s rule); both list handlers now branch unrestricted → campus → INCHARGE →
+    else-nothing (never leak). `listTeachers` also re-keyed off `Role.systemKey` (was the now-editable
+    `name` — Phase-12 drift). 2 new `scope-enforcement.test.ts` cases prove in-scope visible / out-of-scope
+    hidden.
+  - **C2 (MEDIUM, §46):** Homework/Assessments/Class-Diary 500'd for Incharge (`resolveSectionScopeFilter`
+    threw `SECTION_REQUIRED` for a campus-less actor). Fixed at the source: it now returns the Incharge's
+    scoped-sections filter (`{ sectionId: { in } }`), a new `SectionScopeFilter` shape — no frontend picker
+    needed, consistent with Campus Head's campus-wide behavior. New test: Incharge `GET /homework` (no
+    sectionId) → 200, scoped.
+  - **C3 (MEDIUM, §35):** Result lifecycle transitions (submit/review/finalize/publish) had a read-then-
+    write TOCTOU race — refactored to an atomic conditional `updateMany(where: { id, status: from })` (same
+    optimistic pattern as InchargeScope), rejecting a concurrent double-advance with `RESULT_STATE_CONFLICT`.
+    Results suite 14/14. Payment idempotency already existed.
+  - **A3 (DB indexes):** added query-driven `@@index`es to 12 models in `schema.prisma` (skipping redundant
+    ones where a composite unique already covers the prefix — enrollments/attendance), `prisma validate`
+    clean, DB confirmed in sync. **The migration was blocked by the auto-mode classifier (schema change on
+    live Neon) — handed the user the one command to run: `npx prisma migrate dev --name add_query_driven_indexes`.**
+- Verified: backend `tsc --noEmit` clean; unit 25/25; `scope-enforcement` 19/19 (was 16); `results` 14/14.
+- **Deliberately NOT done** (recorded, not hidden): the `.`-vs-`:` permission rename and error-envelope
+  reshape (cosmetic, high blast-radius); marks `Float`→`Decimal` and a timetable-slot DB unique (bundle with
+  the index migration); gateway policy modes (BLOCKED on FeatureConfig); a broader `role.name`→`systemKey`
+  sweep across leaves/teacher-attendance (spawn-worthy follow-up, same drift class as the `listTeachers` fix).
+- Index migration then applied on user authorization: `20260913023829_add_query_driven_indexes` (16
+  indexes), `prisma migrate status` in sync (20 migrations). `prisma generate` hit a benign Windows EPERM
+  (running api dev server holds the query-engine DLL) — harmless (indexes don't change Client types),
+  regenerates on next restart.
+
+### 2026-09-13 (bb) — Phase D: portal (Teacher/Parent/Student) audited, one real gap fixed
+
+- Audited the `/portal` shell the same way the dashboard was audited. Finding: it is **genuinely real and
+  scope-correct** — `/portal` home shows real teacher-assignments / linked children; attendance, timetable,
+  homework branch by portal role (Teacher → own assigned sections; Parent → `ChildSwitcher` over linked
+  children; Student → own `studentId`); results/report-card/fees/complaints/leave all fetch scope-correctly.
+  Role is used only to pick the portal *variant* (a legitimate UI-shape decision, not the role-name drift the
+  dashboard had). Icons already present in `portal-nav`.
+- **One concrete gap fixed:** Report Card was student-only (`if (!user.studentId) return null`) and absent
+  from the Parent nav, though PARENT holds `report_card.view` and spec §44 lists it under the Parent portal.
+  Rebuilt `portal/report-card/page.tsx` to support Parent via `ChildSwitcher` (same pattern as Results) and
+  added Report Card to the Parent nav. `tsc` + `npm run build` clean.
+- Not done: a full per-role *live* portal walkthrough needs Teacher/Parent/Student test users **with profiles
+  + linked data** in the dev DB (the verify-* accounts are staff-only) — offered as a follow-up, not blocking.
+
+### 2026-09-13 (bc) — Portal live-verified per role; deferred DB bundle assessed; role.name→systemKey drift swept
+
+- **Portal live verification:** seeded a coherent demo scenario (`scripts/_seed-portal-demo.ts`, idempotent,
+  kept for the user's own browser pass — Teacher+assignment as class teacher, Student+enrollment+login,
+  Parent+linked child, published homework, attendance, invoice). The Browser pane wouldn't draw this run
+  (Claude's window behind another → screenshots time out), so verified at the data layer with authenticated
+  fetches per role: Teacher → own assignment (200); Parent → own child + child-scoped invoices/results/
+  report-cards/attendance (all 200, **confirms the (bb) report-card fix**); Student → self + attendance +
+  results/report-cards (200), `/invoices` 403 by design (STUDENT lacks `invoice.view`, Fees not in student
+  nav). Demo logins password `Verify123!Pass`.
+- **Deferred DB bundle assessed, mostly a no-op (honest finding, not skipped work):** the timetable section-
+  slot unique (`@@unique([timetableId, dayOfWeek, periodNumber])`) **already exists**; a teacher-slot DB
+  unique isn't cleanly expressible (TimetableEntry has no `academicYearId` column — would need denormalizing
+  it, and the app-level double-book check already guards this). Marks `Float`→`Decimal` **deliberately not
+  done**: it would flip the Prisma Client type from `number` to `Prisma.Decimal` across every marks
+  arithmetic/display site (backend services + report-card snapshot + frontend), a wide breaking ripple for
+  near-zero benefit (Float is exact enough for 2-dp marks). Recorded, not hidden.
+- **`role.name`→`systemKey` drift swept (real latent bug, same class as the (ba) `listTeachers` fix):** an
+  institute renaming the TEACHER role's display label would have silently broken teacher lookups in
+  `leaves/service.ts` (×2), `teacher-attendance/service.ts` (×1), and `teachers/service.ts`
+  (`getTeacherCampusIds` + `getUserCampusIdsForRole`, param renamed to `roleSystemKey`). All switched to
+  `Role.systemKey`. Grep confirms zero `role: { name: ... }` identity checks remain. `tsc` clean; leaves +
+  teacher-attendance + teachers integration suites 19/19.
+
 ### 2026-09-12 (ai) — Phase 11 Phase A (campus-scoping) implementation plan written; docs/archive deleted
 
 - User asked "what's next" after (ah)'s seed change. Sized up Phase A (removing `PRINCIPAL`/`OFFICE` from

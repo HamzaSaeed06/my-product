@@ -1,7 +1,8 @@
 import type { Request, Response } from "express";
 import { z } from "zod";
 import * as teachersService from "./service.js";
-import { getActorProfile } from "../../lib/scope.js";
+import { getActorProfile, assertCampusInScope, isUnrestricted } from "../../lib/scope.js";
+import { getInchargeScopedSectionIds } from "../incharge-scopes/service.js";
 import { HttpError } from "../../middleware/errorHandler.js";
 
 const createSchema = z.object({
@@ -20,8 +21,31 @@ const listQuerySchema = z.object({ campusId: z.string().uuid().optional() });
 export async function listTeachersHandler(req: Request, res: Response): Promise<void> {
   const { campusId } = listQuerySchema.parse(req.query);
   const profile = await getActorProfile(req.user!.id);
-  const campusIdIn = profile.campusIds.length > 0 ? profile.campusIds : campusId ? [campusId] : undefined;
-  res.status(200).json(await teachersService.listTeachers(campusIdIn));
+
+  // SUPER_ADMIN: all teachers, optionally filtered to one campus.
+  if (isUnrestricted(profile)) {
+    res.status(200).json(await teachersService.listTeachers(campusId ? { campusIdIn: [campusId] } : undefined));
+    return;
+  }
+
+  // CAMPUS_HEAD / OFFICE: teachers on their own campus(es). A named campusId
+  // must be one of theirs — previously an arbitrary ?campusId let any
+  // teacher.view holder read another campus's teachers.
+  if (profile.campusIds.length > 0) {
+    if (campusId) assertCampusInScope(profile, campusId);
+    res.status(200).json(await teachersService.listTeachers({ campusIdIn: campusId ? [campusId] : profile.campusIds }));
+    return;
+  }
+
+  // INCHARGE: only teachers assigned to a section their scope covers —
+  // previously fell through to an unfiltered institute-wide list (§19/§50).
+  if (profile.roles.includes("INCHARGE")) {
+    const sectionIdIn = await getInchargeScopedSectionIds(profile.userId);
+    res.status(200).json(await teachersService.listTeachers({ sectionIdIn }));
+    return;
+  }
+
+  res.status(200).json([]);
 }
 
 export async function createTeacherHandler(req: Request, res: Response): Promise<void> {

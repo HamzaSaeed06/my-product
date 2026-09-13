@@ -183,6 +183,7 @@ model UserRole {
   campus Campus? @relation(fields: [campusId], references: [id])
 
   @@unique([userId, roleId, campusId])
+  @@index([campusId])
   @@map("user_roles")
 }
 
@@ -624,6 +625,7 @@ model Section {
   promotionsAsTargetSection Promotion[]
 
   @@unique([classId, campusId, academicYearId, name])
+  @@index([campusId])
   @@map("sections")
 }
 
@@ -987,6 +989,7 @@ model TeacherAssignment {
   academicYear AcademicYear @relation(fields: [academicYearId], references: [id])
 
   @@unique([teacherId, subjectId, sectionId, academicYearId])
+  @@index([sectionId])
   @@map("teacher_assignments")
 }
 
@@ -1351,6 +1354,8 @@ model Assessment {
   teacher      Teacher            @relation(fields: [teacherId], references: [id])
   results      AssessmentResult[]
 
+  @@index([sectionId])
+  @@index([teacherId])
   @@map("assessments")
 }
 
@@ -1476,6 +1481,7 @@ model Result {
   reportCard ReportCard?
 
   @@unique([studentId, examId])
+  @@index([sectionId])
   @@map("results")
 }
 
@@ -1693,6 +1699,9 @@ model Invoice {
   waivers     Waiver[]
   creditsUsed CreditTransaction[] @relation("CreditUsedOnInvoice")
 
+  @@index([studentId])
+  @@index([campusId])
+  @@index([status])
   @@map("invoices")
 }
 
@@ -1744,6 +1753,7 @@ model Payment {
   refunds        Refund[]
   creditsSourced CreditTransaction[] @relation("CreditSourcePayment")
 
+  @@index([studentId])
   @@map("payments")
 }
 
@@ -1767,6 +1777,8 @@ model PaymentAllocation {
   payment Payment @relation(fields: [paymentId], references: [id], onDelete: Cascade)
   invoice Invoice @relation(fields: [invoiceId], references: [id])
 
+  @@index([invoiceId])
+  @@index([paymentId])
   @@map("payment_allocations")
 }
 
@@ -2171,6 +2183,7 @@ model Leave {
   decidedBy   User?    @relation("LeaveDecidedBy", fields: [decidedById], references: [id])
 
   @@index([studentId, fromDate, toDate])
+  @@index([teacherId])
   @@map("leaves")
 }
 
@@ -2216,6 +2229,8 @@ model Complaint {
   assignedTo  User?           @relation("ComplaintAssignedTo", fields: [assignedToId], references: [id])
   notes       ComplaintNote[]
 
+  @@index([campusId])
+  @@index([studentId])
   @@map("complaints")
 }
 

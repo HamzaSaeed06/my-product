@@ -24,6 +24,9 @@ let teacherUserId: string;
 let teacherId: string;
 let teacherClient: Awaited<ReturnType<typeof loginAsTestUser>>;
 
+let teacherOutUserId: string; // assigned only to sectionOut (outside Incharge scope)
+let teacherOutId: string;
+
 let parentUserId: string;
 let parentId: string;
 let parentClient: Awaited<ReturnType<typeof loginAsTestUser>>;
@@ -88,6 +91,21 @@ describe("Phase 7 scope enforcement (real database)", () => {
     });
     teacherClient = await loginAsTestUser(teacherUser.email, PASSWORD);
 
+    // A second teacher — assigned only to sectionOut (outside the Incharge's
+    // scoped class), so we can prove the Incharge's teacher list excludes them.
+    const teacherOutUser = await createTestUserWithRole({
+      email: `scope-teacher-out-${suffix}@example.test`,
+      password: PASSWORD,
+      fullName: "Scope Teacher Out",
+      roleName: "TEACHER",
+    });
+    teacherOutUserId = teacherOutUser.id;
+    const teacherOut = await prisma.teacher.create({ data: { userId: teacherOutUserId } });
+    teacherOutId = teacherOut.id;
+    await prisma.teacherAssignment.create({
+      data: { teacherId: teacherOutId, subjectId, classId: classOutId, sectionId: sectionOutId, academicYearId },
+    });
+
     // Parent — linked to studentIn only.
     const parentUser = await createTestUserWithRole({
       email: `scope-parent-${suffix}@example.test`,
@@ -134,6 +152,9 @@ describe("Phase 7 scope enforcement (real database)", () => {
     if (teacherId) await prisma.teacherAssignment.deleteMany({ where: { teacherId } }).catch(() => {});
     if (teacherId) await prisma.teacher.deleteMany({ where: { id: teacherId } }).catch(() => {});
     if (teacherUserId) await prisma.user.deleteMany({ where: { id: teacherUserId } }).catch(() => {});
+    if (teacherOutId) await prisma.teacherAssignment.deleteMany({ where: { teacherId: teacherOutId } }).catch(() => {});
+    if (teacherOutId) await prisma.teacher.deleteMany({ where: { id: teacherOutId } }).catch(() => {});
+    if (teacherOutUserId) await prisma.user.deleteMany({ where: { id: teacherOutUserId } }).catch(() => {});
     if (parentId) await prisma.studentParent.deleteMany({ where: { parentId } }).catch(() => {});
     if (parentId) await prisma.parent.deleteMany({ where: { id: parentId } }).catch(() => {});
     if (parentUserId) await prisma.user.deleteMany({ where: { id: parentUserId } }).catch(() => {});
@@ -264,6 +285,50 @@ describe("Phase 7 scope enforcement (real database)", () => {
       const res = await inchargeClient.get(`/api/v1/homework?sectionId=${sectionOutId}`);
       expect(res.status).toBe(403);
       expect(res.body.error).toBe("OUT_OF_SCOPE");
+    });
+
+    // Regression: GET /sections previously returned every section in the
+    // institute for an Incharge (campusIds empty → unfiltered). Now narrowed
+    // to their scoped sections only.
+    it("lists only sections within their scope (not the whole institute)", async () => {
+      const res = await inchargeClient.get(`/api/v1/sections`);
+      expect(res.status).toBe(200);
+      const ids = res.body.map((s: { id: string }) => s.id);
+      expect(ids).toContain(sectionInId);
+      expect(ids).not.toContain(sectionOutId);
+    });
+
+    // Regression: GET /teachers previously returned every teacher in the
+    // institute for an Incharge. Now narrowed to teachers assigned to a
+    // section their scope covers.
+    it("lists only teachers assigned within their scope (not the whole institute)", async () => {
+      const res = await inchargeClient.get(`/api/v1/teachers`);
+      expect(res.status).toBe(200);
+      const ids = res.body.map((t: { id: string }) => t.id);
+      expect(ids).toContain(teacherId);
+      expect(ids).not.toContain(teacherOutId);
+    });
+
+    // Regression: GET /homework with no sectionId previously 500'd for an
+    // Incharge (SECTION_REQUIRED, campusIds empty). Now returns homework
+    // across their scoped sections, and only those.
+    it("lists homework across their scope without a sectionId (no 500), scoped correctly", async () => {
+      const [hwIn, hwOut] = await Promise.all([
+        prisma.homework.create({
+          data: { subjectId, sectionId: sectionInId, classId: classInId, teacherId, title: `HW In ${suffix}`, dueDate: new Date("2026-09-20") },
+        }),
+        prisma.homework.create({
+          data: { subjectId, sectionId: sectionOutId, classId: classOutId, teacherId: teacherOutId, title: `HW Out ${suffix}`, dueDate: new Date("2026-09-20") },
+        }),
+      ]);
+
+      const res = await inchargeClient.get(`/api/v1/homework`);
+      expect(res.status).toBe(200);
+      const ids = res.body.map((h: { id: string }) => h.id);
+      expect(ids).toContain(hwIn.id);
+      expect(ids).not.toContain(hwOut.id);
+
+      await prisma.homework.deleteMany({ where: { id: { in: [hwIn.id, hwOut.id] } } }).catch(() => {});
     });
   });
 });

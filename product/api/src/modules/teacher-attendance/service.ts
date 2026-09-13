@@ -40,7 +40,7 @@ export async function listTeacherAttendance(filter: { teacherId?: string; date?:
       // joined class/section — see
       // docs/PHASE_11A_CAMPUS_SCOPING_IMPLEMENTATION_PLAN.md Group 3.
       teacher: filter.campusIdIn
-        ? { user: { userRoles: { some: { role: { name: "TEACHER" }, campusId: { in: filter.campusIdIn } } } } }
+        ? { user: { userRoles: { some: { role: { systemKey: "TEACHER" }, campusId: { in: filter.campusIdIn } } } } }
         : undefined,
     },
     include: { teacher: { include: { user: { select: { fullName: true } } } } },

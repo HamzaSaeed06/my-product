@@ -74,7 +74,7 @@ export async function getHomeworkSectionId(id: string): Promise<string> {
 export async function listHomework(filter: {
   subjectId?: string;
   classId?: string;
-  scope: { sectionId?: string } | { section: { campusId: { in: string[] } } };
+  scope: { sectionId?: string } | { sectionId: { in: string[] } } | { section: { campusId: { in: string[] } } };
 }) {
   const { scope, ...rest } = filter;
   return prisma.homework.findMany({ where: { ...rest, ...scope, archivedAt: null }, include: include(), orderBy: { dueDate: "asc" } });

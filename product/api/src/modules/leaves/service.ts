@@ -36,7 +36,7 @@ export async function getLeaveCampusId(id: string): Promise<string | null> {
   if (leave.subjectType === "TEACHER" && leave.teacherId) {
     const teacher = await prisma.teacher.findUnique({
       where: { id: leave.teacherId },
-      include: { user: { include: { userRoles: { where: { role: { name: "TEACHER" } } } } } },
+      include: { user: { include: { userRoles: { where: { role: { systemKey: "TEACHER" } } } } } },
     });
     return teacher?.user.userRoles[0]?.campusId ?? null;
   }
@@ -70,7 +70,7 @@ export async function listLeaves(filter: {
         ? {
             OR: [
               { subjectType: "STUDENT", student: { enrollments: { some: { status: "ACTIVE", section: { campusId: { in: filter.campusIdIn } } } } } },
-              { subjectType: "TEACHER", teacher: { user: { userRoles: { some: { role: { name: "TEACHER" }, campusId: { in: filter.campusIdIn } } } } } },
+              { subjectType: "TEACHER", teacher: { user: { userRoles: { some: { role: { systemKey: "TEACHER" }, campusId: { in: filter.campusIdIn } } } } } },
             ],
           }
         : { studentId: studentIdFilter }),

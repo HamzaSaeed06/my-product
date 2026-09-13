@@ -29,6 +29,7 @@ const NAV_BY_ROLE = {
     { href: "/portal/timetable", label: "Timetable", icon: CalendarDays },
     { href: "/portal/homework", label: "Homework", icon: BookOpen },
     { href: "/portal/results", label: "Results", icon: Award },
+    { href: "/portal/report-card", label: "Report Card", icon: FileText },
     { href: "/portal/fees", label: "Fees", icon: Wallet },
     { href: "/portal/leave", label: "Leave", icon: Plane },
     { href: "/portal/complaints", label: "Complaints", icon: MessageSquare },

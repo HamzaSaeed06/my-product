@@ -1,5 +1,6 @@
 import { getCurrentUser } from "@/lib/session";
 import { apiRequest } from "@/lib/apiClient";
+import { ChildSwitcher } from "@/components/child-switcher";
 
 interface ReportCardSnapshot {
   studentName: string;
@@ -17,15 +18,44 @@ interface ReportCard {
   snapshot: ReportCardSnapshot;
 }
 
-export default async function PortalReportCardPage() {
-  const user = await getCurrentUser();
-  if (!user?.studentId) return null;
+interface Student {
+  id: string;
+  fullName: string;
+}
 
-  const reportCards = await apiRequest<ReportCard[]>(`/api/v1/report-cards?studentId=${user.studentId}`);
+// Student sees their own report cards; Parent sees a linked child's (with a
+// child switcher), same shape as the Results page. Parent holds
+// report_card.view and the backend scopes /report-cards?studentId to a
+// linked child via resolveStudentScopeFilter — spec §44 lists report cards
+// under the Parent portal.
+export default async function PortalReportCardPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ studentId?: string }>;
+}) {
+  const user = await getCurrentUser();
+  if (!user) return null;
+  const { studentId: requestedStudentId } = await searchParams;
+
+  const isParent = user.roles.includes("PARENT");
+  const students = isParent ? await apiRequest<Student[]>("/api/v1/students") : [];
+  const studentId = user.roles.includes("STUDENT") ? user.studentId! : (requestedStudentId ?? students[0]?.id);
+
+  if (!studentId) {
+    return (
+      <div>
+        <h1 className="text-lg font-semibold text-foreground">Report Card</h1>
+        <p className="mt-4 text-sm text-muted-foreground">No children linked to your account yet.</p>
+      </div>
+    );
+  }
+
+  const reportCards = await apiRequest<ReportCard[]>(`/api/v1/report-cards?studentId=${studentId}`);
 
   return (
     <div>
       <h1 className="text-lg font-semibold text-foreground">Report Card</h1>
+      {isParent ? <ChildSwitcher students={students} selectedId={studentId} basePath="/portal/report-card" /> : null}
       {reportCards.length === 0 ? (
         <p className="mt-4 text-sm text-muted-foreground">No report cards generated yet.</p>
       ) : (

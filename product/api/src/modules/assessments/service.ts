@@ -49,7 +49,7 @@ export async function createAssessment(
 export async function listAssessments(filter: {
   subjectId?: string;
   academicYearId?: string;
-  scope: { sectionId?: string } | { section: { campusId: { in: string[] } } };
+  scope: { sectionId?: string } | { sectionId: { in: string[] } } | { section: { campusId: { in: string[] } } };
 }) {
   const { scope, ...rest } = filter;
   return prisma.assessment.findMany({ where: { ...rest, ...scope, archivedAt: null }, include: include(), orderBy: { assessmentDate: "desc" } });

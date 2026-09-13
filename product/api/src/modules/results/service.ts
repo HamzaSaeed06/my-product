@@ -1,3 +1,4 @@
+import type { Prisma, ResultStatus } from "@prisma/client";
 import { prisma } from "../../lib/prisma.js";
 import { writeAuditLog } from "../../lib/audit.js";
 import { HttpError } from "../../middleware/errorHandler.js";
@@ -116,64 +117,52 @@ function assertTransition(current: string, expected: string) {
   }
 }
 
-export async function submitResult(id: string, actorId: string) {
+// Advances a Result through its lifecycle with an ATOMIC, conditional
+// update. The pre-check (findUnique + assertTransition) gives a friendly
+// error; the updateMany's `where: { id, status: from }` is what actually
+// closes the race — if a concurrent request already advanced the row, the
+// conditional update matches 0 rows and we reject instead of double-applying
+// (spec §35: "two users approve the same result"). Same optimistic-
+// concurrency shape as InchargeScope's version guard, no transaction needed.
+async function advanceResultStatus(
+  id: string,
+  from: ResultStatus,
+  to: ResultStatus,
+  extraData: Prisma.ResultUncheckedUpdateManyInput,
+  action: string,
+  actorId: string
+) {
   const result = await prisma.result.findUnique({ where: { id } });
   if (!result) throw new HttpError(404, "RESULT_NOT_FOUND", "Result not found");
-  assertTransition(result.status, "DRAFT");
+  assertTransition(result.status, from);
 
-  const updated = await prisma.result.update({ where: { id }, data: { status: "SUBMITTED", submittedAt: new Date() }, include: include() });
+  const { count } = await prisma.result.updateMany({
+    where: { id, status: from },
+    data: { status: to, ...extraData },
+  });
+  if (count === 0) {
+    throw new HttpError(409, "RESULT_STATE_CONFLICT", "This result was just changed by someone else — refresh and retry");
+  }
 
-  await writeAuditLog({ actorId, action: "SUBMIT", resource: "Result", recordId: id, newValue: { status: "SUBMITTED" } });
-
+  const updated = await prisma.result.findUniqueOrThrow({ where: { id }, include: include() });
+  await writeAuditLog({ actorId, action, resource: "Result", recordId: id, newValue: { status: to } });
   return updated;
+}
+
+export async function submitResult(id: string, actorId: string) {
+  return advanceResultStatus(id, "DRAFT", "SUBMITTED", { submittedAt: new Date() }, "SUBMIT", actorId);
 }
 
 export async function reviewResult(id: string, actorId: string) {
-  const result = await prisma.result.findUnique({ where: { id } });
-  if (!result) throw new HttpError(404, "RESULT_NOT_FOUND", "Result not found");
-  assertTransition(result.status, "SUBMITTED");
-
-  const updated = await prisma.result.update({
-    where: { id },
-    data: { status: "REVIEWED", reviewedById: actorId, reviewedAt: new Date() },
-    include: include(),
-  });
-
-  await writeAuditLog({ actorId, action: "REVIEW", resource: "Result", recordId: id, newValue: { status: "REVIEWED" } });
-
-  return updated;
+  return advanceResultStatus(id, "SUBMITTED", "REVIEWED", { reviewedById: actorId, reviewedAt: new Date() }, "REVIEW", actorId);
 }
 
 export async function finalizeResult(id: string, actorId: string) {
-  const result = await prisma.result.findUnique({ where: { id } });
-  if (!result) throw new HttpError(404, "RESULT_NOT_FOUND", "Result not found");
-  assertTransition(result.status, "REVIEWED");
-
-  const updated = await prisma.result.update({
-    where: { id },
-    data: { status: "FINALIZED", finalizedById: actorId, finalizedAt: new Date() },
-    include: include(),
-  });
-
-  await writeAuditLog({ actorId, action: "FINALIZE", resource: "Result", recordId: id, newValue: { status: "FINALIZED" } });
-
-  return updated;
+  return advanceResultStatus(id, "REVIEWED", "FINALIZED", { finalizedById: actorId, finalizedAt: new Date() }, "FINALIZE", actorId);
 }
 
 export async function publishResult(id: string, actorId: string) {
-  const result = await prisma.result.findUnique({ where: { id } });
-  if (!result) throw new HttpError(404, "RESULT_NOT_FOUND", "Result not found");
-  assertTransition(result.status, "FINALIZED");
-
-  const updated = await prisma.result.update({
-    where: { id },
-    data: { status: "PUBLISHED", publishedById: actorId, publishedAt: new Date() },
-    include: include(),
-  });
-
-  await writeAuditLog({ actorId, action: "PUBLISH", resource: "Result", recordId: id, newValue: { status: "PUBLISHED" } });
-
-  return updated;
+  return advanceResultStatus(id, "FINALIZED", "PUBLISHED", { publishedById: actorId, publishedAt: new Date() }, "PUBLISH", actorId);
 }
 
 export async function requestResultCorrection(

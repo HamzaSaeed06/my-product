@@ -1,6 +1,6 @@
 import { prisma } from "./prisma.js";
 import { HttpError } from "../middleware/errorHandler.js";
-import { checkInchargeScope } from "../modules/incharge-scopes/service.js";
+import { checkInchargeScope, getInchargeScopedSectionIds } from "../modules/incharge-scopes/service.js";
 import { getContextActiveDelegations } from "./requestContext.js";
 
 // Phase 7's data-scoping layer. A permission grant (seed.ts's
@@ -272,7 +272,10 @@ export async function assertSectionQueryInScope(profile: ActorProfile, sectionId
 // permission check silently falling through to an unfiltered query.
 // Spread the result into the model's `where` alongside its other filters
 // (the model must have a `section` relation for the campus-wide branch).
-export type SectionScopeFilter = { sectionId?: string } | { section: { campusId: { in: string[] } } };
+export type SectionScopeFilter =
+  | { sectionId?: string }
+  | { sectionId: { in: string[] } }
+  | { section: { campusId: { in: string[] } } };
 
 export async function resolveSectionScopeFilter(
   profile: ActorProfile,
@@ -287,6 +290,16 @@ export async function resolveSectionScopeFilter(
 
   if (profile.campusIds.length > 0) {
     return { section: { campusId: { in: profile.campusIds } } };
+  }
+
+  // INCHARGE has no campusIds — "everything across my scope" IS well-defined
+  // for them (unlike a bare Teacher): the union of the sections their active
+  // InchargeScope covers. Previously this fell through to SECTION_REQUIRED,
+  // which 500'd the Homework/Assessments pages for an Incharge who (rightly)
+  // holds homework.view/assessment.view but has no single section to name.
+  // An empty scope → `sectionId IN []` → nothing, never everything.
+  if (profile.roles.includes("INCHARGE")) {
+    return { sectionId: { in: await getInchargeScopedSectionIds(profile.userId) } };
   }
 
   throw new HttpError(400, "SECTION_REQUIRED", "sectionId is required for your role");

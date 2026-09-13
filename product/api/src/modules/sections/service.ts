@@ -7,9 +7,13 @@ export async function listSections(filter: {
   campusId?: string;
   academicYearId?: string;
   campusIdIn?: string[];
+  // Explicit section-id allow-list (Incharge scope). An empty array means
+  // "this actor oversees no sections" → returns nothing, never everything.
+  sectionIdIn?: string[];
 }) {
   return prisma.section.findMany({
     where: {
+      id: filter.sectionIdIn ? { in: filter.sectionIdIn } : undefined,
       classId: filter.classId,
       campusId: filter.campusIdIn ? { in: filter.campusIdIn } : filter.campusId,
       academicYearId: filter.academicYearId,

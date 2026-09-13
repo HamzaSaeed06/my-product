@@ -3,11 +3,22 @@ import { writeAuditLog } from "../../lib/audit.js";
 import { HttpError } from "../../middleware/errorHandler.js";
 import { assertStaffLimit } from "../../lib/licenseLimits.js";
 
-export async function listTeachers(campusIdIn?: string[]) {
+// Scope-filtered teacher list. `campusIdIn` narrows to teachers whose own
+// TEACHER role sits at one of those campuses (CAMPUS_HEAD/OFFICE); `sectionIdIn`
+// narrows to teachers with an active assignment in one of those sections
+// (INCHARGE — their scope is sections, not a campus). Passing neither returns
+// all teachers (SUPER_ADMIN only). An empty `sectionIdIn` returns nothing,
+// never everything. Keyed off Role.systemKey (Phase 12), not the now-editable
+// display name.
+export async function listTeachers(scope?: { campusIdIn?: string[]; sectionIdIn?: string[] }) {
+  let where: import("@prisma/client").Prisma.TeacherWhereInput | undefined;
+  if (scope?.sectionIdIn) {
+    where = { assignments: { some: { sectionId: { in: scope.sectionIdIn }, archivedAt: null } } };
+  } else if (scope?.campusIdIn) {
+    where = { user: { userRoles: { some: { role: { systemKey: "TEACHER" }, campusId: { in: scope.campusIdIn } } } } };
+  }
   return prisma.teacher.findMany({
-    where: campusIdIn
-      ? { user: { userRoles: { some: { role: { name: "TEACHER" }, campusId: { in: campusIdIn } } } } }
-      : undefined,
+    where,
     include: { user: { select: { id: true, fullName: true, email: true } } },
     orderBy: { createdAt: "desc" },
   });
@@ -19,17 +30,18 @@ export async function listTeachers(campusIdIn?: string[]) {
 export async function getTeacherCampusIds(id: string): Promise<string[]> {
   const teacher = await prisma.teacher.findUnique({
     where: { id },
-    include: { user: { include: { userRoles: { where: { role: { name: "TEACHER" } } } } } },
+    include: { user: { include: { userRoles: { where: { role: { systemKey: "TEACHER" } } } } } },
   });
   if (!teacher) throw new HttpError(404, "TEACHER_NOT_FOUND", "Teacher not found");
   return teacher.user.userRoles.map((ur) => ur.campusId).filter((id): id is string => !!id);
 }
 
 // Same idea, but keyed by userId — used before a Teacher profile exists
-// yet (createTeacherHandler's scope check).
-export async function getUserCampusIdsForRole(userId: string, roleName: string): Promise<string[]> {
+// yet (createTeacherHandler's scope check). Keyed off Role.systemKey (the
+// stable identity), not the now-editable display name.
+export async function getUserCampusIdsForRole(userId: string, roleSystemKey: string): Promise<string[]> {
   const userRoles = await prisma.userRole.findMany({
-    where: { userId, role: { name: roleName } },
+    where: { userId, role: { systemKey: roleSystemKey } },
     select: { campusId: true },
   });
   return userRoles.map((ur) => ur.campusId).filter((id): id is string => !!id);

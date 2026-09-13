@@ -258,6 +258,56 @@ export async function findInchargeUserIdsForSection(sectionId: string): Promise<
     .map((scope) => scope.userId);
 }
 
+// Resolves an Incharge's *current* scope into the concrete set of section
+// ids they oversee — the list-filter counterpart to checkInchargeScope's
+// single-section verify. Used by scope-filtered list endpoints (sections,
+// teachers, ...) so an Incharge (who has no campusIds — their scope is
+// InchargeScope rows, not a campus role) is narrowed to exactly their
+// assigned sections instead of falling through to "list the whole
+// institute". A scope that lists explicit sections narrows to those; a
+// scope with only classes (no explicit sections) covers every section of
+// those classes at the scope's campus+year — mirroring checkInchargeScope's
+// own rule exactly. Returns [] when the actor has no active scope, which
+// callers apply as `id IN ([])` → nothing, never "everything".
+export async function getInchargeScopedSectionIds(userId: string): Promise<string[]> {
+  const now = new Date();
+  const scopes = await prisma.inchargeScope.findMany({
+    where: {
+      userId,
+      revokedAt: null,
+      effectiveFrom: { lte: now },
+      OR: [{ effectiveTo: null }, { effectiveTo: { gte: now } }],
+    },
+    include: include(),
+  });
+  if (scopes.length === 0) return [];
+
+  const sectionIds = new Set<string>();
+  const classLevelClauses: { campusId: string; academicYearId: string; classId: { in: string[] } }[] = [];
+
+  for (const scope of scopes) {
+    if (scope.sections.length > 0) {
+      for (const s of scope.sections) sectionIds.add(s.sectionId);
+    } else if (scope.classes.length > 0) {
+      classLevelClauses.push({
+        campusId: scope.campusId,
+        academicYearId: scope.academicYearId,
+        classId: { in: scope.classes.map((c) => c.classId) },
+      });
+    }
+  }
+
+  if (classLevelClauses.length > 0) {
+    const sections = await prisma.section.findMany({
+      where: { OR: classLevelClauses },
+      select: { id: true },
+    });
+    for (const s of sections) sectionIds.add(s.id);
+  }
+
+  return [...sectionIds];
+}
+
 export async function checkInchargeScope(params: {
   userId: string;
   campusId: string;
