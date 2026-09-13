@@ -27,26 +27,31 @@ not a generic AI-generated admin panel.
 
 ## Brand Personality
 
-Three words: **institutional, dense, unhurried-under-load** — it looks like a ledger a
-professional trusts, not a startup's marketing site wearing an admin skin. Named references
-already established for this codebase (`docs/PRODUCT_SPEC.md` Section 9): **Stripe, Linear,
-Vercel, shadcn/ui** — specifically their restraint (no decoration competing with data),
-their confident use of borders/hairlines over shadows, and their willingness to let dense
-information sit dense rather than padding it out for a "clean first impression." Emotional
-goal: staff should feel the tool is fast and won't lose their place, not that it's exciting.
+**Revised 2026-09-13 on explicit user direction: follow Vercel's actual Geist design system
+specifically, not a generic composite of the four named references.** Three words:
+**neutral, precise, restrained** — Vercel's dashboard/settings UI is the concrete target,
+not an abstraction of it: true monochrome surfaces (zero-chroma black/white/gray, no tinted
+"brand" primary), Geist Sans/Mono, one saturated color reserved for the interaction focus
+ring, small dot indicators instead of colored badge fills for status. The other three named
+references (`docs/PRODUCT_SPEC.md` Section 9: Stripe, Linear, shadcn/ui) remain compatible
+— they share the same restraint and borders-over-shadows instinct — but Vercel's system is
+now the literal target being matched, not one voice among four. Emotional goal: staff should
+feel the tool is fast, precise, and won't lose their place, not that it's exciting.
 
 ## Anti-references
 
-Explicitly rejected (see `product/web-v2/DESIGN_SYSTEM.md` for the full list, carried over
-from the original rebuild brief): the "generic AI admin panel" family — identical
-soft-shadow rounded cards everywhere as the only surface language; one accent color reused
-for both brand and success; ALL-CAPS tracked-out eyebrow labels above every section; a single
-border-radius applied regardless of element role; gradient washes as decoration; a plain
-`<Select>` used for lists that can run into the hundreds; a Dialog reached for by default
-regardless of whether the interaction is simple or complex (the single biggest thing the old
-`product/web` frontend got wrong, and the reason this rebuild exists). Also explicitly not:
-colorful/childish/over-designed templates (`docs/PRODUCT_SPEC.md` Section 9), and — per this
-skill's own house rules — the cream/sand/beige "AI default" body background family.
+Explicitly rejected (see `product/web-v2/DESIGN_SYSTEM.md` for the full list): the "generic
+AI admin panel" family — identical soft-shadow rounded cards everywhere as the only surface
+language; **any tinted/colored primary color, including this project's own first attempt at
+one** (a blue-slate "ink" — corrected once the user flagged that a single retouched color
+wasn't the ask); a saturated accent used as a background fill instead of a small dot
+indicator; ALL-CAPS tracked-out eyebrow labels above every section; a single border-radius
+applied regardless of element role; gradient washes as decoration; a plain `<Select>` used
+for lists that can run into the hundreds; a Dialog reached for by default regardless of
+whether the interaction is simple or complex (the single biggest thing the old `product/web`
+frontend got wrong, and the reason this rebuild exists). Also explicitly not: colorful/
+childish/over-designed templates (`docs/PRODUCT_SPEC.md` Section 9), and — per this skill's
+own house rules — the cream/sand/beige "AI default" body background family.
 
 ## Design Principles
 

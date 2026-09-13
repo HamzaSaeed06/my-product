@@ -1,5 +1,35 @@
 # web-v2 Progress
 
+## 2026-09-13 — Vercel/Geist system pivot (still Phase A)
+
+User feedback on the first design-rigor pass: it still "tasted the same" — a color/font swap
+isn't a real system, and the component layout/positioning read as a reskin of `product/web`,
+not a distinct architecture. Explicit direction: follow **Vercel's actual Geist design
+system**, specifically, not an invented palette. This is a genuine token-level rewrite, not
+another retouch:
+
+- **True monochrome palette**: every neutral token (background, surface, border, muted text)
+  is now zero-chroma oklch — no blue-slate "ink," no warm paper tint. Primary is near-black.
+- **One saturated color, one job**: `--ring` is now a vivid geist blue used only for the
+  keyboard-focus ring — Vercel's own signature move against an otherwise grayscale UI.
+- **Status Dot replaces colored badges**: `src/components/status-dot.tsx` — a small colored
+  dot + plain text, matching Vercel's deployment-status convention. Applied to student
+  status, fee status (table + filter), and campus fee-collection health. Colored badge
+  pill fills are gone from the demo entirely.
+- **Stat Strip lost its icons**: label + figure only, no icon column — matches how Vercel's
+  own usage/summary rows are built (plain, not icon-decorated).
+- **New `PageHeader` component** (`src/components/page-header.tsx`): every page now opens
+  with the identical slot (title, description, right-aligned actions, hairline bottom
+  border) instead of each page hand-rolling its own `<h1>`/`<p>` block — this is the
+  concrete fix for "positioning/consistency isn't there across pages."
+- `DESIGN_SYSTEM.md`, `PRODUCT.md`, `DESIGN.md` all rewritten to describe this system as the
+  actual target (Vercel's Geist system specifically), not as one of several loose
+  inspirations. Read `DESIGN.md`'s Overview section for the full named-rules version.
+
+Sidebar's active-nav-item style needed no change — it already used a light neutral fill
+(`sidebar-accent`) rather than a solid color block, which turned out to already match
+Vercel's own settings-sidebar convention once the underlying tokens went monochrome.
+
 ## 2026-09-13 — Design-rigor revision pass (still Phase A)
 
 Ran the `impeccable` skill against the Phase A demo per user feedback. Wrote

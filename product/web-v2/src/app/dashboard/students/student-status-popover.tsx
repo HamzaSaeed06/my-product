@@ -2,15 +2,22 @@
 
 import { useState } from "react";
 import { toast } from "sonner";
-import { Badge } from "@/components/ui/badge";
+import { ChevronDown } from "lucide-react";
+import { StatusDot, type StatusTone } from "@/components/status-dot";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Button } from "@/components/ui/button";
 import type { Student, StudentStatus } from "@/lib/mock/students";
 
-const STATUS_VARIANT: Record<StudentStatus, "default" | "secondary" | "outline"> = {
-  ACTIVE: "default",
-  INACTIVE: "outline",
-  GRADUATED: "secondary",
+const STATUS_TONE: Record<StudentStatus, StatusTone> = {
+  ACTIVE: "success",
+  INACTIVE: "neutral",
+  GRADUATED: "neutral",
+};
+
+const STATUS_LABEL: Record<StudentStatus, string> = {
+  ACTIVE: "Active",
+  INACTIVE: "Inactive",
+  GRADUATED: "Graduated",
 };
 
 const OPTIONS: StudentStatus[] = ["ACTIVE", "INACTIVE", "GRADUATED"];
@@ -23,24 +30,27 @@ export function StudentStatusPopover({ student }: { student: Student }) {
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
-      <PopoverTrigger render={<button type="button" className="cursor-pointer rounded outline-offset-2" />}>
-        <Badge variant={STATUS_VARIANT[status]}>{status}</Badge>
+      <PopoverTrigger
+        render={<button type="button" className="group flex items-center gap-1 rounded outline-offset-2" />}
+      >
+        <StatusDot tone={STATUS_TONE[status]}>{STATUS_LABEL[status]}</StatusDot>
+        <ChevronDown className="size-3 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100" />
       </PopoverTrigger>
-      <PopoverContent className="w-48 p-2" align="start">
+      <PopoverContent className="w-44 p-1" align="start">
         <div className="flex flex-col gap-0.5">
           {OPTIONS.map((option) => (
             <Button
               key={option}
               variant={option === status ? "secondary" : "ghost"}
               size="sm"
-              className="justify-start"
+              className="justify-start gap-1.5 font-normal"
               onClick={() => {
                 setStatus(option);
                 setOpen(false);
                 toast.success(`${student.fullName}'s status set to ${option.toLowerCase()}.`);
               }}
             >
-              {option}
+              <StatusDot tone={STATUS_TONE[option]}>{STATUS_LABEL[option]}</StatusDot>
             </Button>
           ))}
         </div>

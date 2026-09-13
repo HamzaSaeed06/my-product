@@ -1,27 +1,25 @@
-import { ArrowDownRight, ArrowUpRight, type LucideIcon } from "lucide-react";
+import { ArrowDownRight, ArrowUpRight } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 export interface StatEntry {
   label: string;
   value: string | number;
-  icon: LucideIcon;
   deltaPercent?: number | null;
   tone?: "neutral" | "signal";
 }
 
 // A single bordered strip divided by hairlines, not four identical
-// drop-shadow cards — reads as one ledger header ("here are today's
-// figures, side by side") rather than a repeated SaaS KPI-card template.
-// No colored border stripes: tone is carried by the number/icon color only.
+// drop-shadow icon-cards — reads as one ledger header ("here are today's
+// figures, side by side") the way Vercel's own usage/summary rows do: plain
+// label, plain number, no icon competing with the figure for attention.
 export function StatStrip({ entries }: { entries: StatEntry[] }) {
   return (
     <div className="grid grid-cols-2 divide-y divide-border rounded-lg border border-border bg-card sm:grid-cols-4 sm:divide-x sm:divide-y-0">
       {entries.map((entry) => (
         <div key={entry.label} className="flex flex-col gap-1.5 p-4">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-medium text-muted-foreground">{entry.label}</span>
-            <entry.icon className={cn("size-4", entry.tone === "signal" ? "text-signal" : "text-muted-foreground")} />
-          </div>
+          <span className={cn("text-xs font-medium", entry.tone === "signal" ? "text-signal-foreground" : "text-muted-foreground")}>
+            {entry.label}
+          </span>
           <div className="flex items-baseline gap-2">
             <span className="font-mono text-2xl font-semibold tabular-nums text-foreground">{entry.value}</span>
             {entry.deltaPercent != null ? (

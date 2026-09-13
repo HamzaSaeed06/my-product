@@ -8,7 +8,7 @@ import {
   BreadcrumbPage,
   BreadcrumbSeparator,
 } from "@/components/ui/breadcrumb";
-import { Badge } from "@/components/ui/badge";
+import { StatusDot } from "@/components/status-dot";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -52,7 +52,9 @@ export default async function StudentDetailPage({ params }: PageProps<"/dashboar
         <div className="flex flex-col gap-1">
           <div className="flex items-center gap-2">
             <h1 className="text-xl font-semibold text-foreground">{student.fullName}</h1>
-            <Badge variant={student.status === "ACTIVE" ? "default" : "outline"}>{student.status}</Badge>
+            <StatusDot tone={student.status === "ACTIVE" ? "success" : "neutral"}>
+              {student.status === "ACTIVE" ? "Active" : student.status === "INACTIVE" ? "Inactive" : "Graduated"}
+            </StatusDot>
           </div>
           <p className="font-mono text-sm text-muted-foreground">
             {student.admissionNo} &middot; {student.className} - {student.section} &middot; {student.campusName}

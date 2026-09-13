@@ -3,7 +3,7 @@
 import type { ColumnDef } from "@tanstack/react-table";
 import { ArrowUpDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
+import { StatusDot, type StatusTone } from "@/components/status-dot";
 import type { Student } from "@/lib/mock/students";
 import { StudentRowActions } from "./student-row-actions";
 import { StudentStatusPopover } from "./student-status-popover";
@@ -24,10 +24,16 @@ function sortableHeader(label: string) {
   };
 }
 
-const FEE_STATUS_CLASS: Record<Student["feeStatus"], string> = {
-  PAID: "bg-success/10 text-success border-success/30",
-  DUE: "bg-signal/10 text-signal-foreground border-signal/30",
-  OVERDUE: "bg-destructive/10 text-destructive border-destructive/30",
+const FEE_STATUS_TONE: Record<Student["feeStatus"], StatusTone> = {
+  PAID: "success",
+  DUE: "warning",
+  OVERDUE: "danger",
+};
+
+const FEE_STATUS_LABEL: Record<Student["feeStatus"], string> = {
+  PAID: "Paid",
+  DUE: "Due",
+  OVERDUE: "Overdue",
 };
 
 export const studentColumns: ColumnDef<Student>[] = [
@@ -69,9 +75,7 @@ export const studentColumns: ColumnDef<Student>[] = [
     accessorKey: "feeStatus",
     header: "Fee status",
     cell: ({ row }) => (
-      <Badge variant="outline" className={FEE_STATUS_CLASS[row.original.feeStatus]}>
-        {row.original.feeStatus}
-      </Badge>
+      <StatusDot tone={FEE_STATUS_TONE[row.original.feeStatus]}>{FEE_STATUS_LABEL[row.original.feeStatus]}</StatusDot>
     ),
   },
   {

@@ -7,13 +7,14 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Badge } from "@/components/ui/badge";
+import { StatusDot, type StatusTone } from "@/components/status-dot";
+import { cn } from "@/lib/utils";
 import type { CampusOverview } from "@/lib/mock/campuses";
 
-function feeBadgeVariant(pct: number): "default" | "secondary" | "destructive" {
-  if (pct >= 90) return "default";
-  if (pct >= 80) return "secondary";
-  return "destructive";
+function feeTone(pct: number): StatusTone {
+  if (pct >= 90) return "success";
+  if (pct >= 80) return "warning";
+  return "danger";
 }
 
 export function CampusesOverviewTable({ campuses }: { campuses: CampusOverview[] }) {
@@ -37,16 +38,21 @@ export function CampusesOverviewTable({ campuses }: { campuses: CampusOverview[]
             <TableCell className="text-right font-mono tabular-nums">{c.students.toLocaleString()}</TableCell>
             <TableCell className="text-right font-mono tabular-nums">{c.teachers}</TableCell>
             <TableCell className="text-right">
-              {c.pendingAdmissions > 0 ? (
-                <Badge variant="outline" className="border-signal/40 bg-signal/10 text-signal-foreground">
-                  {c.pendingAdmissions}
-                </Badge>
-              ) : (
-                <span className="font-mono tabular-nums text-muted-foreground">0</span>
-              )}
+              <span
+                className={cn(
+                  "font-mono tabular-nums",
+                  c.pendingAdmissions > 0 ? "font-medium text-signal-foreground" : "text-muted-foreground"
+                )}
+              >
+                {c.pendingAdmissions}
+              </span>
             </TableCell>
             <TableCell className="text-right">
-              <Badge variant={feeBadgeVariant(c.feeCollectedPct)}>{c.feeCollectedPct}%</Badge>
+              <span className="inline-flex justify-end">
+                <StatusDot tone={feeTone(c.feeCollectedPct)}>
+                  <span className="font-mono tabular-nums">{c.feeCollectedPct}%</span>
+                </StatusDot>
+              </span>
             </TableCell>
             <TableCell className="text-right font-mono tabular-nums">{c.attendanceTodayPct}%</TableCell>
             <TableCell>
