@@ -62,6 +62,13 @@
  * elements, 6px for cards/buttons/controls, full pill for status/badges.
  * Terminal Green is the one accent color the source palette allows — used
  * here only as the "success" dot-indicator tone, never as a fill.
+ *
+ * THIS IS THE "vercel-geist" THEME (see src/lib/themes.ts + the top-right
+ * design switcher). :root is that theme's default token set. When another
+ * pasted design system is added, give it its own
+ * `[data-theme="<id>"] { --background: ...; }` block below (higher source
+ * order than :root so it wins at equal specificity) instead of overwriting
+ * these values, so both stay switchable side by side.
  */
 :root {
   --raw-paper-white: #fafafa;

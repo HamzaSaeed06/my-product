@@ -12,6 +12,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { CampusScopePicker } from "@/components/campus-scope-picker";
+import { ThemeSwitcher } from "@/components/theme-switcher";
 import type { Viewer } from "@/lib/mock/session";
 
 function initials(fullName: string): string {
@@ -34,7 +35,9 @@ export function SiteHeader({ viewer }: { viewer: Viewer }) {
         )}
       </div>
 
-      <div className="flex items-center gap-1">
+      <div className="flex items-center gap-2">
+        <ThemeSwitcher />
+        <Separator orientation="vertical" className="h-5" />
         <DropdownMenu>
           <DropdownMenuTrigger render={<Button variant="ghost" className="h-9 gap-2 px-2" />}>
             <Avatar className="size-7">

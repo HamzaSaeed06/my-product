@@ -1,5 +1,30 @@
 # web-v2 Progress
 
+## 2026-09-13 — Design-system switcher (top-right) for comparing multiple pasted designs
+
+The user is pasting in more than one design system to compare live before picking a
+winner. Rather than rebuild the token set each time, added a switcher:
+
+- **`src/lib/themes.ts`**: a small registry, `[{ id, label }]`. Currently one entry:
+  `{ id: "vercel-geist", label: "Vercel Geist" }` — the design system built so far.
+- **`src/components/theme-provider.tsx`**: wraps the app in `next-themes`' `ThemeProvider`
+  (already a dependency), repurposed for `attribute="data-theme"` with the registry's ids as
+  `themes` — this is a *design-system* switch, independent of this project's own light/dark
+  (`.dark` class) handling.
+- **`src/components/theme-switcher.tsx`**: a `Select` in the top-right of the header
+  (`site-header.tsx`), next to the account menu, backed by `useTheme()`.
+- **`src/app/globals.css`**: `:root` is documented as the `"vercel-geist"` theme's token
+  block. Room left for more: a future pasted design gets its own
+  `[data-theme="<id>"] { ... }` block placed *after* `:root` in source order (same
+  specificity as `:root`, so later-in-file wins) plus one new entry in `themes.ts` — nothing
+  else changes.
+
+**When the next design system arrives**: add its tokens as a new `[data-theme="..."]` block
+in `globals.css`, add `{ id, label }` to `THEMES` in `themes.ts`. The switcher UI needs no
+changes. Once a final design is chosen, this whole switcher can be deleted and its winning
+theme's tokens promoted to be the only `:root` block again — it's scoped to the review
+period, not meant to ship.
+
 ## 2026-09-13 — Chart matched exactly to shadcn's reference; Select label bug fixed
 
 The user pasted shadcn's actual "Area Chart - Interactive" source and asked for it applied
