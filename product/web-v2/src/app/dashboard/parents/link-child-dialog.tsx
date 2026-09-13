@@ -12,16 +12,22 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Field, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Combobox } from "@/components/combobox";
 import type { Parent } from "@/lib/mock/parents";
 import { mockStudents } from "@/lib/mock/students";
 
-// A small Dialog rather than a Popover now that it's triggered from a
-// row-actions dropdown item instead of a persistent inline button — a
-// Popover needs a trigger element that stays mounted to anchor to, which
-// a closed dropdown item no longer provides. Same two fields either way.
+function initials(name: string) {
+  return name.split(" ").map((p) => p[0]).join("").toUpperCase();
+}
+
+// The student list can run into the hundreds and the same name can occur
+// more than once — the search results carry class/section/campus, not just
+// a name, and picking one shows a full-detail preview card before the
+// Link button is enabled, so a parent never gets linked to the wrong
+// same-name student by mistake.
 export function LinkChildDialog({
   parent,
   open,
@@ -34,14 +40,16 @@ export function LinkChildDialog({
   const [studentId, setStudentId] = useState<string | null>(null);
   const [relationship, setRelationship] = useState("");
 
-  const options = mockStudents
-    .filter((s) => s.status === "ACTIVE" && !parent.children.some((c) => c.studentId === s.id))
-    .map((s) => ({ value: s.id, label: `${s.fullName} (${s.admissionNo})` }));
+  const eligible = mockStudents.filter((s) => s.status === "ACTIVE" && !parent.children.some((c) => c.studentId === s.id));
+  const options = eligible.map((s) => ({
+    value: s.id,
+    label: `${s.fullName} — ${s.admissionNo} · ${s.className}-${s.section} · ${s.campusName}`,
+  }));
+  const selected = eligible.find((s) => s.id === studentId);
 
   function handleLink() {
-    const student = mockStudents.find((s) => s.id === studentId);
     onOpenChange(false);
-    toast.success(`${student?.fullName} linked to ${parent.fullName}.`);
+    toast.success(`${selected?.fullName} linked to ${parent.fullName}.`);
     setStudentId(null);
     setRelationship("");
   }
@@ -56,8 +64,24 @@ export function LinkChildDialog({
         <div className="flex flex-col gap-4">
           <Field>
             <FieldLabel>Student</FieldLabel>
-            <Combobox options={options} value={studentId} onChange={setStudentId} placeholder="Search students…" />
+            <Combobox options={options} value={studentId} onChange={setStudentId} placeholder="Search students…" className="w-full" />
           </Field>
+
+          {selected ? (
+            <div className="flex items-center gap-3 rounded-[var(--card-radius)] border border-border p-3">
+              <Avatar className="size-10 shrink-0">
+                <AvatarFallback className="bg-secondary text-secondary-foreground">{initials(selected.fullName)}</AvatarFallback>
+              </Avatar>
+              <div className="flex flex-col">
+                <span className="text-sm font-medium text-foreground">{selected.fullName}</span>
+                <span className="font-mono text-xs text-muted-foreground">{selected.admissionNo}</span>
+                <span className="text-xs text-muted-foreground">
+                  {selected.className}-{selected.section} · {selected.campusName}
+                </span>
+              </div>
+            </div>
+          ) : null}
+
           <Field>
             <FieldLabel htmlFor="link-relationship">Relationship</FieldLabel>
             <Input
@@ -71,7 +95,7 @@ export function LinkChildDialog({
         <DialogFooter>
           <DialogClose render={<Button variant="outline" />}>Cancel</DialogClose>
           <Button disabled={!studentId} onClick={handleLink}>
-            Link
+            Link this student
           </Button>
         </DialogFooter>
       </DialogContent>
