@@ -76,7 +76,7 @@ export function CreateInvoiceDialog({ students, categories }: { students: Studen
         {items.map((item, index) => (
           <div key={index} className="grid grid-cols-[1fr_1fr_auto_auto] items-end gap-2">
             <Select value={item.feeCategoryId} onValueChange={(v) => v && updateItem(index, { feeCategoryId: v })} disabled={disabled}>
-              <SelectTrigger>
+              <SelectTrigger aria-label={`Fee category for line item ${index + 1}`}>
                 <SelectValue placeholder="Category" />
               </SelectTrigger>
               <SelectContent>

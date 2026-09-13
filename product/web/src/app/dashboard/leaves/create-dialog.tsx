@@ -18,7 +18,7 @@ export function CreateLeaveDialog({ students, teachers }: { students: NamedOptio
   return (
     <FormDialog triggerLabel="+ Request leave" title="Request a leave" action={createLeave}>
       <div className="flex flex-col gap-2">
-        <Label>Subject</Label>
+        <Label htmlFor="leave-subject">Subject</Label>
         <Select
           name="subjectType"
           value={subjectType}
@@ -26,7 +26,7 @@ export function CreateLeaveDialog({ students, teachers }: { students: NamedOptio
             if (v === "STUDENT" || v === "TEACHER") setSubjectType(v);
           }}
         >
-          <SelectTrigger className="w-full">
+          <SelectTrigger id="leave-subject" className="w-full">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>

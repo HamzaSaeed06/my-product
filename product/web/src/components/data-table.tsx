@@ -93,6 +93,7 @@ export function DataTable<T>({
               setQuery(e.target.value);
             }}
             placeholder={searchPlaceholder}
+            aria-label={searchPlaceholder}
             className="pl-8"
           />
         </div>

@@ -2,6 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import {
   AlertDialog,
@@ -21,6 +22,10 @@ interface ConfirmActionButtonProps {
   confirmDescription: string;
   destructive?: boolean;
   action: () => Promise<{ error?: string } | void>;
+  /** Accessible name for the trigger button — set this whenever the same
+   * label repeats across multiple rows in a table, so a screen reader
+   * announces which row the control acts on. */
+  ariaLabel?: string;
 }
 
 // Shared by every "archive / close / revoke" control across the Phase 1
@@ -33,6 +38,7 @@ export function ConfirmActionButton({
   confirmDescription,
   destructive = false,
   action,
+  ariaLabel,
 }: ConfirmActionButtonProps) {
   const [open, setOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -44,10 +50,12 @@ export function ConfirmActionButton({
       const result = await action();
       if (result?.error) {
         setError(result.error);
+        toast.error(result.error);
         return;
       }
       setOpen(false);
       setError(null);
+      toast.success("Done");
       router.refresh();
     });
   }
@@ -60,13 +68,21 @@ export function ConfirmActionButton({
         if (!next) setError(null);
       }}
     >
-      <AlertDialogTrigger render={<Button variant="outline" size="sm" />}>{label}</AlertDialogTrigger>
+      <AlertDialogTrigger
+        render={<Button variant={destructive ? "destructive" : "outline"} size="sm" aria-label={ariaLabel} />}
+      >
+        {label}
+      </AlertDialogTrigger>
       <AlertDialogContent>
         <AlertDialogHeader>
           <AlertDialogTitle>{confirmTitle}</AlertDialogTitle>
           <AlertDialogDescription>{confirmDescription}</AlertDialogDescription>
         </AlertDialogHeader>
-        {error ? <p className="text-sm text-destructive">{error}</p> : null}
+        {error ? (
+          <p role="alert" className="text-sm text-destructive">
+            {error}
+          </p>
+        ) : null}
         <AlertDialogFooter>
           <AlertDialogCancel>Cancel</AlertDialogCancel>
           <AlertDialogAction

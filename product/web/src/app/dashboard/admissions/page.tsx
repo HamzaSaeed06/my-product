@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { apiRequest } from "@/lib/apiClient";
+import { getCurrentUser } from "@/lib/session";
 import { PageHeader } from "@/components/page-header";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -42,12 +43,28 @@ export default async function AdmissionsPage({
   searchParams: Promise<{ campusId?: string }>;
 }) {
   const { campusId } = await searchParams;
+
+  // Mirrors admission.create/admission.approve/admission.reject from
+  // routes.ts — note the withdraw route also requires admission.create
+  // (there's no separate admission.withdraw key). Campus Head/Office can
+  // hold admission.view without admission.create, so the "New admission"
+  // dialog and the students/campuses/classes/academic-years fetches that
+  // exist only to feed its dropdowns (the table itself renders each
+  // admission's embedded student/campus/class/academicYear, not these
+  // lookups) must not render/fetch unconditionally.
+  const currentUser = await getCurrentUser();
+  const permissions = currentUser?.permissions ?? [];
+  const canCreate = permissions.includes("admission.create");
+  const canApprove = permissions.includes("admission.approve");
+  const canReject = permissions.includes("admission.reject");
+  const canWithdraw = permissions.includes("admission.create");
+
   const [admissions, students, campuses, classes, academicYears] = await Promise.all([
     apiRequest<Admission[]>(`/api/v1/admissions${campusId ? `?campusId=${campusId}` : ""}`),
-    apiRequest<StudentOption[]>("/api/v1/students?status=ACTIVE"),
-    apiRequest<NamedOption[]>("/api/v1/campuses"),
-    apiRequest<NamedOption[]>("/api/v1/classes"),
-    apiRequest<NamedOption[]>("/api/v1/academic-years"),
+    canCreate ? apiRequest<StudentOption[]>("/api/v1/students?status=ACTIVE") : Promise.resolve<StudentOption[]>([]),
+    canCreate ? apiRequest<NamedOption[]>("/api/v1/campuses") : Promise.resolve<NamedOption[]>([]),
+    canCreate ? apiRequest<NamedOption[]>("/api/v1/classes") : Promise.resolve<NamedOption[]>([]),
+    canCreate ? apiRequest<NamedOption[]>("/api/v1/academic-years") : Promise.resolve<NamedOption[]>([]),
   ]);
 
   return (
@@ -56,7 +73,9 @@ export default async function AdmissionsPage({
         title="Admissions"
         description="Admission ≠ Enrollment — approving here does not automatically enroll the student."
         action={
-          <CreateAdmissionDialog students={students} campuses={campuses} classes={classes} academicYears={academicYears} />
+          canCreate ? (
+            <CreateAdmissionDialog students={students} campuses={campuses} classes={classes} academicYears={academicYears} />
+          ) : undefined
         }
       />
 
@@ -91,9 +110,15 @@ export default async function AdmissionsPage({
                   <TableCell className="flex justify-end gap-2">
                     {admission.status === "PENDING" && (
                       <>
-                        <ApproveAdmissionButton id={admission.id} studentName={admission.student.fullName} />
-                        <RejectAdmissionButton id={admission.id} studentName={admission.student.fullName} />
-                        <WithdrawAdmissionButton id={admission.id} studentName={admission.student.fullName} />
+                        {canApprove && (
+                          <ApproveAdmissionButton id={admission.id} studentName={admission.student.fullName} />
+                        )}
+                        {canReject && (
+                          <RejectAdmissionButton id={admission.id} studentName={admission.student.fullName} />
+                        )}
+                        {canWithdraw && (
+                          <WithdrawAdmissionButton id={admission.id} studentName={admission.student.fullName} />
+                        )}
                       </>
                     )}
                   </TableCell>

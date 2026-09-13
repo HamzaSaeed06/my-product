@@ -19,7 +19,7 @@ export function TimetableSectionSelect({ sections, selectedId }: { sections: Sec
       value={selectedId}
       onValueChange={(value) => router.push(`/dashboard/timetable?sectionId=${value}`)}
     >
-      <SelectTrigger className="w-72">
+      <SelectTrigger aria-label="Select a section" className="w-72">
         <SelectValue placeholder="Select a section" />
       </SelectTrigger>
       <SelectContent>

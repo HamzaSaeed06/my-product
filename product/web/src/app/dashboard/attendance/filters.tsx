@@ -22,7 +22,7 @@ export function AttendanceFilters({
   return (
     <div className="mb-4 flex items-center gap-3">
       <Select value={selectedSectionId} onValueChange={(value) => value && navigate(value, date)}>
-        <SelectTrigger className="w-72">
+        <SelectTrigger aria-label="Filter by section" className="w-72">
           <SelectValue placeholder="Select a section" />
         </SelectTrigger>
         <SelectContent>

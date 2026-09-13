@@ -1,6 +1,5 @@
 import { getCurrentUser } from "@/lib/session";
 import { apiRequest } from "@/lib/apiClient";
-import { ChildSwitcher } from "@/components/child-switcher";
 import { Badge } from "@/components/ui/badge";
 import { RequestPortalLeaveDialog } from "./create-dialog";
 import { CancelPortalLeaveButton } from "./cancel-button";
@@ -105,7 +104,6 @@ export default async function PortalLeavePage({
           title="Request leave for your child"
         />
       </div>
-      <ChildSwitcher students={students} selectedId={studentId} basePath="/portal/leave" />
       <LeaveList leaves={leaves} />
     </div>
   );

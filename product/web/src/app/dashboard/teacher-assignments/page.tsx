@@ -1,8 +1,8 @@
 import { apiRequest } from "@/lib/apiClient";
+import { getCurrentUser } from "@/lib/session";
 import { PageHeader } from "@/components/page-header";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { CreateAssignmentDialog } from "./assignment-dialogs";
-import { ArchiveAssignmentButton } from "./archive-assignment-button";
+import { TeacherAssignmentsTable } from "./teacher-assignments-table";
 import type { SectionOption } from "@/components/section-picker";
 
 interface Assignment {
@@ -35,14 +35,24 @@ interface RawSection {
 }
 
 export default async function TeacherAssignmentsPage() {
+  // teacher_assignment.create/.edit from routes.ts. teachers/subjects/
+  // sections/classes/campuses/academicYears are fetched only to feed the
+  // "Assign teacher" dialog (sections' own class/campus/year labels are
+  // built from classes/campuses/academicYears purely for that dialog's
+  // SectionPicker) — none of it is used elsewhere on this page, so gate
+  // all of it behind canCreate.
+  const permissions = (await getCurrentUser())?.permissions ?? [];
+  const canCreate = permissions.includes("teacher_assignment.create");
+  const canEdit = permissions.includes("teacher_assignment.edit");
+
   const [assignments, teachers, subjects, rawSections, classes, campuses, academicYears] = await Promise.all([
     apiRequest<Assignment[]>("/api/v1/teacher-assignments"),
-    apiRequest<Teacher[]>("/api/v1/teachers"),
-    apiRequest<NamedOption[]>("/api/v1/subjects"),
-    apiRequest<RawSection[]>("/api/v1/sections"),
-    apiRequest<NamedOption[]>("/api/v1/classes"),
-    apiRequest<NamedOption[]>("/api/v1/campuses"),
-    apiRequest<NamedOption[]>("/api/v1/academic-years"),
+    canCreate ? apiRequest<Teacher[]>("/api/v1/teachers") : Promise.resolve<Teacher[]>([]),
+    canCreate ? apiRequest<NamedOption[]>("/api/v1/subjects") : Promise.resolve<NamedOption[]>([]),
+    canCreate ? apiRequest<RawSection[]>("/api/v1/sections") : Promise.resolve<RawSection[]>([]),
+    canCreate ? apiRequest<NamedOption[]>("/api/v1/classes") : Promise.resolve<NamedOption[]>([]),
+    canCreate ? apiRequest<NamedOption[]>("/api/v1/campuses") : Promise.resolve<NamedOption[]>([]),
+    canCreate ? apiRequest<NamedOption[]>("/api/v1/academic-years") : Promise.resolve<NamedOption[]>([]),
   ]);
 
   const classNameById = new Map(classes.map((c) => [c.id, c.name]));
@@ -70,41 +80,10 @@ export default async function TeacherAssignmentsPage() {
       <PageHeader
         title="Teacher Assignments"
         description="Which teacher teaches which subject to which section, per academic year."
-        action={<CreateAssignmentDialog teachers={activeTeachers} subjects={subjects} sections={sections} />}
+        action={canCreate ? <CreateAssignmentDialog teachers={activeTeachers} subjects={subjects} sections={sections} /> : undefined}
       />
 
-      {assignments.length === 0 ? (
-        <p className="text-sm text-muted-foreground">No assignments yet. Click "Assign teacher" to create one.</p>
-      ) : (
-        <div className="overflow-x-auto rounded-lg border border-border">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Teacher</TableHead>
-                <TableHead>Subject</TableHead>
-                <TableHead>Class</TableHead>
-                <TableHead>Section</TableHead>
-                <TableHead>Academic year</TableHead>
-                <TableHead className="text-right">Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {assignments.map((a) => (
-                <TableRow key={a.id}>
-                  <TableCell className="font-medium">{a.teacher.user.fullName}</TableCell>
-                  <TableCell className="text-muted-foreground">{a.subject.name}</TableCell>
-                  <TableCell className="text-muted-foreground">{a.klass.name}</TableCell>
-                  <TableCell className="text-muted-foreground">{a.section.name}</TableCell>
-                  <TableCell className="text-muted-foreground">{a.academicYear.name}</TableCell>
-                  <TableCell className="text-right">
-                    <ArchiveAssignmentButton id={a.id} />
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </div>
-      )}
+      <TeacherAssignmentsTable assignments={assignments} canEdit={canEdit} />
     </div>
   );
 }

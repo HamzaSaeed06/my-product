@@ -4,7 +4,7 @@ import { asyncHandler } from "../../lib/asyncHandler.js";
 import { requirePermission } from "../../middleware/guard.js";
 import { csrfProtection } from "../../middleware/csrf.js";
 import { writeRateLimiter } from "../../middleware/rateLimiter.js";
-import { documentUpload } from "../../lib/upload.js";
+import { documentUpload, verifyUploadedFileType } from "../../lib/upload.js";
 
 export const homeworkRouter = Router();
 
@@ -16,6 +16,7 @@ homeworkRouter.post(
   csrfProtection,
   writeRateLimiter,
   documentUpload.array("files", 10),
+  verifyUploadedFileType,
   asyncHandler(controller.createHomeworkHandler)
 );
 
@@ -25,6 +26,7 @@ homeworkRouter.post(
   csrfProtection,
   writeRateLimiter,
   documentUpload.single("file"),
+  verifyUploadedFileType,
   asyncHandler(controller.addHomeworkAttachmentHandler)
 );
 

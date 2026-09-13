@@ -1,4 +1,5 @@
 import { apiRequest } from "@/lib/apiClient";
+import { getCurrentUser } from "@/lib/session";
 import { PageHeader } from "@/components/page-header";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
@@ -47,12 +48,23 @@ export default async function PromotionsPage({
 }) {
   const params = await searchParams;
 
+  // Mirrors promotion.create/promotion.approve from routes.ts. The pending
+  // class-jump approvals panel (and its /api/v1/approvals fetch, which
+  // requires the distinct approval.view permission) exists only to let a
+  // promotion.approve holder decide it, so it's gated behind canApprove —
+  // a promotion.view-only user would otherwise 403 on that fetch before
+  // ever seeing the promotions list below it.
+  const currentUser = await getCurrentUser();
+  const permissions = currentUser?.permissions ?? [];
+  const canCreate = permissions.includes("promotion.create");
+  const canApprove = permissions.includes("promotion.approve");
+
   const [rawSections, classes, campuses, academicYears, pendingApprovals] = await Promise.all([
     apiRequest<RawSection[]>("/api/v1/sections"),
     apiRequest<NamedOption[]>("/api/v1/classes"),
     apiRequest<NamedOption[]>("/api/v1/campuses"),
     apiRequest<NamedOption[]>("/api/v1/academic-years"),
-    apiRequest<ApprovalRequest[]>("/api/v1/approvals?status=PENDING"),
+    canApprove ? apiRequest<ApprovalRequest[]>("/api/v1/approvals?status=PENDING") : Promise.resolve<ApprovalRequest[]>([]),
   ]);
 
   const classJumpApprovals = pendingApprovals.filter((a) => a.type === "PROMOTION_CLASS_JUMP");
@@ -120,7 +132,7 @@ export default async function PromotionsPage({
                 <TableHead>Student Code</TableHead>
                 <TableHead>Name</TableHead>
                 <TableHead>Status</TableHead>
-                <TableHead className="text-right">Actions</TableHead>
+                {canCreate ? <TableHead className="text-right">Actions</TableHead> : null}
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -131,21 +143,23 @@ export default async function PromotionsPage({
                     <TableCell className="font-mono text-xs text-muted-foreground">{student.studentCode}</TableCell>
                     <TableCell className="font-medium">{student.fullName}</TableCell>
                     <TableCell>{decided ? <Badge variant="secondary">Decided</Badge> : <Badge variant="secondary">Pending</Badge>}</TableCell>
-                    <TableCell className="text-right">
-                      {!decided ? (
-                        <DecidePromotionDialog
-                          studentName={student.fullName}
-                          studentId={student.id}
-                          fromEnrollmentId={
-                            enrollments.find((e) => e.student.id === student.id)!.id
-                          }
-                          academicYearId={targetYearId}
-                          targetClassId={targetClassId}
-                          targetSectionId={targetSectionId}
-                          disabled={!canDecide}
-                        />
-                      ) : null}
-                    </TableCell>
+                    {canCreate ? (
+                      <TableCell className="text-right">
+                        {!decided ? (
+                          <DecidePromotionDialog
+                            studentName={student.fullName}
+                            studentId={student.id}
+                            fromEnrollmentId={
+                              enrollments.find((e) => e.student.id === student.id)!.id
+                            }
+                            academicYearId={targetYearId}
+                            targetClassId={targetClassId}
+                            targetSectionId={targetSectionId}
+                            disabled={!canDecide}
+                          />
+                        ) : null}
+                      </TableCell>
+                    ) : null}
                   </TableRow>
                 );
               })}

@@ -1,10 +1,8 @@
 import { apiRequest } from "@/lib/apiClient";
 import { getCurrentUser } from "@/lib/session";
 import { PageHeader } from "@/components/page-header";
-import { Badge } from "@/components/ui/badge";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { CreateTeacherDialog, EditTeacherDialog } from "./teacher-dialogs";
-import { ArchiveTeacherButton } from "./archive-teacher-button";
+import { CreateTeacherDialog } from "./teacher-dialogs";
+import { TeachersTable } from "./teachers-table";
 
 interface UserWithRoles {
   id: string;
@@ -58,45 +56,7 @@ export default async function TeachersPage({
         action={canCreate ? <CreateTeacherDialog eligibleUsers={eligibleUsers} /> : undefined}
       />
 
-      {teachers.length === 0 ? (
-        <p className="text-sm text-muted-foreground">No teachers yet. Click "Add teacher" to create a profile.</p>
-      ) : (
-        <div className="overflow-x-auto rounded-lg border border-border">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Name</TableHead>
-                <TableHead>Employee code</TableHead>
-                <TableHead>Qualification</TableHead>
-                <TableHead>Status</TableHead>
-                {canEdit || canArchive ? <TableHead className="text-right">Actions</TableHead> : null}
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {teachers.map((teacher) => (
-                <TableRow key={teacher.id}>
-                  <TableCell className="font-medium">{teacher.user.fullName}</TableCell>
-                  <TableCell className="text-muted-foreground">{teacher.employeeCode ?? "—"}</TableCell>
-                  <TableCell className="text-muted-foreground">{teacher.qualification ?? "—"}</TableCell>
-                  <TableCell>
-                    {teacher.status === "ARCHIVED" ? <Badge variant="secondary">Archived</Badge> : <Badge>Active</Badge>}
-                  </TableCell>
-                  {canEdit || canArchive ? (
-                    <TableCell className="flex justify-end gap-2">
-                      {teacher.status === "ACTIVE" && (
-                        <>
-                          {canEdit ? <EditTeacherDialog teacher={teacher} /> : null}
-                          {canArchive ? <ArchiveTeacherButton id={teacher.id} name={teacher.user.fullName} /> : null}
-                        </>
-                      )}
-                    </TableCell>
-                  ) : null}
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </div>
-      )}
+      <TeachersTable teachers={teachers} canEdit={canEdit} canArchive={canArchive} />
     </div>
   );
 }

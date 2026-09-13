@@ -2,6 +2,8 @@ import { apiRequest, ApiError } from "@/lib/apiClient";
 import { getCurrentUser } from "@/lib/session";
 import { PageHeader } from "@/components/page-header";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { StatCard } from "@/components/stat-card";
+import { SectionHeading } from "@/components/section-heading";
 import { ExportCsvButton } from "../export-button";
 import { DateRangeFilters } from "../date-range-filters";
 import { BarChartCard } from "../charts";
@@ -63,22 +65,10 @@ async function AttendanceReportContent({ searchParams }: Props) {
       <DateRangeFilters basePath="/dashboard/reports/attendance" dateFrom={dateFrom} dateTo={dateTo} campusId={campusId ?? ""} campuses={campuses} />
 
       <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-4">
-        <div className="rounded-lg border border-border p-4">
-          <p className="text-xs text-muted-foreground">Present</p>
-          <p className="text-2xl font-semibold text-foreground">{report.monthlySummary.present}</p>
-        </div>
-        <div className="rounded-lg border border-border p-4">
-          <p className="text-xs text-muted-foreground">Absent</p>
-          <p className="text-2xl font-semibold text-foreground">{report.monthlySummary.absent}</p>
-        </div>
-        <div className="rounded-lg border border-border p-4">
-          <p className="text-xs text-muted-foreground">Leave</p>
-          <p className="text-2xl font-semibold text-foreground">{report.monthlySummary.leave}</p>
-        </div>
-        <div className="rounded-lg border border-border p-4">
-          <p className="text-xs text-muted-foreground">Overall attendance</p>
-          <p className="text-2xl font-semibold text-foreground">{report.monthlySummary.overallAttendancePercentage}%</p>
-        </div>
+        <StatCard label="Present" value={report.monthlySummary.present} />
+        <StatCard label="Absent" value={report.monthlySummary.absent} />
+        <StatCard label="Leave" value={report.monthlySummary.leave} />
+        <StatCard label="Overall attendance" value={`${report.monthlySummary.overallAttendancePercentage}%`} />
       </div>
 
       <div className="mt-6 grid grid-cols-1 gap-4 lg:grid-cols-2">
@@ -87,7 +77,7 @@ async function AttendanceReportContent({ searchParams }: Props) {
       </div>
 
       <div className="mt-6">
-        <h2 className="mb-3 text-sm font-semibold text-foreground">Student-wise</h2>
+        <SectionHeading>Student-wise</SectionHeading>
         <div className="overflow-x-auto rounded-lg border border-border">
           <Table>
             <TableHeader>

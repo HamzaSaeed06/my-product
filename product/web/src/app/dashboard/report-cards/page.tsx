@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { apiRequest } from "@/lib/apiClient";
+import { getCurrentUser } from "@/lib/session";
 import { PageHeader } from "@/components/page-header";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { ReportCardFilters } from "./filters";
@@ -42,6 +43,10 @@ export default async function ReportCardsPage({
   searchParams: Promise<{ examId?: string; sectionId?: string }>;
 }) {
   const { examId: requestedExamId, sectionId: requestedSectionId } = await searchParams;
+
+  // report_card.generate is the module's only write route (no separate
+  // edit/archive) — gates the Generate/Regenerate button.
+  const canGenerate = ((await getCurrentUser())?.permissions ?? []).includes("report_card.generate");
 
   const [exams, rawSections, classes, campuses] = await Promise.all([
     apiRequest<Exam[]>("/api/v1/exams"),
@@ -86,13 +91,22 @@ export default async function ReportCardsPage({
         <ReportCardsBody
           examId={selectedExamId}
           sectionId={sectionChoices.find((s) => s.id === requestedSectionId)?.id ?? sectionChoices[0]!.id}
+          canGenerate={canGenerate}
         />
       )}
     </div>
   );
 }
 
-async function ReportCardsBody({ examId, sectionId }: { examId: string; sectionId: string }) {
+async function ReportCardsBody({
+  examId,
+  sectionId,
+  canGenerate,
+}: {
+  examId: string;
+  sectionId: string;
+  canGenerate: boolean;
+}) {
   const [results, reportCards] = await Promise.all([
     apiRequest<Result[]>(`/api/v1/results?examId=${examId}&sectionId=${sectionId}`),
     apiRequest<ReportCard[]>(`/api/v1/report-cards?examId=${examId}`),
@@ -129,7 +143,9 @@ async function ReportCardsBody({ examId, sectionId }: { examId: string; sectionI
                         View
                       </Link>
                     ) : null}
-                    <GenerateReportCardButton resultId={result.id} regenerate={!!reportCard} />
+                    {canGenerate ? (
+                      <GenerateReportCardButton resultId={result.id} regenerate={!!reportCard} />
+                    ) : null}
                   </div>
                 </TableCell>
               </TableRow>

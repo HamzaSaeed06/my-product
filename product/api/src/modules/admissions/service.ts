@@ -49,7 +49,28 @@ export async function createAdmission(
     throw new HttpError(409, "ACADEMIC_YEAR_CLOSED", "Cannot apply for admission in a closed academic year");
   }
 
-  const admission = await prisma.admission.create({ data: input });
+  // Duplicate-submission guard (Section 1.3 — verified this was missing,
+  // unlike online-payment/service.ts's webhook idempotency check). No
+  // schema-level unique constraint: a student legitimately CAN reapply for
+  // the same class/year after a REJECTED decision, so a hard constraint on
+  // (studentId, classId, academicYearId) would wrongly block that. This
+  // only blocks a second PENDING admission for the same triple — the
+  // actual double-click/duplicate-request case — inside a transaction so
+  // the check and the insert are atomic relative to each other.
+  const admission = await prisma.$transaction(async (tx) => {
+    const existingPending = await tx.admission.findFirst({
+      where: {
+        studentId: input.studentId,
+        classId: input.classId,
+        academicYearId: input.academicYearId,
+        status: "PENDING",
+      },
+    });
+    if (existingPending) {
+      throw new HttpError(409, "ADMISSION_ALREADY_PENDING", "A pending admission already exists for this student, class, and academic year");
+    }
+    return tx.admission.create({ data: input });
+  });
 
   await writeAuditLog({
     actorId,

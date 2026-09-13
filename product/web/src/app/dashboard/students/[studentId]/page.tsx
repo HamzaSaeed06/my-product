@@ -1,5 +1,7 @@
 import { apiRequest } from "@/lib/apiClient";
+import { getCurrentUser } from "@/lib/session";
 import { PageHeader } from "@/components/page-header";
+import { SectionHeading } from "@/components/section-heading";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { StudentProfileForm } from "./profile-form";
@@ -53,13 +55,35 @@ interface NamedOption {
 export default async function StudentDetailPage({ params }: { params: Promise<{ studentId: string }> }) {
   const { studentId } = await params;
 
+  // Mirrors student.edit/student.archive from students/routes.ts and
+  // enrollment.create/enrollment.transfer/enrollment.withdraw from
+  // enrollments/routes.ts (separate module, separate keys — NOT
+  // student.archive) and document.view/document.upload from the
+  // students/:id/documents routes. Office/Incharge frequently hold
+  // student.view without the write keys, so every write action below must
+  // be gated, and the sections/classes/campuses/academic-years fetch (which
+  // exists only to feed the Enroll/Transfer dialogs' section picker) must
+  // not run unless the viewer can actually use one of those dialogs.
+  const currentUser = await getCurrentUser();
+  const permissions = currentUser?.permissions ?? [];
+  const canEdit = permissions.includes("student.edit");
+  const canArchive = permissions.includes("student.archive");
+  const canCreateEnrollment = permissions.includes("enrollment.create");
+  const canTransferEnrollment = permissions.includes("enrollment.transfer");
+  const canWithdrawEnrollment = permissions.includes("enrollment.withdraw");
+  const canViewDocuments = permissions.includes("document.view");
+  const canUploadDocuments = permissions.includes("document.upload");
+  const needsSectionOptions = canCreateEnrollment || canTransferEnrollment;
+
   const [student, documents, rawSections, classes, campuses, academicYears] = await Promise.all([
     apiRequest<StudentDetail>(`/api/v1/students/${studentId}`),
-    apiRequest<DocumentRow[]>(`/api/v1/students/${studentId}/documents`),
-    apiRequest<RawSection[]>("/api/v1/sections"),
-    apiRequest<NamedOption[]>("/api/v1/classes"),
-    apiRequest<NamedOption[]>("/api/v1/campuses"),
-    apiRequest<NamedOption[]>("/api/v1/academic-years"),
+    canViewDocuments
+      ? apiRequest<DocumentRow[]>(`/api/v1/students/${studentId}/documents`)
+      : Promise.resolve<DocumentRow[]>([]),
+    needsSectionOptions ? apiRequest<RawSection[]>("/api/v1/sections") : Promise.resolve<RawSection[]>([]),
+    needsSectionOptions ? apiRequest<NamedOption[]>("/api/v1/classes") : Promise.resolve<NamedOption[]>([]),
+    needsSectionOptions ? apiRequest<NamedOption[]>("/api/v1/campuses") : Promise.resolve<NamedOption[]>([]),
+    needsSectionOptions ? apiRequest<NamedOption[]>("/api/v1/academic-years") : Promise.resolve<NamedOption[]>([]),
   ]);
 
   const classNameById = new Map(classes.map((c) => [c.id, c.name]));
@@ -89,7 +113,7 @@ export default async function StudentDetailPage({ params }: { params: Promise<{ 
         title={student.fullName}
         description={`${student.studentCode} · ${student.status}`}
         action={
-          student.status === "ACTIVE" ? (
+          student.status === "ACTIVE" && canArchive ? (
             <div className="flex gap-2">
               <WithdrawStudentButton studentId={student.id} name={student.fullName} />
               <ArchiveStudentButton studentId={student.id} name={student.fullName} />
@@ -99,14 +123,14 @@ export default async function StudentDetailPage({ params }: { params: Promise<{ 
       />
 
       <section className="mb-8 rounded-lg border border-border p-5">
-        <h2 className="mb-4 text-sm font-medium text-foreground">Profile</h2>
-        <StudentProfileForm student={student} />
+        <SectionHeading>Profile</SectionHeading>
+        <StudentProfileForm student={student} canEdit={canEdit} />
       </section>
 
       <section className="mb-8 rounded-lg border border-border p-5">
         <div className="mb-4 flex items-center justify-between">
-          <h2 className="text-sm font-medium text-foreground">Enrollment</h2>
-          {!activeEnrollment && <EnrollDialog studentId={student.id} sections={sections} />}
+          <SectionHeading className="mb-0">Enrollment</SectionHeading>
+          {!activeEnrollment && canCreateEnrollment && <EnrollDialog studentId={student.id} sections={sections} />}
         </div>
 
         {student.enrollments.length === 0 ? (
@@ -137,8 +161,12 @@ export default async function StudentDetailPage({ params }: { params: Promise<{ 
                     <TableCell className="flex justify-end gap-2">
                       {e.status === "ACTIVE" && (
                         <>
-                          <TransferDialog studentId={student.id} enrollmentId={e.id} sections={transferSections} />
-                          <WithdrawEnrollmentButton studentId={student.id} enrollmentId={e.id} />
+                          {canTransferEnrollment && (
+                            <TransferDialog studentId={student.id} enrollmentId={e.id} sections={transferSections} />
+                          )}
+                          {canWithdrawEnrollment && (
+                            <WithdrawEnrollmentButton studentId={student.id} enrollmentId={e.id} />
+                          )}
                         </>
                       )}
                     </TableCell>
@@ -151,7 +179,7 @@ export default async function StudentDetailPage({ params }: { params: Promise<{ 
       </section>
 
       <section className="mb-8 rounded-lg border border-border p-5">
-        <h2 className="mb-4 text-sm font-medium text-foreground">Parents / Guardians</h2>
+        <SectionHeading>Parents / Guardians</SectionHeading>
         {student.parents.length === 0 ? (
           <p className="text-sm text-muted-foreground">
             No parents linked yet. Link them from the Parents page.
@@ -173,8 +201,8 @@ export default async function StudentDetailPage({ params }: { params: Promise<{ 
 
       <section className="rounded-lg border border-border p-5">
         <div className="mb-4 flex items-center justify-between">
-          <h2 className="text-sm font-medium text-foreground">Documents</h2>
-          <DocumentUploadDialog studentId={student.id} />
+          <SectionHeading className="mb-0">Documents</SectionHeading>
+          {canUploadDocuments && <DocumentUploadDialog studentId={student.id} />}
         </div>
         {documents.length === 0 ? (
           <p className="text-sm text-muted-foreground">No documents uploaded yet.</p>

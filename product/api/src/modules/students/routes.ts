@@ -4,7 +4,7 @@ import { asyncHandler } from "../../lib/asyncHandler.js";
 import { requirePermission } from "../../middleware/guard.js";
 import { csrfProtection } from "../../middleware/csrf.js";
 import { writeRateLimiter } from "../../middleware/rateLimiter.js";
-import { documentUpload } from "../../lib/upload.js";
+import { documentUpload, verifyUploadedFileType } from "../../lib/upload.js";
 
 export const studentsRouter = Router();
 
@@ -56,5 +56,6 @@ studentsRouter.post(
   csrfProtection,
   writeRateLimiter,
   documentUpload.single("file"),
+  verifyUploadedFileType,
   asyncHandler(controller.uploadStudentDocumentHandler)
 );

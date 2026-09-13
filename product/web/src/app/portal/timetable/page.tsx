@@ -1,7 +1,6 @@
 import { getCurrentUser } from "@/lib/session";
 import { apiRequest } from "@/lib/apiClient";
 import { getTeacherAssignments, getActiveEnrollment } from "@/lib/portalScope";
-import { ChildSwitcher } from "@/components/child-switcher";
 
 interface TimetableEntry {
   id: string;
@@ -125,9 +124,6 @@ export default async function PortalTimetablePage({
   return (
     <div>
       <h1 className="text-lg font-semibold text-foreground">Timetable</h1>
-      {user.roles.includes("PARENT") ? (
-        <ChildSwitcher students={students} selectedId={studentId} basePath="/portal/timetable" />
-      ) : null}
       {!enrollment ? (
         <p className="mt-4 text-sm text-muted-foreground">Not currently enrolled in any class.</p>
       ) : (

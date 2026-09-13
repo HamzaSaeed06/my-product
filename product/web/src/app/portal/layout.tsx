@@ -1,6 +1,8 @@
+import { Suspense } from "react";
 import { redirect } from "next/navigation";
 import { LogOut } from "lucide-react";
 import { getCurrentUser } from "@/lib/session";
+import { apiRequest } from "@/lib/apiClient";
 import { logout } from "../dashboard/actions";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import {
@@ -11,8 +13,15 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Button } from "@/components/ui/button";
 import { PortalNav } from "@/components/portal-nav";
+import { ChildSwitcher } from "@/components/child-switcher";
+import { cn } from "@/lib/utils";
 
 const STAFF_ROLES = ["SUPER_ADMIN", "CAMPUS_HEAD", "INCHARGE", "OFFICE"];
+
+interface Student {
+  id: string;
+  fullName: string;
+}
 
 function initials(fullName: string): string {
   const parts = fullName.trim().split(/\s+/);
@@ -47,17 +56,31 @@ export default async function PortalLayout({ children }: { children: React.React
   const missingProfile =
     (role === "TEACHER" && !user.teacherId) || (role === "STUDENT" && !user.studentId);
 
+  // Fetched once here (rather than repeated in every page) so the switcher
+  // can live in the persistent header — see child-switcher.tsx. Named `kids`
+  // to avoid colliding with this layout's own `children` prop (the page
+  // content) below.
+  const kids = role === "PARENT" && !missingProfile ? await apiRequest<Student[]>("/api/v1/students") : [];
+
   return (
     <div className="flex min-h-svh flex-col bg-background">
-      <header className="flex h-14 shrink-0 items-center justify-between border-b border-border px-4">
-        <div className="flex items-center gap-2.5">
+      <header className="flex h-14 shrink-0 items-center justify-between gap-2 border-b border-border px-4">
+        <div className="flex shrink-0 items-center gap-2.5">
           <div className="flex size-7 shrink-0 items-center justify-center rounded-md bg-primary text-sm font-semibold text-primary-foreground">
             I
           </div>
-          <span className="text-sm font-medium text-foreground">Institution Management</span>
+          <span className={cn("text-sm font-medium text-foreground", kids.length > 1 && "hidden sm:inline")}>
+            Institution Management
+          </span>
         </div>
 
-        <div className="flex items-center gap-1">
+        {kids.length > 1 ? (
+          <Suspense fallback={null}>
+            <ChildSwitcher students={kids} />
+          </Suspense>
+        ) : null}
+
+        <div className="flex shrink-0 items-center gap-1">
           <DropdownMenu>
             <DropdownMenuTrigger render={<Button variant="ghost" className="h-9 gap-2 px-2" />}>
               <Avatar className="size-7">

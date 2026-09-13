@@ -1,10 +1,8 @@
-import Link from "next/link";
 import { apiRequest } from "@/lib/apiClient";
+import { getCurrentUser } from "@/lib/session";
 import { PageHeader } from "@/components/page-header";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Badge } from "@/components/ui/badge";
 import { CreateInvoiceDialog } from "./create-dialog";
-import { VoidInvoiceDialog } from "./void-dialog";
+import { InvoicesTable } from "./invoices-table";
 
 interface Student {
   id: string;
@@ -26,68 +24,40 @@ interface Invoice {
   status: "UNPAID" | "PARTIALLY_PAID" | "PAID" | "VOID";
 }
 
-const STATUS_VARIANT: Record<Invoice["status"], "default" | "secondary"> = {
-  UNPAID: "secondary",
-  PARTIALLY_PAID: "secondary",
-  PAID: "default",
-  VOID: "secondary",
-};
-
 export default async function InvoicesPage() {
+  // Mirrors invoice.create/invoice.void from routes.ts — Campus Head can
+  // hold invoice.view without invoice.create, so the "Create Invoice"
+  // dialog (and its students/fee-categories dropdown data, fetched only to
+  // populate that dialog) must not render/fetch unconditionally. The
+  // students fetch also feeds studentNameById's table labels for every
+  // viewer, so when gated off it degrades to the table's existing "—"
+  // fallback rather than a permission error.
+  const currentUser = await getCurrentUser();
+  const permissions = currentUser?.permissions ?? [];
+  const canCreate = permissions.includes("invoice.create");
+  const canVoid = permissions.includes("invoice.void");
+
   const [invoices, students, categories] = await Promise.all([
     apiRequest<Invoice[]>("/api/v1/invoices"),
-    apiRequest<Student[]>("/api/v1/students"),
-    apiRequest<NamedOption[]>("/api/v1/fee-categories"),
+    canCreate ? apiRequest<Student[]>("/api/v1/students") : Promise.resolve<Student[]>([]),
+    canCreate ? apiRequest<NamedOption[]>("/api/v1/fee-categories") : Promise.resolve<NamedOption[]>([]),
   ]);
 
   const activeStudents = students.filter((s) => s.status === "ACTIVE");
-  const studentById = new Map(students.map((s) => [s.id, s]));
+  const studentNameById = Object.fromEntries(students.map((s) => [s.id, s.fullName]));
 
   return (
     <div>
       <PageHeader
         title="Invoices"
         description="Generate a fee invoice for a student, then record payments against it."
-        action={<CreateInvoiceDialog students={activeStudents} categories={categories} />}
+        action={canCreate ? <CreateInvoiceDialog students={activeStudents} categories={categories} /> : undefined}
       />
 
       {invoices.length === 0 ? (
         <p className="text-sm text-muted-foreground">No invoices yet.</p>
       ) : (
-        <div className="overflow-x-auto rounded-lg border border-border">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Invoice #</TableHead>
-                <TableHead>Student</TableHead>
-                <TableHead>Total</TableHead>
-                <TableHead>Due Date</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead className="text-right">Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {invoices.map((inv) => (
-                <TableRow key={inv.id}>
-                  <TableCell className="font-mono text-xs text-muted-foreground">
-                    <Link href={`/dashboard/invoices/${inv.id}`} className="hover:underline">
-                      {inv.invoiceNumber}
-                    </Link>
-                  </TableCell>
-                  <TableCell className="font-medium">{studentById.get(inv.studentId)?.fullName ?? "—"}</TableCell>
-                  <TableCell className="text-muted-foreground">{inv.totalAmount}</TableCell>
-                  <TableCell className="text-muted-foreground">{inv.dueDate.slice(0, 10)}</TableCell>
-                  <TableCell>
-                    <Badge variant={STATUS_VARIANT[inv.status]}>{inv.status}</Badge>
-                  </TableCell>
-                  <TableCell className="text-right">
-                    {inv.status === "UNPAID" ? <VoidInvoiceDialog invoiceId={inv.id} /> : null}
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </div>
+        <InvoicesTable invoices={invoices} studentNameById={studentNameById} canVoid={canVoid} />
       )}
     </div>
   );

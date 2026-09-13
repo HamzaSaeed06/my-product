@@ -1,4 +1,5 @@
 import { apiRequest } from "@/lib/apiClient";
+import { getCurrentUser } from "@/lib/session";
 import { PageHeader } from "@/components/page-header";
 import { CreateParentDialog, LinkChildDialog } from "./parent-dialogs";
 import { UnlinkChildButton } from "./unlink-child-button";
@@ -23,9 +24,21 @@ interface Student {
 }
 
 export default async function ParentsPage() {
+  // Mirrors parent.create/parent.edit from routes.ts — parent.edit gates
+  // three separate write routes (PATCH /:parentId, POST /:parentId/children
+  // link, DELETE /:parentId/children/:linkId unlink), so it gates both the
+  // "Link child" dialog and the "Unlink" button. The students fetch exists
+  // only to feed "Link child"'s picker (each parent's linked children
+  // render from the parent's own embedded `children[].student`, not this
+  // list), so it's gated the same way rather than fetched unconditionally.
+  const currentUser = await getCurrentUser();
+  const permissions = currentUser?.permissions ?? [];
+  const canCreate = permissions.includes("parent.create");
+  const canEdit = permissions.includes("parent.edit");
+
   const [parents, students] = await Promise.all([
     apiRequest<Parent[]>("/api/v1/parents"),
-    apiRequest<Student[]>("/api/v1/students?status=ACTIVE"),
+    canEdit ? apiRequest<Student[]>("/api/v1/students?status=ACTIVE") : Promise.resolve<Student[]>([]),
   ]);
 
   return (
@@ -33,11 +46,11 @@ export default async function ParentsPage() {
       <PageHeader
         title="Parents"
         description="Guardians and their linked children — a parent can have multiple children."
-        action={<CreateParentDialog />}
+        action={canCreate ? <CreateParentDialog /> : undefined}
       />
 
       {parents.length === 0 ? (
-        <p className="text-sm text-muted-foreground">No parents yet. Click "Add parent" to create one.</p>
+        <p className="text-sm text-muted-foreground">No parents yet. Click &quot;Add parent&quot; to create one.</p>
       ) : (
         <div className="flex flex-col gap-3">
           {parents.map((parent) => (
@@ -50,7 +63,7 @@ export default async function ParentsPage() {
                     {parent.email ? ` · ${parent.email}` : ""}
                   </p>
                 </div>
-                <LinkChildDialog parentId={parent.id} students={students} />
+                {canEdit && <LinkChildDialog parentId={parent.id} students={students} />}
               </div>
 
               {parent.children.length > 0 ? (
@@ -64,7 +77,9 @@ export default async function ParentsPage() {
                           {link.relationship ? ` · ${link.relationship}` : ""})
                         </span>
                       </span>
-                      <UnlinkChildButton parentId={parent.id} linkId={link.id} studentName={link.student.fullName} />
+                      {canEdit && (
+                        <UnlinkChildButton parentId={parent.id} linkId={link.id} studentName={link.student.fullName} />
+                      )}
                     </div>
                   ))}
                 </div>

@@ -3,6 +3,8 @@ import { getCurrentUser } from "@/lib/session";
 import { PageHeader } from "@/components/page-header";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
+import { StatCard } from "@/components/stat-card";
+import { SectionHeading } from "@/components/section-heading";
 import { ExportCsvButton } from "../export-button";
 import { AcademicFilters } from "./filters";
 import { BarChartCard } from "../charts";
@@ -95,18 +97,9 @@ async function AcademicReportContent({ searchParams }: Props) {
       <AcademicFilters exams={exams.map((e) => ({ id: e.id, name: e.name }))} sections={sectionChoices} selectedExamId={examId} selectedSectionId={sectionId ?? ""} />
 
       <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-3">
-        <div className="rounded-lg border border-border p-4">
-          <p className="text-xs text-muted-foreground">Passed</p>
-          <p className="text-2xl font-semibold text-foreground">{report.passFailRates.passed}</p>
-        </div>
-        <div className="rounded-lg border border-border p-4">
-          <p className="text-xs text-muted-foreground">Failed</p>
-          <p className="text-2xl font-semibold text-foreground">{report.passFailRates.failed}</p>
-        </div>
-        <div className="rounded-lg border border-border p-4">
-          <p className="text-xs text-muted-foreground">Pass rate</p>
-          <p className="text-2xl font-semibold text-foreground">{report.passFailRates.passRatePercentage}%</p>
-        </div>
+        <StatCard label="Passed" value={report.passFailRates.passed} />
+        <StatCard label="Failed" value={report.passFailRates.failed} />
+        <StatCard label="Pass rate" value={`${report.passFailRates.passRatePercentage}%`} />
       </div>
 
       <div className="mt-6 grid grid-cols-1 gap-4 lg:grid-cols-2">
@@ -121,7 +114,7 @@ async function AcademicReportContent({ searchParams }: Props) {
       </div>
 
       <div className="mt-6">
-        <h2 className="mb-3 text-sm font-semibold text-foreground">Student performance</h2>
+        <SectionHeading>Student performance</SectionHeading>
         <div className="overflow-x-auto rounded-lg border border-border">
           <Table>
             <TableHeader>
@@ -159,7 +152,7 @@ async function AcademicReportContent({ searchParams }: Props) {
 
       {report.teacherPerformance.length > 0 ? (
         <div className="mt-6">
-          <h2 className="mb-3 text-sm font-semibold text-foreground">Teacher performance</h2>
+          <SectionHeading>Teacher performance</SectionHeading>
           <div className="overflow-x-auto rounded-lg border border-border">
             <Table>
               <TableHeader>
@@ -185,7 +178,7 @@ async function AcademicReportContent({ searchParams }: Props) {
 
       {report.curriculumProgress.length > 0 ? (
         <div className="mt-6">
-          <h2 className="mb-3 text-sm font-semibold text-foreground">Curriculum progress</h2>
+          <SectionHeading>Curriculum progress</SectionHeading>
           <div className="flex flex-wrap gap-2">
             {report.curriculumProgress.map((c) => (
               <div key={c.sectionId} className="rounded-md bg-secondary/50 px-3 py-1.5 text-xs text-muted-foreground">

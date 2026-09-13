@@ -1,7 +1,6 @@
 import { getCurrentUser } from "@/lib/session";
 import { apiRequest } from "@/lib/apiClient";
 import { getTeacherAssignments } from "@/lib/portalScope";
-import { ChildSwitcher } from "@/components/child-switcher";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { MarkAttendanceForm } from "../../dashboard/attendance/mark-attendance-form";
@@ -114,9 +113,6 @@ export default async function PortalAttendancePage({
   return (
     <div>
       <h1 className="text-lg font-semibold text-foreground">Attendance</h1>
-      {user.roles.includes("PARENT") ? (
-        <ChildSwitcher students={students} selectedId={studentId} basePath="/portal/attendance" />
-      ) : null}
       {records.length === 0 ? (
         <p className="mt-4 text-sm text-muted-foreground">No attendance records yet.</p>
       ) : (

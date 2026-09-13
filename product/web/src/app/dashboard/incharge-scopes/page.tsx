@@ -1,10 +1,8 @@
 import { apiRequest } from "@/lib/apiClient";
 import { getCurrentUser } from "@/lib/session";
 import { PageHeader } from "@/components/page-header";
-import { Badge } from "@/components/ui/badge";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { CreateInchargeScopeDialog, EditInchargeScopeDialog } from "./scope-dialogs";
-import { RevokeScopeButton } from "./revoke-scope-button";
+import { CreateInchargeScopeDialog } from "./scope-dialogs";
+import { InchargeScopesTable } from "./incharge-scopes-table";
 
 interface NamedOption {
   id: string;
@@ -30,23 +28,27 @@ interface Scope {
 }
 
 export default async function InchargeScopesPage() {
-  const [user, scopes, users, campuses, academicYears, classes, sections] = await Promise.all([
-    getCurrentUser(),
+  const user = await getCurrentUser();
+  // incharge_scope.create/.edit/.revoke from routes.ts — distinct keys,
+  // not necessarily all held together, so gated separately rather than
+  // collapsed into one role check. sections is fetched only to feed the
+  // Edit dialog's section CheckboxList (not used for row labels), so it's
+  // gated behind canEdit; users/campuses/academicYears/classes double as
+  // row labels for every viewer (userNameById/campusNameById/etc.) so they
+  // stay unconditional and fall back to "—" per the table's own pattern.
+  const permissions = user?.permissions ?? [];
+  const canCreate = permissions.includes("incharge_scope.create");
+  const canEdit = permissions.includes("incharge_scope.edit");
+  const canRevoke = permissions.includes("incharge_scope.revoke");
+
+  const [scopes, users, campuses, academicYears, classes, sections] = await Promise.all([
     apiRequest<Scope[]>("/api/v1/incharge-scopes"),
     apiRequest<UserWithRoles[]>("/api/v1/users"),
     apiRequest<NamedOption[]>("/api/v1/campuses"),
     apiRequest<NamedOption[]>("/api/v1/academic-years"),
     apiRequest<NamedOption[]>("/api/v1/classes"),
-    apiRequest<NamedOption[]>("/api/v1/sections"),
+    canEdit ? apiRequest<NamedOption[]>("/api/v1/sections") : Promise.resolve<NamedOption[]>([]),
   ]);
-
-  // Campus Head can see this page (their own campus's Incharge scopes) but
-  // only Super Admin can create/edit/revoke one — matches the seed.ts
-  // grant (CAMPUS_HEAD has incharge_scope.view only). A hidden button isn't
-  // the real security boundary (the backend already refuses these actions
-  // for CAMPUS_HEAD), but showing controls that would just 403 on click is
-  // bad UX, so hide them here too.
-  const canManage = !!user?.roles.includes("SUPER_ADMIN");
 
   const inchargeUsers = users
     .filter((u) => u.roles.some((r) => r.roleName === "INCHARGE"))
@@ -63,7 +65,7 @@ export default async function InchargeScopesPage() {
         title="Incharge Scopes"
         description="Which classes/sections each Incharge can manage — dynamic, overlap allowed by design."
         action={
-          canManage ? (
+          canCreate ? (
             <CreateInchargeScopeDialog
               inchargeUsers={inchargeUsers}
               campuses={campuses}
@@ -74,63 +76,18 @@ export default async function InchargeScopesPage() {
         }
       />
 
-      {scopes.length === 0 ? (
-        <p className="text-sm text-muted-foreground">
-          {canManage
-            ? 'No scopes assigned yet. Click "Assign scope" to give an Incharge access to classes/sections.'
-            : "No Incharge scopes at your campus yet."}
-        </p>
-      ) : (
-        <div className="overflow-x-auto rounded-lg border border-border">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Incharge</TableHead>
-                <TableHead>Campus</TableHead>
-                <TableHead>Academic year</TableHead>
-                <TableHead>Classes</TableHead>
-                <TableHead>Sections</TableHead>
-                <TableHead className="text-right">Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {scopes.map((scope) => (
-                <TableRow key={scope.id}>
-                  <TableCell className="font-medium">{userNameById.get(scope.userId) ?? "—"}</TableCell>
-                  <TableCell className="text-muted-foreground">
-                    {campusNameById.get(scope.campusId) ?? "—"}
-                  </TableCell>
-                  <TableCell className="text-muted-foreground">
-                    {yearNameById.get(scope.academicYearId) ?? "—"}
-                  </TableCell>
-                  <TableCell>
-                    <div className="flex flex-wrap gap-1">
-                      {scope.classes.map((c) => (
-                        <Badge key={c.classId} variant="secondary">
-                          {classNameById.get(c.classId) ?? "—"}
-                        </Badge>
-                      ))}
-                    </div>
-                  </TableCell>
-                  <TableCell className="text-muted-foreground">
-                    {scope.sections.length === 0 ? "All sections" : scope.sections.length}
-                  </TableCell>
-                  <TableCell className="flex justify-end gap-2">
-                    {canManage ? (
-                      <>
-                        <EditInchargeScopeDialog scope={scope} classes={classes} sections={sections} />
-                        <RevokeScopeButton id={scope.id} userName={userNameById.get(scope.userId) ?? "this user"} />
-                      </>
-                    ) : (
-                      <span className="text-xs text-muted-foreground">View only</span>
-                    )}
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </div>
-      )}
+      <InchargeScopesTable
+        scopes={scopes}
+        userNameById={Object.fromEntries(userNameById)}
+        campusNameById={Object.fromEntries(campusNameById)}
+        yearNameById={Object.fromEntries(yearNameById)}
+        classNameById={Object.fromEntries(classNameById)}
+        classes={classes}
+        sections={sections}
+        canCreate={canCreate}
+        canEdit={canEdit}
+        canRevoke={canRevoke}
+      />
     </div>
   );
 }

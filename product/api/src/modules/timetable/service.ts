@@ -43,16 +43,34 @@ export async function getTimetable(id: string) {
 
 // Same teacher cannot be in 2 places at the same day+period, across the
 // WHOLE academic year (not just this section) — a service-layer check
-// since it spans multiple Timetable rows, not something a DB constraint
-// can express.
-async function assertNoTeacherConflict(params: {
-  teacherId: string;
-  academicYearId: string;
-  dayOfWeek: DayOfWeek;
-  periodNumber: number;
-  excludeEntryId?: string;
-}) {
-  const conflict = await prisma.timetableEntry.findFirst({
+// since it spans multiple Timetable rows (via the timetable relation's
+// academicYearId), not something a single-table @@unique can express the
+// way SECTION_SLOT_CONFLICT below is (that one has a real DB constraint:
+// @@unique([timetableId, dayOfWeek, periodNumber])).
+//
+// Section 1.3: this check used to run as a plain findFirst before the
+// create/update — a separate read-then-write, so two concurrent requests
+// scheduling the same teacher into different sections for the same
+// day/period could both pass the check before either write commits. Now
+// takes `db` (the transaction client) and both call sites run it inside a
+// Serializable $transaction — Prisma's default Read Committed isolation
+// would NOT actually close this race even inside a transaction (it only
+// promises each statement sees committed data as of that statement, not
+// protection from a concurrent phantom insert); Serializable is what
+// makes "check then write" safe, at the cost of one side getting a P2034
+// serialization failure under real contention, mapped to the same
+// TEACHER_CONFLICT the pre-check already gives an unmatched read.
+async function assertNoTeacherConflict(
+  db: Prisma.TransactionClient,
+  params: {
+    teacherId: string;
+    academicYearId: string;
+    dayOfWeek: DayOfWeek;
+    periodNumber: number;
+    excludeEntryId?: string;
+  }
+) {
+  const conflict = await db.timetableEntry.findFirst({
     where: {
       teacherId: params.teacherId,
       dayOfWeek: params.dayOfWeek,
@@ -71,6 +89,14 @@ async function assertNoTeacherConflict(params: {
   }
 }
 
+// P2034 is Prisma's code for a Serializable transaction that lost a write
+// conflict — the correct outcome here is the same friendly message a
+// losing concurrent request would get from the pre-check itself, not a
+// raw 500.
+function isSerializationConflict(err: unknown): boolean {
+  return err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2034";
+}
+
 export async function addTimetableEntry(
   timetableId: string,
   input: { dayOfWeek: DayOfWeek; periodNumber: number; subjectId: string; teacherId: string; startTime?: string; endTime?: string },
@@ -86,18 +112,23 @@ export async function addTimetableEntry(
   if (!subject || subject.archivedAt) throw new HttpError(400, "SUBJECT_NOT_FOUND", "Subject not found or archived");
   if (!teacher || teacher.status === "ARCHIVED") throw new HttpError(400, "TEACHER_NOT_FOUND", "Teacher not found or archived");
 
-  await assertNoTeacherConflict({
-    teacherId: input.teacherId,
-    academicYearId: timetable.academicYearId,
-    dayOfWeek: input.dayOfWeek,
-    periodNumber: input.periodNumber,
-  });
-
   try {
-    const entry = await prisma.timetableEntry.create({
-      data: { timetableId, ...input },
-      include: { subject: true, teacher: { include: { user: true } } },
-    });
+    const entry = await prisma.$transaction(
+      async (tx) => {
+        await assertNoTeacherConflict(tx, {
+          teacherId: input.teacherId,
+          academicYearId: timetable.academicYearId,
+          dayOfWeek: input.dayOfWeek,
+          periodNumber: input.periodNumber,
+        });
+
+        return tx.timetableEntry.create({
+          data: { timetableId, ...input },
+          include: { subject: true, teacher: { include: { user: true } } },
+        });
+      },
+      { isolationLevel: Prisma.TransactionIsolationLevel.Serializable }
+    );
 
     await writeAuditLog({
       actorId,
@@ -111,6 +142,13 @@ export async function addTimetableEntry(
   } catch (err) {
     if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2002") {
       throw new HttpError(409, "SECTION_SLOT_CONFLICT", "This section already has a subject scheduled for that day/period");
+    }
+    if (isSerializationConflict(err)) {
+      throw new HttpError(
+        409,
+        "TEACHER_CONFLICT",
+        "This teacher was just scheduled into a conflicting slot by another request — refresh and retry"
+      );
     }
     throw err;
   }
@@ -137,20 +175,25 @@ export async function updateTimetableEntry(
     if (!teacher || teacher.status === "ARCHIVED") throw new HttpError(400, "TEACHER_NOT_FOUND", "Teacher not found or archived");
   }
 
-  await assertNoTeacherConflict({
-    teacherId: nextTeacherId,
-    academicYearId: entry.timetable.academicYearId,
-    dayOfWeek: nextDayOfWeek,
-    periodNumber: nextPeriodNumber,
-    excludeEntryId: id,
-  });
-
   try {
-    const updated = await prisma.timetableEntry.update({
-      where: { id },
-      data: input,
-      include: { subject: true, teacher: { include: { user: true } } },
-    });
+    const updated = await prisma.$transaction(
+      async (tx) => {
+        await assertNoTeacherConflict(tx, {
+          teacherId: nextTeacherId,
+          academicYearId: entry.timetable.academicYearId,
+          dayOfWeek: nextDayOfWeek,
+          periodNumber: nextPeriodNumber,
+          excludeEntryId: id,
+        });
+
+        return tx.timetableEntry.update({
+          where: { id },
+          data: input,
+          include: { subject: true, teacher: { include: { user: true } } },
+        });
+      },
+      { isolationLevel: Prisma.TransactionIsolationLevel.Serializable }
+    );
 
     await writeAuditLog({
       actorId,
@@ -165,6 +208,13 @@ export async function updateTimetableEntry(
   } catch (err) {
     if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2002") {
       throw new HttpError(409, "SECTION_SLOT_CONFLICT", "This section already has a subject scheduled for that day/period");
+    }
+    if (isSerializationConflict(err)) {
+      throw new HttpError(
+        409,
+        "TEACHER_CONFLICT",
+        "This teacher was just scheduled into a conflicting slot by another request — refresh and retry"
+      );
     }
     throw err;
   }

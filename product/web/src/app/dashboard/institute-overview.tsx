@@ -1,8 +1,8 @@
 import Link from "next/link";
 import { Building2, GraduationCap, Users, ClipboardList } from "lucide-react";
 import { apiRequest } from "@/lib/apiClient";
-import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardAction } from "@/components/ui/card";
-import { DeltaBadge } from "@/components/delta-badge";
+import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
+import { StatCard } from "@/components/stat-card";
 import { CampusComparisonChart } from "./campus-comparison-chart";
 import { CampusesTable } from "./campuses-table";
 
@@ -25,35 +25,6 @@ interface InstituteOverviewData {
     pendingAdmissions: number;
   };
   perCampus: CampusOverview[];
-}
-
-function StatCard({
-  label,
-  value,
-  icon: Icon,
-  deltaPercent,
-}: {
-  label: string;
-  value: number;
-  icon: React.ComponentType<{ className?: string }>;
-  deltaPercent?: number | null;
-}) {
-  return (
-    <Card size="sm">
-      <CardHeader>
-        <CardDescription className="flex items-center gap-1.5">
-          <Icon className="size-3.5" />
-          {label}
-        </CardDescription>
-        <CardTitle className="text-2xl font-semibold tabular-nums">{value.toLocaleString()}</CardTitle>
-        {deltaPercent !== undefined ? (
-          <CardAction>
-            <DeltaBadge percent={deltaPercent} />
-          </CardAction>
-        ) : null}
-      </CardHeader>
-    </Card>
-  );
 }
 
 // Super Admin's home — a read-only, cross-campus monitoring view, not an
@@ -97,7 +68,7 @@ export async function InstituteOverview() {
           <Card>
             <CardHeader>
               <CardTitle>Campuses</CardTitle>
-              <CardDescription>Each campus's own numbers — click through to drill into one.</CardDescription>
+              <CardDescription>Each campus&apos;s own numbers — click through to drill into one.</CardDescription>
             </CardHeader>
             <CardContent>
               <CampusesTable perCampus={perCampus} />

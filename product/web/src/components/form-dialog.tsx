@@ -2,6 +2,7 @@
 
 import { useState, useTransition, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -42,10 +43,12 @@ export function FormDialog({
       const result = await action(formData);
       if (result?.error) {
         setError(result.error);
+        toast.error(result.error);
         return;
       }
       setOpen(false);
       setError(null);
+      toast.success("Saved");
       router.refresh();
     });
   }
@@ -66,7 +69,11 @@ export function FormDialog({
         </DialogHeader>
         <form action={handleSubmit} className="flex flex-col gap-4">
           {children}
-          {error ? <p className="text-sm text-destructive">{error}</p> : null}
+          {error ? (
+            <p role="alert" className="text-sm text-destructive">
+              {error}
+            </p>
+          ) : null}
           <DialogFooter>
             <Button type="submit" disabled={isPending}>
               {isPending ? "Saving…" : submitLabel}

@@ -3,6 +3,8 @@ import { getCurrentUser } from "@/lib/session";
 import { PageHeader } from "@/components/page-header";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
+import { StatCard } from "@/components/stat-card";
+import { SectionHeading } from "@/components/section-heading";
 import { ExportCsvButton } from "../export-button";
 import { DateRangeFilters } from "../date-range-filters";
 import { LineChartCard } from "../charts";
@@ -68,18 +70,9 @@ async function FinancialReportContent({ searchParams }: Props) {
       <DateRangeFilters basePath="/dashboard/reports/financial" dateFrom={dateFrom} dateTo={dateTo} campusId={campusId ?? ""} campuses={campuses} />
 
       <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-3">
-        <div className="rounded-lg border border-border p-4">
-          <p className="text-xs text-muted-foreground">Outstanding fees</p>
-          <p className="text-2xl font-semibold text-foreground">{report.outstandingFees}</p>
-        </div>
-        <div className="rounded-lg border border-border p-4">
-          <p className="text-xs text-muted-foreground">Paid invoices (range)</p>
-          <p className="text-2xl font-semibold text-foreground">{report.paidInvoicesCount}</p>
-        </div>
-        <div className="rounded-lg border border-border p-4">
-          <p className="text-xs text-muted-foreground">Pending reconciliation</p>
-          <p className="text-2xl font-semibold text-foreground">{report.reconciliation.pendingCount}</p>
-        </div>
+        <StatCard label="Outstanding fees" value={report.outstandingFees} />
+        <StatCard label="Paid invoices (range)" value={report.paidInvoicesCount} />
+        <StatCard label="Pending reconciliation" value={report.reconciliation.pendingCount} />
       </div>
 
       <div className="mt-6">
@@ -88,7 +81,7 @@ async function FinancialReportContent({ searchParams }: Props) {
 
       <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2">
         <div className="rounded-lg border border-border p-4">
-          <p className="mb-2 text-sm font-medium text-foreground">Discounts &amp; waivers</p>
+          <SectionHeading className="mb-2">Discounts &amp; waivers</SectionHeading>
           <p className="text-sm text-muted-foreground">
             {report.discountWaiverSummary.discountCount} discounts totaling {report.discountWaiverSummary.totalDiscounts}
           </p>
@@ -97,7 +90,7 @@ async function FinancialReportContent({ searchParams }: Props) {
           </p>
         </div>
         <div className="rounded-lg border border-border p-4">
-          <p className="mb-2 text-sm font-medium text-foreground">Campus-wise revenue</p>
+          <SectionHeading className="mb-2">Campus-wise revenue</SectionHeading>
           {report.campusWiseRevenue.length === 0 ? (
             <p className="text-sm text-muted-foreground">No collections in this range.</p>
           ) : (
@@ -113,7 +106,7 @@ async function FinancialReportContent({ searchParams }: Props) {
       </div>
 
       <div className="mt-6">
-        <h2 className="mb-3 text-sm font-semibold text-foreground">Cashier reports (Cash Closings)</h2>
+        <SectionHeading>Cashier reports (Cash Closings)</SectionHeading>
         <div className="overflow-x-auto rounded-lg border border-border">
           <Table>
             <TableHeader>
@@ -129,7 +122,13 @@ async function FinancialReportContent({ searchParams }: Props) {
                 <TableRow key={c.id}>
                   <TableCell className="text-muted-foreground">{c.date.slice(0, 10)}</TableCell>
                   <TableCell>{c.collections}</TableCell>
-                  <TableCell className={c.variance !== 0 ? "text-destructive" : "text-muted-foreground"}>{c.variance}</TableCell>
+                  <TableCell
+                    className={
+                      c.variance < 0 ? "text-destructive" : c.variance > 0 ? "text-warning" : "text-muted-foreground"
+                    }
+                  >
+                    {c.variance}
+                  </TableCell>
                   <TableCell>
                     <Badge variant={c.status === "APPROVED" ? "default" : "secondary"}>{c.status}</Badge>
                   </TableCell>

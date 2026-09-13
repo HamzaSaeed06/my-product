@@ -1,9 +1,8 @@
 import { apiRequest } from "@/lib/apiClient";
 import { getCurrentUser } from "@/lib/session";
 import { PageHeader } from "@/components/page-header";
-import { Badge } from "@/components/ui/badge";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { CreateUserDialog, AssignRoleDialog, RemoveRoleButton, ToggleActiveButton } from "./user-dialogs";
+import { CreateUserDialog } from "./user-dialogs";
+import { UsersTable } from "./users-table";
 
 interface UserRow {
   id: string;
@@ -43,7 +42,6 @@ export default async function UsersPage() {
   const canViewRoles = permissions.includes("role.view");
   const canViewCampuses = permissions.includes("campus.view");
   const canAssignRoles = canEdit && canViewRoles && canViewCampuses;
-  const canAct = canEdit || canDisable;
 
   const [roles, campuses] = await Promise.all([
     canViewRoles ? apiRequest<RoleOption[]>("/api/v1/roles") : Promise.resolve<RoleOption[]>([]),
@@ -51,8 +49,6 @@ export default async function UsersPage() {
   ]);
 
   const activeRoles = roles.filter((r) => !r.archivedAt);
-  const campusName = (id: string | null) =>
-    id ? (campuses.find((c) => c.id === id)?.name ?? (canViewCampuses ? "Unknown campus" : "Other campus")) : "All campuses";
 
   return (
     <div>
@@ -62,68 +58,15 @@ export default async function UsersPage() {
         action={canCreate ? <CreateUserDialog /> : undefined}
       />
 
-      {users.length === 0 ? (
-        <p className="text-sm text-muted-foreground">No users yet. Click &quot;Add user&quot; to create one.</p>
-      ) : (
-        <div className="overflow-x-auto rounded-lg border border-border">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Name</TableHead>
-                <TableHead>Email</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead>Roles</TableHead>
-                {canAct ? <TableHead className="text-right">Actions</TableHead> : null}
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {users.map((user) => (
-                <TableRow key={user.id}>
-                  <TableCell className="font-medium">{user.fullName}</TableCell>
-                  <TableCell className="text-muted-foreground">{user.email}</TableCell>
-                  <TableCell>
-                    {user.isActive ? <Badge>Active</Badge> : <Badge variant="secondary">Disabled</Badge>}
-                  </TableCell>
-                  <TableCell>
-                    {user.roles.length === 0 ? (
-                      <span className="text-sm text-muted-foreground">No roles</span>
-                    ) : (
-                      <div className="flex flex-wrap gap-1.5">
-                        {user.roles.map((role) => (
-                          <div key={role.userRoleId} className="flex items-center gap-1">
-                            <Badge variant="outline" title={campusName(role.campusId)}>
-                              {role.roleName}
-                              {role.campusId ? ` · ${campusName(role.campusId)}` : ""}
-                            </Badge>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </TableCell>
-                  {canAct ? (
-                    <TableCell className="flex flex-wrap justify-end gap-2">
-                      {canAssignRoles ? (
-                        <AssignRoleDialog userId={user.id} userName={user.fullName} roles={activeRoles} campuses={campuses} />
-                      ) : null}
-                      {canEdit
-                        ? user.roles.map((role) => (
-                            <RemoveRoleButton
-                              key={role.userRoleId}
-                              userId={user.id}
-                              userRoleId={role.userRoleId}
-                              roleName={`${role.roleName}${role.campusId ? ` (${campusName(role.campusId)})` : ""}`}
-                            />
-                          ))
-                        : null}
-                      {canDisable ? <ToggleActiveButton userId={user.id} isActive={user.isActive} /> : null}
-                    </TableCell>
-                  ) : null}
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </div>
-      )}
+      <UsersTable
+        users={users}
+        activeRoles={activeRoles}
+        campuses={campuses}
+        canViewCampuses={canViewCampuses}
+        canEdit={canEdit}
+        canDisable={canDisable}
+        canAssignRoles={canAssignRoles}
+      />
     </div>
   );
 }

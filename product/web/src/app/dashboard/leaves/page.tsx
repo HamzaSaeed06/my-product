@@ -1,10 +1,8 @@
 import { apiRequest } from "@/lib/apiClient";
 import { getCurrentUser } from "@/lib/session";
 import { PageHeader } from "@/components/page-header";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Badge } from "@/components/ui/badge";
 import { CreateLeaveDialog } from "./create-dialog";
-import { LeaveActionButtons } from "./decide-buttons";
+import { LeavesTable } from "./leaves-table";
 
 interface Student {
   id: string;
@@ -28,13 +26,6 @@ interface Leave {
   student: { fullName: string; studentCode: string } | null;
   teacher: { user: { fullName: string } } | null;
 }
-
-const STATUS_VARIANT: Record<string, "default" | "secondary" | "destructive"> = {
-  PENDING: "secondary",
-  APPROVED: "default",
-  REJECTED: "destructive",
-  CANCELLED: "secondary",
-};
 
 export default async function LeavesPage() {
   const currentUser = await getCurrentUser();
@@ -62,7 +53,6 @@ export default async function LeavesPage() {
 
   const studentOptions = students.map((s) => ({ id: s.id, label: `${s.fullName} (${s.studentCode})` }));
   const teacherOptions = teachers.map((t) => ({ id: t.id, label: t.user.fullName }));
-  const canAct = canApprove || canReject || canCancel;
 
   return (
     <div>
@@ -72,60 +62,7 @@ export default async function LeavesPage() {
         action={canCreate ? <CreateLeaveDialog students={studentOptions} teachers={teacherOptions} /> : undefined}
       />
 
-      {leaves.length === 0 ? (
-        <p className="text-sm text-muted-foreground">No leave requests yet.</p>
-      ) : (
-        <div className="overflow-x-auto rounded-lg border border-border">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Subject</TableHead>
-                <TableHead>Dates</TableHead>
-                <TableHead>Reason</TableHead>
-                <TableHead>Status</TableHead>
-                {canAct ? <TableHead className="text-right">Actions</TableHead> : null}
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {leaves.map((leave) => (
-                <TableRow key={leave.id}>
-                  <TableCell>
-                    <p className="font-medium text-foreground">
-                      {leave.subjectType === "STUDENT" ? leave.student?.fullName : leave.teacher?.user.fullName}
-                    </p>
-                    <p className="text-xs text-muted-foreground">
-                      {leave.subjectType === "STUDENT" ? `Student · ${leave.student?.studentCode}` : "Teacher"}
-                    </p>
-                  </TableCell>
-                  <TableCell className="text-muted-foreground">
-                    {leave.fromDate.slice(0, 10)} → {leave.toDate.slice(0, 10)}
-                    {leave.isRetrospective ? (
-                      <Badge variant="secondary" className="ml-2">
-                        Retrospective
-                      </Badge>
-                    ) : null}
-                  </TableCell>
-                  <TableCell className="text-muted-foreground">{leave.reason}</TableCell>
-                  <TableCell>
-                    <Badge variant={STATUS_VARIANT[leave.status]}>{leave.status}</Badge>
-                  </TableCell>
-                  {canAct ? (
-                    <TableCell className="text-right">
-                      <LeaveActionButtons
-                        id={leave.id}
-                        status={leave.status}
-                        canApprove={canApprove}
-                        canReject={canReject}
-                        canCancel={canCancel}
-                      />
-                    </TableCell>
-                  ) : null}
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </div>
-      )}
+      <LeavesTable leaves={leaves} canApprove={canApprove} canReject={canReject} canCancel={canCancel} />
     </div>
   );
 }

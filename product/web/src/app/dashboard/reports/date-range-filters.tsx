@@ -57,9 +57,11 @@ export function DateRangeFilters({
         <Input id="report-date-to" type="date" value={dateTo} onChange={(e) => navigate({ dateTo: e.target.value })} className="w-40" />
       </div>
       <div className="flex flex-col gap-1">
-        <Label className="text-xs">Campus</Label>
+        <Label htmlFor="report-campus" className="text-xs">
+          Campus
+        </Label>
         <Select value={campusId || "all"} onValueChange={(value) => value && navigate({ campusId: value === "all" ? "" : value })}>
-          <SelectTrigger className="w-48">
+          <SelectTrigger id="report-campus" className="w-48">
             <SelectValue placeholder="All campuses" />
           </SelectTrigger>
           <SelectContent>

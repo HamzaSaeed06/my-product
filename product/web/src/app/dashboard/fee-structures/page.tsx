@@ -1,10 +1,9 @@
 import { apiRequest } from "@/lib/apiClient";
+import { getCurrentUser } from "@/lib/session";
 import { PageHeader } from "@/components/page-header";
-import { Badge } from "@/components/ui/badge";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { CreateCategoryDialog } from "./category-dialog";
 import { CreateStructureDialog } from "./structure-dialog";
-import { ArchiveCategoryButton, ArchiveStructureButton } from "./archive-buttons";
+import { FeeCategoriesList, FeeStructuresTable } from "./fee-structures-table";
 
 interface Institute {
   id: string;
@@ -31,9 +30,22 @@ interface FeeStructure {
 }
 
 export default async function FeeStructuresPage() {
+  // Mirrors fee_structure.create/fee_structure.edit from routes.ts — the
+  // archive endpoints for both categories and structures require
+  // fee_structure.edit, not a separate archive key. `institute` and
+  // `classes` are fetched only to feed the two create dialogs' hidden
+  // instituteId input / class picker, so both are gated behind canCreate
+  // (institute.view is a distinct permission a fee_structure viewer may
+  // lack). `categories` is dual-purpose (also renders as the always-visible
+  // category chip list), so it stays unconditional.
+  const currentUser = await getCurrentUser();
+  const permissions = currentUser?.permissions ?? [];
+  const canCreate = permissions.includes("fee_structure.create");
+  const canEdit = permissions.includes("fee_structure.edit");
+
   const [institute, classes, categories, structures] = await Promise.all([
-    apiRequest<Institute>("/api/v1/institute"),
-    apiRequest<NamedOption[]>("/api/v1/classes"),
+    canCreate ? apiRequest<Institute>("/api/v1/institute") : Promise.resolve<Institute | null>(null),
+    canCreate ? apiRequest<NamedOption[]>("/api/v1/classes") : Promise.resolve<NamedOption[]>([]),
     apiRequest<FeeCategory[]>("/api/v1/fee-categories"),
     apiRequest<FeeStructure[]>("/api/v1/fee-structures"),
   ]);
@@ -45,61 +57,19 @@ export default async function FeeStructuresPage() {
       <div className="mb-8">
         <div className="mb-3 flex items-center justify-between">
           <h2 className="text-sm font-semibold text-foreground">Fee Categories</h2>
-          <CreateCategoryDialog instituteId={institute.id} />
+          {canCreate && institute ? <CreateCategoryDialog instituteId={institute.id} /> : null}
         </div>
-        {categories.length === 0 ? (
-          <p className="text-sm text-muted-foreground">No fee categories yet.</p>
-        ) : (
-          <div className="flex flex-wrap gap-2">
-            {categories.map((c) => (
-              <div key={c.id} className="flex items-center gap-2 rounded-md border border-border px-3 py-1.5 text-sm">
-                {c.name}
-                <ArchiveCategoryButton id={c.id} />
-              </div>
-            ))}
-          </div>
-        )}
+        <FeeCategoriesList categories={categories} canEdit={canEdit} />
       </div>
 
       <div>
         <div className="mb-3 flex items-center justify-between">
           <h2 className="text-sm font-semibold text-foreground">Fee Structures</h2>
-          <CreateStructureDialog instituteId={institute.id} classes={classes} categories={categories} />
+          {canCreate && institute ? (
+            <CreateStructureDialog instituteId={institute.id} classes={classes} categories={categories} />
+          ) : null}
         </div>
-        {structures.length === 0 ? (
-          <p className="text-sm text-muted-foreground">No fee structures yet.</p>
-        ) : (
-          <div className="overflow-x-auto rounded-lg border border-border">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Name</TableHead>
-                  <TableHead>Class</TableHead>
-                  <TableHead>Category</TableHead>
-                  <TableHead>Amount</TableHead>
-                  <TableHead>Frequency</TableHead>
-                  <TableHead className="text-right">Actions</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {structures.map((s) => (
-                  <TableRow key={s.id}>
-                    <TableCell className="font-medium">{s.name}</TableCell>
-                    <TableCell className="text-muted-foreground">{s.klass.name}</TableCell>
-                    <TableCell className="text-muted-foreground">{s.feeCategory.name}</TableCell>
-                    <TableCell className="text-muted-foreground">{s.amount}</TableCell>
-                    <TableCell>
-                      <Badge variant="secondary">{s.frequency}</Badge>
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <ArchiveStructureButton id={s.id} />
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </div>
-        )}
+        <FeeStructuresTable structures={structures} canEdit={canEdit} />
       </div>
     </div>
   );

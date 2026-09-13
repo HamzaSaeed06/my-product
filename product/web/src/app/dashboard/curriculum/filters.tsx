@@ -28,7 +28,7 @@ export function CurriculumFilters({
   return (
     <div className="mb-4 flex items-center gap-3">
       <Select value={selectedClassId} onValueChange={(value) => value && navigate(value, selectedYearId)}>
-        <SelectTrigger className="w-56">
+        <SelectTrigger aria-label="Filter by class" className="w-56">
           <SelectValue placeholder="Select a class" />
         </SelectTrigger>
         <SelectContent>
@@ -40,7 +40,7 @@ export function CurriculumFilters({
         </SelectContent>
       </Select>
       <Select value={selectedYearId} onValueChange={(value) => value && navigate(selectedClassId, value)}>
-        <SelectTrigger className="w-56">
+        <SelectTrigger aria-label="Filter by academic year" className="w-56">
           <SelectValue placeholder="Select an academic year" />
         </SelectTrigger>
         <SelectContent>

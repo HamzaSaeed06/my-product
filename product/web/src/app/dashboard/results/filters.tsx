@@ -23,7 +23,7 @@ export function ResultsFilters({
   return (
     <div className="mb-4 flex items-center gap-3">
       <Select value={selectedExamId} onValueChange={(value) => value && navigate(value, selectedSectionId)}>
-        <SelectTrigger className="w-56">
+        <SelectTrigger aria-label="Filter by exam" className="w-56">
           <SelectValue placeholder="Select an exam" />
         </SelectTrigger>
         <SelectContent>
@@ -35,7 +35,7 @@ export function ResultsFilters({
         </SelectContent>
       </Select>
       <Select value={selectedSectionId} onValueChange={(value) => value && navigate(selectedExamId, value)}>
-        <SelectTrigger className="w-72">
+        <SelectTrigger aria-label="Filter by section" className="w-72">
           <SelectValue placeholder="Select a section" />
         </SelectTrigger>
         <SelectContent>

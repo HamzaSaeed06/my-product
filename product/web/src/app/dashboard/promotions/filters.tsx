@@ -34,9 +34,9 @@ export function PromotionFilters({
   return (
     <div className="mb-4 grid grid-cols-2 gap-4 sm:grid-cols-4">
       <div className="flex flex-col gap-1.5">
-        <Label>From section</Label>
+        <Label htmlFor="promo-from-section">From section</Label>
         <Select value={selected.fromSectionId} onValueChange={(v) => v && update("fromSectionId", v)}>
-          <SelectTrigger>
+          <SelectTrigger id="promo-from-section">
             <SelectValue placeholder="Select" />
           </SelectTrigger>
           <SelectContent>
@@ -49,9 +49,9 @@ export function PromotionFilters({
         </Select>
       </div>
       <div className="flex flex-col gap-1.5">
-        <Label>Target year</Label>
+        <Label htmlFor="promo-target-year">Target year</Label>
         <Select value={selected.targetYearId} onValueChange={(v) => v && update("targetYearId", v)}>
-          <SelectTrigger>
+          <SelectTrigger id="promo-target-year">
             <SelectValue placeholder="Select" />
           </SelectTrigger>
           <SelectContent>
@@ -64,9 +64,9 @@ export function PromotionFilters({
         </Select>
       </div>
       <div className="flex flex-col gap-1.5">
-        <Label>Target class</Label>
+        <Label htmlFor="promo-target-class">Target class</Label>
         <Select value={selected.targetClassId} onValueChange={(v) => v && update("targetClassId", v)}>
-          <SelectTrigger>
+          <SelectTrigger id="promo-target-class">
             <SelectValue placeholder="Select" />
           </SelectTrigger>
           <SelectContent>
@@ -79,9 +79,9 @@ export function PromotionFilters({
         </Select>
       </div>
       <div className="flex flex-col gap-1.5">
-        <Label>Target section</Label>
+        <Label htmlFor="promo-target-section">Target section</Label>
         <Select value={selected.targetSectionId} onValueChange={(v) => v && update("targetSectionId", v)}>
-          <SelectTrigger>
+          <SelectTrigger id="promo-target-section">
             <SelectValue placeholder="Select" />
           </SelectTrigger>
           <SelectContent>

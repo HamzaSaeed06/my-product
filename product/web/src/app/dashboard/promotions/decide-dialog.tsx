@@ -47,9 +47,9 @@ export function DecidePromotionDialog({
       <input type="hidden" name="targetSectionId" value={targetSectionId} />
 
       <div className="flex flex-col gap-2">
-        <Label>Decision</Label>
+        <Label htmlFor="promo-decision">Decision</Label>
         <Select name="decision" value={decision} onValueChange={(v) => v && setDecision(v)} disabled={disabled}>
-          <SelectTrigger className="w-full">
+          <SelectTrigger id="promo-decision" className="w-full">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>

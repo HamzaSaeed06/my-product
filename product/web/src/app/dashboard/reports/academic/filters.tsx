@@ -23,7 +23,7 @@ export function AcademicFilters({
   return (
     <div className="flex flex-wrap items-center gap-3">
       <Select value={selectedExamId} onValueChange={(value) => value && navigate(value, "")}>
-        <SelectTrigger className="w-56">
+        <SelectTrigger aria-label="Filter by exam" className="w-56">
           <SelectValue placeholder="Select an exam" />
         </SelectTrigger>
         <SelectContent>
@@ -35,7 +35,7 @@ export function AcademicFilters({
         </SelectContent>
       </Select>
       <Select value={selectedSectionId || "all"} onValueChange={(value) => value && navigate(selectedExamId, value === "all" ? "" : value)}>
-        <SelectTrigger className="w-56">
+        <SelectTrigger aria-label="Filter by section" className="w-56">
           <SelectValue placeholder="All sections" />
         </SelectTrigger>
         <SelectContent>

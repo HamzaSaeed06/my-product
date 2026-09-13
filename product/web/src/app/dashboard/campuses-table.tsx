@@ -26,7 +26,11 @@ export function CampusesTable({ perCampus }: { perCampus: CampusOverview[] }) {
       key: "name",
       header: "Campus",
       sortValue: (c) => c.name,
-      render: (c) => <span className="font-medium text-foreground">{c.name}</span>,
+      render: (c) => (
+        <Link href={`/dashboard/campuses/${c.id}`} className="font-medium text-foreground hover:underline">
+          {c.name}
+        </Link>
+      ),
     },
     {
       key: "students",

@@ -57,9 +57,9 @@ export function AssignSubstituteDialog({ sections, teachers }: { sections: Secti
     >
       <input type="hidden" name="timetableEntryId" value={selectedEntryId} />
       <div className="flex flex-col gap-2">
-        <Label>Section</Label>
+        <Label htmlFor="sub-section">Section</Label>
         <Select disabled={disabled} onValueChange={handleSectionChange}>
-          <SelectTrigger className="w-full">
+          <SelectTrigger id="sub-section" className="w-full">
             <SelectValue placeholder="Select a section" />
           </SelectTrigger>
           <SelectContent>
@@ -72,13 +72,13 @@ export function AssignSubstituteDialog({ sections, teachers }: { sections: Secti
         </Select>
       </div>
       <div className="flex flex-col gap-2">
-        <Label>Period to cover</Label>
+        <Label htmlFor="sub-period">Period to cover</Label>
         <Select
           value={selectedEntryId}
           onValueChange={(value) => setSelectedEntryId(value ?? "")}
           disabled={entries.length === 0}
         >
-          <SelectTrigger className="w-full">
+          <SelectTrigger id="sub-period" className="w-full">
             <SelectValue placeholder={isLoadingEntries ? "Loading…" : "Select a period"} />
           </SelectTrigger>
           <SelectContent>
@@ -95,9 +95,9 @@ export function AssignSubstituteDialog({ sections, teachers }: { sections: Secti
         <Input id="sub-date" name="date" type="date" required />
       </div>
       <div className="flex flex-col gap-2">
-        <Label>Substitute teacher</Label>
+        <Label htmlFor="sub-substitute-teacher">Substitute teacher</Label>
         <Select name="substituteTeacherId" disabled={!selectedEntry}>
-          <SelectTrigger className="w-full">
+          <SelectTrigger id="sub-substitute-teacher" className="w-full">
             <SelectValue placeholder="Select a teacher" />
           </SelectTrigger>
           <SelectContent>

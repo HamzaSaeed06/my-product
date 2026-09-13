@@ -26,6 +26,7 @@ export function StudentSearchBox({ initialQuery }: { initialQuery: string }) {
   return (
     <Input
       placeholder="Search by name, student code, or phone…"
+      aria-label="Search students by name, student code, or phone"
       defaultValue={initialQuery}
       onChange={(e) => handleChange(e.target.value)}
       className="max-w-sm"

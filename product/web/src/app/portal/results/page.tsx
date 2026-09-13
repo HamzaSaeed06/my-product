@@ -1,6 +1,5 @@
 import { getCurrentUser } from "@/lib/session";
 import { apiRequest } from "@/lib/apiClient";
-import { ChildSwitcher } from "@/components/child-switcher";
 
 interface ResultItem {
   id: string;
@@ -47,9 +46,6 @@ export default async function PortalResultsPage({
   return (
     <div>
       <h1 className="text-lg font-semibold text-foreground">Results</h1>
-      {user.roles.includes("PARENT") ? (
-        <ChildSwitcher students={students} selectedId={studentId} basePath="/portal/results" />
-      ) : null}
       {results.length === 0 ? (
         <p className="mt-4 text-sm text-muted-foreground">No published results yet.</p>
       ) : (

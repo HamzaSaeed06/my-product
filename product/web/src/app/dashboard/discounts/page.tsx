@@ -1,4 +1,5 @@
 import { apiRequest } from "@/lib/apiClient";
+import { getCurrentUser } from "@/lib/session";
 import { PageHeader } from "@/components/page-header";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
@@ -23,9 +24,18 @@ interface Discount {
 }
 
 export default async function DiscountsPage() {
+  // Mirrors discount.create/discount.approve from routes.ts. students is
+  // dual-purpose (feeds CreateDiscountDialog's picker AND studentById's
+  // table labels), so gating its fetch on canCreate degrades to the
+  // table's existing "—" fallback for a view-only viewer.
+  const currentUser = await getCurrentUser();
+  const permissions = currentUser?.permissions ?? [];
+  const canCreate = permissions.includes("discount.create");
+  const canApprove = permissions.includes("discount.approve");
+
   const [discounts, students] = await Promise.all([
     apiRequest<Discount[]>("/api/v1/discounts"),
-    apiRequest<Student[]>("/api/v1/students"),
+    canCreate ? apiRequest<Student[]>("/api/v1/students") : Promise.resolve<Student[]>([]),
   ]);
 
   const activeStudents = students.filter((s) => s.status === "ACTIVE");
@@ -36,7 +46,7 @@ export default async function DiscountsPage() {
       <PageHeader
         title="Discounts"
         description="Sibling, merit, or staff discounts — reason required, approval required."
-        action={<CreateDiscountDialog students={activeStudents} />}
+        action={canCreate ? <CreateDiscountDialog students={activeStudents} /> : undefined}
       />
 
       {discounts.length === 0 ? (
@@ -64,7 +74,7 @@ export default async function DiscountsPage() {
                   <TableCell>
                     <Badge variant={d.status === "APPROVED" ? "default" : "secondary"}>{d.status}</Badge>
                   </TableCell>
-                  <TableCell className="text-right">{d.status === "PENDING" ? <DecideDiscountButtons id={d.id} /> : null}</TableCell>
+                  <TableCell className="text-right">{canApprove && d.status === "PENDING" ? <DecideDiscountButtons id={d.id} /> : null}</TableCell>
                 </TableRow>
               ))}
             </TableBody>

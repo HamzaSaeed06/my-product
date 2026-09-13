@@ -1,6 +1,5 @@
 import { getCurrentUser } from "@/lib/session";
 import { apiRequest } from "@/lib/apiClient";
-import { ChildSwitcher } from "@/components/child-switcher";
 
 interface ReportCardSnapshot {
   studentName: string;
@@ -55,7 +54,6 @@ export default async function PortalReportCardPage({
   return (
     <div>
       <h1 className="text-lg font-semibold text-foreground">Report Card</h1>
-      {isParent ? <ChildSwitcher students={students} selectedId={studentId} basePath="/portal/report-card" /> : null}
       {reportCards.length === 0 ? (
         <p className="mt-4 text-sm text-muted-foreground">No report cards generated yet.</p>
       ) : (

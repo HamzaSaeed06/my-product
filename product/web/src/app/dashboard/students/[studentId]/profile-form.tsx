@@ -20,7 +20,7 @@ interface FormState {
   success?: boolean;
 }
 
-export function StudentProfileForm({ student }: { student: Student }) {
+export function StudentProfileForm({ student, canEdit }: { student: Student; canEdit: boolean }) {
   const action = async (_prev: FormState, formData: FormData): Promise<FormState> => {
     const result = await updateStudent(student.id, formData);
     return result?.error ? { error: result.error } : { success: true };
@@ -31,30 +31,38 @@ export function StudentProfileForm({ student }: { student: Student }) {
     <form action={formAction} className="grid gap-4 sm:grid-cols-2">
       <div className="flex flex-col gap-2">
         <Label htmlFor="fullName">Full name</Label>
-        <Input id="fullName" name="fullName" defaultValue={student.fullName} required />
+        <Input id="fullName" name="fullName" defaultValue={student.fullName} required disabled={!canEdit} />
       </div>
       <div className="flex flex-col gap-2">
         <Label htmlFor="dateOfBirth">Date of birth</Label>
-        <Input id="dateOfBirth" name="dateOfBirth" type="date" defaultValue={student.dateOfBirth?.slice(0, 10)} />
+        <Input
+          id="dateOfBirth"
+          name="dateOfBirth"
+          type="date"
+          defaultValue={student.dateOfBirth?.slice(0, 10)}
+          disabled={!canEdit}
+        />
       </div>
       <div className="flex flex-col gap-2">
         <Label htmlFor="gender">Gender</Label>
-        <Input id="gender" name="gender" defaultValue={student.gender ?? ""} />
+        <Input id="gender" name="gender" defaultValue={student.gender ?? ""} disabled={!canEdit} />
       </div>
       <div className="flex flex-col gap-2">
         <Label htmlFor="phone">Phone</Label>
-        <Input id="phone" name="phone" defaultValue={student.phone ?? ""} />
+        <Input id="phone" name="phone" defaultValue={student.phone ?? ""} disabled={!canEdit} />
       </div>
       <div className="flex flex-col gap-2 sm:col-span-2">
         <Label htmlFor="address">Address</Label>
-        <Input id="address" name="address" defaultValue={student.address ?? ""} />
+        <Input id="address" name="address" defaultValue={student.address ?? ""} disabled={!canEdit} />
       </div>
       <div className="sm:col-span-2">
         {state.error ? <p className="mb-2 text-sm text-destructive">{state.error}</p> : null}
         {state.success ? <p className="mb-2 text-sm text-muted-foreground">Saved.</p> : null}
-        <Button type="submit" disabled={isPending}>
-          {isPending ? "Saving…" : "Save profile"}
-        </Button>
+        {canEdit && (
+          <Button type="submit" disabled={isPending}>
+            {isPending ? "Saving…" : "Save profile"}
+          </Button>
+        )}
       </div>
     </form>
   );

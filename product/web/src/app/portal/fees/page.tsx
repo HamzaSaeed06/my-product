@@ -1,6 +1,5 @@
 import { getCurrentUser } from "@/lib/session";
 import { apiRequest } from "@/lib/apiClient";
-import { ChildSwitcher } from "@/components/child-switcher";
 import { Badge } from "@/components/ui/badge";
 import { PayOnlineButton } from "./pay-online-button";
 
@@ -60,7 +59,6 @@ export default async function PortalFeesPage({
   return (
     <div>
       <h1 className="text-lg font-semibold text-foreground">Fees</h1>
-      <ChildSwitcher students={students} selectedId={studentId} basePath="/portal/fees" />
 
       {invoices.length === 0 ? (
         <p className="mt-4 text-sm text-muted-foreground">No invoices yet.</p>

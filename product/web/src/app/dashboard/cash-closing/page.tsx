@@ -1,4 +1,5 @@
 import { apiRequest } from "@/lib/apiClient";
+import { getCurrentUser } from "@/lib/session";
 import { PageHeader } from "@/components/page-header";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
@@ -24,9 +25,18 @@ interface CashClosing {
 }
 
 export default async function CashClosingPage() {
+  // Mirrors cash_closing.create/cash_closing.approve from routes.ts.
+  // campuses is dual-purpose (feeds CreateCashClosingDialog's picker AND
+  // campusById's table labels), so gating its fetch on canCreate degrades
+  // to the table's existing "—" fallback for a view-only viewer.
+  const currentUser = await getCurrentUser();
+  const permissions = currentUser?.permissions ?? [];
+  const canCreate = permissions.includes("cash_closing.create");
+  const canApprove = permissions.includes("cash_closing.approve");
+
   const [closings, campuses] = await Promise.all([
     apiRequest<CashClosing[]>("/api/v1/cash-closing"),
-    apiRequest<Campus[]>("/api/v1/campuses"),
+    canCreate ? apiRequest<Campus[]>("/api/v1/campuses") : Promise.resolve<Campus[]>([]),
   ]);
 
   const activeCampuses = campuses.filter((c) => !c.archivedAt);
@@ -37,7 +47,7 @@ export default async function CashClosingPage() {
       <PageHeader
         title="Cash Closing"
         description="Daily reconciliation per campus — expected vs actual, with variance requiring approval."
-        action={<CreateCashClosingDialog campuses={activeCampuses} />}
+        action={canCreate ? <CreateCashClosingDialog campuses={activeCampuses} /> : undefined}
       />
 
       {closings.length === 0 ? (
@@ -69,7 +79,7 @@ export default async function CashClosingPage() {
                   <TableCell>
                     <Badge variant={c.status === "APPROVED" ? "default" : "secondary"}>{c.status}</Badge>
                   </TableCell>
-                  <TableCell className="text-right">{c.status === "PENDING" ? <ApproveCashClosingButton id={c.id} /> : null}</TableCell>
+                  <TableCell className="text-right">{canApprove && c.status === "PENDING" ? <ApproveCashClosingButton id={c.id} /> : null}</TableCell>
                 </TableRow>
               ))}
             </TableBody>

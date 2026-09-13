@@ -1,4 +1,5 @@
 import { apiRequest } from "@/lib/apiClient";
+import { getCurrentUser } from "@/lib/session";
 import { PageHeader } from "@/components/page-header";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
@@ -34,10 +35,19 @@ const STATUS_VARIANT: Record<Refund["status"], "default" | "secondary"> = {
 };
 
 export default async function RefundsPage() {
+  // Mirrors refund.create/refund.approve from routes.ts. payments/students
+  // here are fetched only to build CreateRefundDialog's picker (the table
+  // itself reads payment.paymentNumber off the refund relation, not from
+  // this array), so both are gated the same way as the dialog.
+  const currentUser = await getCurrentUser();
+  const permissions = currentUser?.permissions ?? [];
+  const canCreate = permissions.includes("refund.create");
+  const canApprove = permissions.includes("refund.approve");
+
   const [refunds, payments, students] = await Promise.all([
     apiRequest<Refund[]>("/api/v1/refunds"),
-    apiRequest<Payment[]>("/api/v1/payments"),
-    apiRequest<Student[]>("/api/v1/students"),
+    canCreate ? apiRequest<Payment[]>("/api/v1/payments") : Promise.resolve<Payment[]>([]),
+    canCreate ? apiRequest<Student[]>("/api/v1/students") : Promise.resolve<Student[]>([]),
   ]);
 
   const studentById = new Map(students.map((s) => [s.id, s]));
@@ -50,7 +60,7 @@ export default async function RefundsPage() {
       <PageHeader
         title="Refunds"
         description="Request a refund against a payment, then approve and mark it completed."
-        action={<CreateRefundDialog payments={paymentOptions} />}
+        action={canCreate ? <CreateRefundDialog payments={paymentOptions} /> : undefined}
       />
 
       {refunds.length === 0 ? (
@@ -79,8 +89,8 @@ export default async function RefundsPage() {
                     <Badge variant={STATUS_VARIANT[r.status]}>{r.status}</Badge>
                   </TableCell>
                   <TableCell className="text-right">
-                    {r.status === "PENDING" ? <DecideRefundButtons id={r.id} /> : null}
-                    {r.status === "APPROVED" ? <CompleteRefundButton id={r.id} /> : null}
+                    {canApprove && r.status === "PENDING" ? <DecideRefundButtons id={r.id} /> : null}
+                    {canApprove && r.status === "APPROVED" ? <CompleteRefundButton id={r.id} /> : null}
                   </TableCell>
                 </TableRow>
               ))}

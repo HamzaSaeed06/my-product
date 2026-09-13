@@ -1,4 +1,5 @@
 import { apiRequest } from "@/lib/apiClient";
+import { getCurrentUser } from "@/lib/session";
 import { PageHeader } from "@/components/page-header";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
@@ -14,6 +15,11 @@ interface Gateway {
 }
 
 export default async function PaymentGatewaysPage() {
+  // payment_gateway.manage gates list/create/edit alike (see routes.ts) —
+  // the list route itself requires it, so a non-manager 403s the whole
+  // page today; that's expected. Gate the write actions on the same key
+  // as defense-in-depth/consistency with the rest of the app's convention.
+  const canManage = ((await getCurrentUser())?.permissions ?? []).includes("payment_gateway.manage");
   const gateways = await apiRequest<Gateway[]>("/api/v1/payment-gateways");
 
   return (
@@ -21,7 +27,7 @@ export default async function PaymentGatewaysPage() {
       <PageHeader
         title="Payment Gateways"
         description="Configure the gateway(s) used for parents' online payments. If more than one is active, the oldest active one is used."
-        action={<CreateGatewayDialog />}
+        action={canManage ? <CreateGatewayDialog /> : undefined}
       />
 
       {gateways.length === 0 ? (
@@ -46,7 +52,7 @@ export default async function PaymentGatewaysPage() {
                     <Badge variant={g.isActive ? "default" : "secondary"}>{g.isActive ? "Active" : "Inactive"}</Badge>
                   </TableCell>
                   <TableCell className="text-right">
-                    <GatewayActiveToggle gatewayId={g.id} isActive={g.isActive} />
+                    {canManage ? <GatewayActiveToggle gatewayId={g.id} isActive={g.isActive} /> : null}
                   </TableCell>
                 </TableRow>
               ))}

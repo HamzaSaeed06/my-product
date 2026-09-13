@@ -45,7 +45,7 @@ export function SectionPicker({
         disabled={sections.length === 0}
         onValueChange={(value) => setSelected(sections.find((s) => s.id === value))}
       >
-        <SelectTrigger className="w-full">
+        <SelectTrigger aria-label="Select a section" className="w-full">
           <SelectValue placeholder="Select a section" />
         </SelectTrigger>
         <SelectContent>

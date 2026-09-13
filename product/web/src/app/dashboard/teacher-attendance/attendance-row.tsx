@@ -59,7 +59,7 @@ export function TeacherAttendanceRow({
         }}
         disabled={isPending}
       >
-        <SelectTrigger className="w-32">
+        <SelectTrigger aria-label="Attendance status" className="w-32">
           <SelectValue />
         </SelectTrigger>
         <SelectContent>

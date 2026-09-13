@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { apiRequest } from "@/lib/apiClient";
+import { getCurrentUser } from "@/lib/session";
 import { PageHeader } from "@/components/page-header";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -21,6 +22,13 @@ export default async function StudentsPage({
 }) {
   const { q = "", campusId } = await searchParams;
 
+  // Mirrors student.create from routes.ts — Office/Incharge can hold
+  // student.view without student.create, so "Add student" must not render
+  // for them (it would 403 on submit).
+  const currentUser = await getCurrentUser();
+  const permissions = currentUser?.permissions ?? [];
+  const canCreate = permissions.includes("student.create");
+
   const students = await apiRequest<Student[]>(
     q
       ? `/api/v1/students/search?q=${encodeURIComponent(q)}`
@@ -32,7 +40,7 @@ export default async function StudentsPage({
       <PageHeader
         title="Students"
         description="Student identity is permanent — enrollment, class, and roll number live separately per academic year."
-        action={<CreateStudentDialog />}
+        action={canCreate ? <CreateStudentDialog /> : undefined}
       />
 
       <div className="mb-4">

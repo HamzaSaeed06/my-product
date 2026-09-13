@@ -1,4 +1,5 @@
 import { apiRequest } from "@/lib/apiClient";
+import { getCurrentUser } from "@/lib/session";
 import { PageHeader } from "@/components/page-header";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
@@ -47,10 +48,21 @@ interface ApprovalRequest {
 }
 
 export default async function PaymentsPage() {
+  // Mirrors payment.record/payment.reverse from routes.ts. students is
+  // dual-purpose (feeds RecordPaymentDialog's picker AND studentById's
+  // table labels), so gating its fetch on canRecord degrades to the
+  // table's existing "—" fallback for a view-only viewer rather than
+  // fetching data nobody but the Create dialog needs. invoices/credits are
+  // fetched only to feed that same dialog.
+  const currentUser = await getCurrentUser();
+  const permissions = currentUser?.permissions ?? [];
+  const canRecord = permissions.includes("payment.record");
+  const canReverse = permissions.includes("payment.reverse");
+
   const [students, invoices, credits, payments, pendingApprovals] = await Promise.all([
-    apiRequest<Student[]>("/api/v1/students"),
-    apiRequest<Invoice[]>("/api/v1/invoices"),
-    apiRequest<CreditTransaction[]>("/api/v1/payments/credits"),
+    canRecord ? apiRequest<Student[]>("/api/v1/students") : Promise.resolve<Student[]>([]),
+    canRecord ? apiRequest<Invoice[]>("/api/v1/invoices") : Promise.resolve<Invoice[]>([]),
+    canRecord ? apiRequest<CreditTransaction[]>("/api/v1/payments/credits") : Promise.resolve<CreditTransaction[]>([]),
     apiRequest<Payment[]>("/api/v1/payments"),
     apiRequest<ApprovalRequest[]>("/api/v1/approvals?status=PENDING"),
   ]);
@@ -64,7 +76,7 @@ export default async function PaymentsPage() {
       <PageHeader
         title="Payments"
         description="Record a cash payment against an invoice, or request/approve a reversal."
-        action={<RecordPaymentDialog students={activeStudents} invoices={invoices} credits={credits} />}
+        action={canRecord ? <RecordPaymentDialog students={activeStudents} invoices={invoices} credits={credits} /> : undefined}
       />
 
       {payments.length === 0 ? (
@@ -95,7 +107,7 @@ export default async function PaymentsPage() {
                     <Badge variant={p.status === "SUCCESS" ? "default" : "secondary"}>{p.status}</Badge>
                   </TableCell>
                   <TableCell className="text-right">
-                    {p.status === "SUCCESS" ? <RequestReversalDialog paymentId={p.id} /> : null}
+                    {canReverse && p.status === "SUCCESS" ? <RequestReversalDialog paymentId={p.id} /> : null}
                   </TableCell>
                 </TableRow>
               ))}
@@ -113,7 +125,7 @@ export default async function PaymentsPage() {
                 <p className="text-sm text-muted-foreground">
                   Requested by {approval.requestedBy.fullName}: &ldquo;{approval.payload.reason}&rdquo;
                 </p>
-                <DecideReversalButtons approvalId={approval.id} />
+                {canReverse ? <DecideReversalButtons approvalId={approval.id} /> : null}
               </div>
             ))}
           </div>

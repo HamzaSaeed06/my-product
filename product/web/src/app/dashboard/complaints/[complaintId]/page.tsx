@@ -1,4 +1,5 @@
 import { apiRequest } from "@/lib/apiClient";
+import { getCurrentUser } from "@/lib/session";
 import { PageHeader } from "@/components/page-header";
 import { Badge } from "@/components/ui/badge";
 import { AssignComplaintDialog } from "../assign-dialog";
@@ -52,9 +53,19 @@ export default async function ComplaintDetailPage({
   params: Promise<{ complaintId: string }>;
 }) {
   const { complaintId } = await params;
+  // complaint.assign gates 4 routes (assign, forward, start-progress,
+  // notes) — this page has UI triggers for assign/start-progress/notes.
+  // reopen reuses complaint.create's permission (see routes.ts), not a
+  // separate key.
+  const permissions = (await getCurrentUser())?.permissions ?? [];
+  const canCreate = permissions.includes("complaint.create");
+  const canAssign = permissions.includes("complaint.assign");
+  const canResolve = permissions.includes("complaint.resolve");
+  const canClose = permissions.includes("complaint.close");
+
   const [complaint, users] = await Promise.all([
     apiRequest<Complaint>(`/api/v1/complaints/${complaintId}`),
-    apiRequest<UserWithRoles[]>("/api/v1/users"),
+    canAssign ? apiRequest<UserWithRoles[]>("/api/v1/users") : Promise.resolve<UserWithRoles[]>([]),
   ]);
 
   const assigneeOptions = users
@@ -84,14 +95,14 @@ export default async function ComplaintDetailPage({
       </div>
 
       <div className="mt-4 flex flex-wrap gap-2">
-        {complaint.status === "OPEN" || complaint.status === "REOPENED" ? (
+        {canAssign && (complaint.status === "OPEN" || complaint.status === "REOPENED") ? (
           <AssignComplaintDialog complaintId={complaint.id} assignees={assigneeOptions} />
         ) : null}
-        {complaint.status === "ASSIGNED" ? <StartProgressButton complaintId={complaint.id} /> : null}
-        {complaint.status === "IN_PROGRESS" ? <ResolveComplaintDialog complaintId={complaint.id} /> : null}
-        {complaint.status === "RESOLVED" ? <CloseComplaintButton complaintId={complaint.id} /> : null}
-        {complaint.status === "CLOSED" ? <ReopenComplaintDialog complaintId={complaint.id} /> : null}
-        {complaint.status !== "CLOSED" ? <AddComplaintNoteDialog complaintId={complaint.id} /> : null}
+        {canAssign && complaint.status === "ASSIGNED" ? <StartProgressButton complaintId={complaint.id} /> : null}
+        {canResolve && complaint.status === "IN_PROGRESS" ? <ResolveComplaintDialog complaintId={complaint.id} /> : null}
+        {canClose && complaint.status === "RESOLVED" ? <CloseComplaintButton complaintId={complaint.id} /> : null}
+        {canCreate && complaint.status === "CLOSED" ? <ReopenComplaintDialog complaintId={complaint.id} /> : null}
+        {canAssign && complaint.status !== "CLOSED" ? <AddComplaintNoteDialog complaintId={complaint.id} /> : null}
       </div>
 
       <div className="mt-8">

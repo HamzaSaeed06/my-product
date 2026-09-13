@@ -57,7 +57,7 @@ export function MarkAttendanceForm({ sectionId, date, students }: { sectionId: s
                     value={statuses[student.id]}
                     onValueChange={(value) => value && setStatuses((prev) => ({ ...prev, [student.id]: value }))}
                   >
-                    <SelectTrigger className="w-36">
+                    <SelectTrigger aria-label={`Attendance status for ${student.fullName}`} className="w-36">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>

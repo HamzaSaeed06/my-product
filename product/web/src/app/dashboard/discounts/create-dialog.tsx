@@ -14,11 +14,11 @@ interface StudentOption {
 }
 
 const TYPES = ["SIBLING", "MERIT", "STAFF", "OTHER"] as const;
-const MODES = ["amount", "percentage"] as const;
+type DiscountMode = "amount" | "percentage";
 
 export function CreateDiscountDialog({ students }: { students: StudentOption[] }) {
   const disabled = students.length === 0;
-  const [mode, setMode] = useState<(typeof MODES)[number]>("percentage");
+  const [mode, setMode] = useState<DiscountMode>("percentage");
 
   return (
     <FormDialog
@@ -59,9 +59,9 @@ export function CreateDiscountDialog({ students }: { students: StudentOption[] }
         </Select>
       </div>
       <div className="flex flex-col gap-2">
-        <Label>Discount as</Label>
-        <Select value={mode} onValueChange={(v) => v && setMode(v as (typeof MODES)[number])}>
-          <SelectTrigger className="w-full">
+        <Label htmlFor="disc-mode">Discount as</Label>
+        <Select value={mode} onValueChange={(v) => v && setMode(v as DiscountMode)}>
+          <SelectTrigger id="disc-mode" className="w-full">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>

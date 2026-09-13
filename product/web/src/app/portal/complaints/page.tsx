@@ -1,6 +1,5 @@
 import { getCurrentUser } from "@/lib/session";
 import { apiRequest } from "@/lib/apiClient";
-import { ChildSwitcher } from "@/components/child-switcher";
 import { Badge } from "@/components/ui/badge";
 import { CreatePortalComplaintDialog } from "./create-dialog";
 
@@ -55,7 +54,6 @@ export default async function PortalComplaintsPage({
         <h1 className="text-lg font-semibold text-foreground">Complaints</h1>
         <CreatePortalComplaintDialog studentId={studentId} />
       </div>
-      <ChildSwitcher students={students} selectedId={studentId} basePath="/portal/complaints" />
 
       {complaints.length === 0 ? (
         <p className="mt-4 text-sm text-muted-foreground">No complaints yet.</p>

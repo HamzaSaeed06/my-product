@@ -1,9 +1,8 @@
 import { apiRequest } from "@/lib/apiClient";
+import { getCurrentUser } from "@/lib/session";
 import { PageHeader } from "@/components/page-header";
-import { Badge } from "@/components/ui/badge";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { CreateCampusDialog, EditCampusDialog } from "./campus-dialogs";
-import { ArchiveCampusButton } from "./archive-campus-button";
+import { CreateCampusDialog } from "./campus-dialogs";
+import { CampusesTable } from "./campuses-table";
 
 interface Campus {
   id: string;
@@ -14,6 +13,13 @@ interface Campus {
 }
 
 export default async function CampusesPage() {
+  // Mirrors campus.create/campus.edit/campus.archive from routes.ts.
+  const currentUser = await getCurrentUser();
+  const permissions = currentUser?.permissions ?? [];
+  const canCreate = permissions.includes("campus.create");
+  const canEdit = permissions.includes("campus.edit");
+  const canArchive = permissions.includes("campus.archive");
+
   const campuses = await apiRequest<Campus[]>("/api/v1/campuses");
 
   return (
@@ -21,50 +27,10 @@ export default async function CampusesPage() {
       <PageHeader
         title="Campuses"
         description="Branches/campuses under this institute."
-        action={<CreateCampusDialog />}
+        action={canCreate ? <CreateCampusDialog /> : undefined}
       />
 
-      {campuses.length === 0 ? (
-        <p className="text-sm text-muted-foreground">No campuses yet. Click "Add campus" to create one.</p>
-      ) : (
-        <div className="overflow-x-auto rounded-lg border border-border">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Name</TableHead>
-                <TableHead>Address</TableHead>
-                <TableHead>Phone</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead className="text-right">Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {campuses.map((campus) => (
-                <TableRow key={campus.id}>
-                  <TableCell className="font-medium">{campus.name}</TableCell>
-                  <TableCell className="text-muted-foreground">{campus.address ?? "—"}</TableCell>
-                  <TableCell className="text-muted-foreground">{campus.phone ?? "—"}</TableCell>
-                  <TableCell>
-                    {campus.archivedAt ? (
-                      <Badge variant="secondary">Archived</Badge>
-                    ) : (
-                      <Badge>Active</Badge>
-                    )}
-                  </TableCell>
-                  <TableCell className="flex justify-end gap-2">
-                    {!campus.archivedAt && (
-                      <>
-                        <EditCampusDialog campus={campus} />
-                        <ArchiveCampusButton id={campus.id} name={campus.name} />
-                      </>
-                    )}
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </div>
-      )}
+      <CampusesTable campuses={campuses} canEdit={canEdit} canArchive={canArchive} />
     </div>
   );
 }

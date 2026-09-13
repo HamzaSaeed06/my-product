@@ -40,7 +40,11 @@ const TYPE_OPTIONS = [
   { value: "INSTITUTE", label: "Institute" },
 ] as const;
 
-export function InstituteProfileForm({ institute }: { institute: Institute }) {
+// canEdit mirrors institute.edit from institute/routes.ts — previously
+// rendered unconditionally, same class of bug as every other module fixed
+// this pass. Same disabled-inputs-and-hidden-submit convention as
+// students/[studentId]/profile-form.tsx's canEdit prop.
+export function InstituteProfileForm({ institute, canEdit }: { institute: Institute; canEdit: boolean }) {
   const [state, formAction, isPending] = useActionState(updateInstitute, {});
 
   return (
@@ -48,11 +52,11 @@ export function InstituteProfileForm({ institute }: { institute: Institute }) {
       <div className="grid gap-4 sm:grid-cols-2">
         <div className="flex flex-col gap-2">
           <Label htmlFor="name">Name</Label>
-          <Input id="name" name="name" defaultValue={institute.name} required />
+          <Input id="name" name="name" defaultValue={institute.name} required disabled={!canEdit} />
         </div>
         <div className="flex flex-col gap-2">
           <Label htmlFor="type">Type</Label>
-          <Select name="type" defaultValue={institute.type}>
+          <Select name="type" defaultValue={institute.type} disabled={!canEdit}>
             <SelectTrigger id="type" className="w-full">
               <SelectValue />
             </SelectTrigger>
@@ -67,31 +71,36 @@ export function InstituteProfileForm({ institute }: { institute: Institute }) {
         </div>
         <div className="flex flex-col gap-2">
           <Label htmlFor="phone">Phone</Label>
-          <Input id="phone" name="phone" defaultValue={institute.phone ?? ""} />
+          <Input id="phone" name="phone" defaultValue={institute.phone ?? ""} disabled={!canEdit} />
         </div>
         <div className="flex flex-col gap-2">
           <Label htmlFor="email">Email</Label>
-          <Input id="email" name="email" type="email" defaultValue={institute.email ?? ""} />
+          <Input id="email" name="email" type="email" defaultValue={institute.email ?? ""} disabled={!canEdit} />
         </div>
         <div className="flex flex-col gap-2">
           <Label htmlFor="website">Website</Label>
-          <Input id="website" name="website" defaultValue={institute.website ?? ""} />
+          <Input id="website" name="website" defaultValue={institute.website ?? ""} disabled={!canEdit} />
         </div>
         <div className="flex flex-col gap-2 sm:col-span-2">
           <Label htmlFor="address">Address</Label>
-          <Input id="address" name="address" defaultValue={institute.address ?? ""} />
+          <Input id="address" name="address" defaultValue={institute.address ?? ""} disabled={!canEdit} />
         </div>
       </div>
       {state.error ? <p className="text-sm text-destructive">{state.error}</p> : null}
       {state.success ? <p className="text-sm text-muted-foreground">Saved.</p> : null}
-      <Button type="submit" disabled={isPending} className="self-start">
-        {isPending ? "Saving…" : "Save profile"}
-      </Button>
+      {canEdit && (
+        <Button type="submit" disabled={isPending} className="self-start">
+          {isPending ? "Saving…" : "Save profile"}
+        </Button>
+      )}
     </form>
   );
 }
 
-export function InstituteSettingsForm({ settings }: { settings: InstituteSettings }) {
+// canConfigure mirrors institute.configure — a distinct key from
+// institute.edit (see routes.ts), so a user could hold one without the
+// other; don't conflate them.
+export function InstituteSettingsForm({ settings, canConfigure }: { settings: InstituteSettings; canConfigure: boolean }) {
   const [state, formAction, isPending] = useActionState(updateInstituteSettings, {});
 
   return (
@@ -99,39 +108,41 @@ export function InstituteSettingsForm({ settings }: { settings: InstituteSetting
       <div className="grid gap-4 sm:grid-cols-2">
         <div className="flex flex-col gap-2">
           <Label htmlFor="timezone">Timezone</Label>
-          <Input id="timezone" name="timezone" defaultValue={settings.timezone} />
+          <Input id="timezone" name="timezone" defaultValue={settings.timezone} disabled={!canConfigure} />
         </div>
         <div className="flex flex-col gap-2">
           <Label htmlFor="locale">Locale</Label>
-          <Input id="locale" name="locale" defaultValue={settings.locale} />
+          <Input id="locale" name="locale" defaultValue={settings.locale} disabled={!canConfigure} />
         </div>
         <div className="flex flex-col gap-2">
           <Label htmlFor="currency">Currency</Label>
-          <Input id="currency" name="currency" defaultValue={settings.currency} />
+          <Input id="currency" name="currency" defaultValue={settings.currency} disabled={!canConfigure} />
         </div>
         <div />
         <div className="flex flex-col gap-2">
           <Label htmlFor="studentLabel">Student label</Label>
-          <Input id="studentLabel" name="studentLabel" defaultValue={settings.studentLabel} />
+          <Input id="studentLabel" name="studentLabel" defaultValue={settings.studentLabel} disabled={!canConfigure} />
         </div>
         <div className="flex flex-col gap-2">
           <Label htmlFor="teacherLabel">Teacher label</Label>
-          <Input id="teacherLabel" name="teacherLabel" defaultValue={settings.teacherLabel} />
+          <Input id="teacherLabel" name="teacherLabel" defaultValue={settings.teacherLabel} disabled={!canConfigure} />
         </div>
         <div className="flex flex-col gap-2">
           <Label htmlFor="classLabel">Class label</Label>
-          <Input id="classLabel" name="classLabel" defaultValue={settings.classLabel} />
+          <Input id="classLabel" name="classLabel" defaultValue={settings.classLabel} disabled={!canConfigure} />
         </div>
         <div className="flex flex-col gap-2">
           <Label htmlFor="sectionLabel">Section label</Label>
-          <Input id="sectionLabel" name="sectionLabel" defaultValue={settings.sectionLabel} />
+          <Input id="sectionLabel" name="sectionLabel" defaultValue={settings.sectionLabel} disabled={!canConfigure} />
         </div>
       </div>
       {state.error ? <p className="text-sm text-destructive">{state.error}</p> : null}
       {state.success ? <p className="text-sm text-muted-foreground">Saved.</p> : null}
-      <Button type="submit" disabled={isPending} className="self-start">
-        {isPending ? "Saving…" : "Save settings"}
-      </Button>
+      {canConfigure && (
+        <Button type="submit" disabled={isPending} className="self-start">
+          {isPending ? "Saving…" : "Save settings"}
+        </Button>
+      )}
     </form>
   );
 }

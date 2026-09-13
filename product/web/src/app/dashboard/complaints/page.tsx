@@ -1,10 +1,8 @@
-import Link from "next/link";
 import { apiRequest } from "@/lib/apiClient";
 import { getCurrentUser } from "@/lib/session";
 import { PageHeader } from "@/components/page-header";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Badge } from "@/components/ui/badge";
 import { CreateComplaintDialog } from "./create-dialog";
+import { ComplaintsTable } from "./complaints-table";
 
 interface Student {
   id: string;
@@ -21,15 +19,6 @@ interface Complaint {
   assignedTo: { fullName: string } | null;
   createdAt: string;
 }
-
-const STATUS_VARIANT: Record<string, "default" | "secondary" | "destructive"> = {
-  OPEN: "secondary",
-  ASSIGNED: "secondary",
-  IN_PROGRESS: "secondary",
-  RESOLVED: "default",
-  CLOSED: "default",
-  REOPENED: "destructive",
-};
 
 export default async function ComplaintsPage() {
   const currentUser = await getCurrentUser();
@@ -55,45 +44,7 @@ export default async function ComplaintsPage() {
         action={canCreate ? <CreateComplaintDialog students={studentOptions} /> : undefined}
       />
 
-      {complaints.length === 0 ? (
-        <p className="text-sm text-muted-foreground">No complaints yet.</p>
-      ) : (
-        <div className="overflow-x-auto rounded-lg border border-border">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Category</TableHead>
-                <TableHead>Student</TableHead>
-                <TableHead>Assigned to</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead className="text-right">Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {complaints.map((c) => (
-                <TableRow key={c.id}>
-                  <TableCell>
-                    <p className="font-medium text-foreground">{c.category}</p>
-                    <p className="max-w-xs truncate text-xs text-muted-foreground">{c.description}</p>
-                  </TableCell>
-                  <TableCell className="text-muted-foreground">
-                    {c.student ? `${c.student.fullName} (${c.student.studentCode})` : "—"}
-                  </TableCell>
-                  <TableCell className="text-muted-foreground">{c.assignedTo?.fullName ?? "—"}</TableCell>
-                  <TableCell>
-                    <Badge variant={STATUS_VARIANT[c.status]}>{c.status.replace("_", " ")}</Badge>
-                  </TableCell>
-                  <TableCell className="text-right">
-                    <Link href={`/dashboard/complaints/${c.id}`} className="text-sm text-foreground hover:underline">
-                      View →
-                    </Link>
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </div>
-      )}
+      <ComplaintsTable complaints={complaints} />
     </div>
   );
 }

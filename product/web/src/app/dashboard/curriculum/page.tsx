@@ -35,12 +35,16 @@ export default async function CurriculumPage({
   // curriculum.create is distinct from curriculum.edit (see routes.ts) —
   // Incharge holds edit (toggle progress, archive an existing topic) but
   // not create, so the "Add topic" dialog must not render for them.
-  const canCreate = ((await getCurrentUser())?.permissions ?? []).includes("curriculum.create");
+  const permissions = (await getCurrentUser())?.permissions ?? [];
+  const canCreate = permissions.includes("curriculum.create");
+  // curriculum.edit gates 3 write routes (PATCH update, archive, progress
+  // toggle) — only archive and progress-toggle have UI triggers today.
+  const canEdit = permissions.includes("curriculum.edit");
 
   const [classes, academicYears, subjects, rawSections] = await Promise.all([
     apiRequest<NamedOption[]>("/api/v1/classes"),
     apiRequest<NamedOption[]>("/api/v1/academic-years"),
-    apiRequest<NamedOption[]>("/api/v1/subjects"),
+    canCreate ? apiRequest<NamedOption[]>("/api/v1/subjects") : Promise.resolve<NamedOption[]>([]),
     apiRequest<RawSection[]>("/api/v1/sections"),
   ]);
 
@@ -82,12 +86,12 @@ export default async function CurriculumPage({
               <div key={topic.id} className="rounded-lg border border-border p-4">
                 <div className="mb-3 flex items-center justify-between">
                   <p className="text-sm font-medium text-foreground">{topic.topic}</p>
-                  <ArchiveTopicButton id={topic.id} />
+                  {canEdit && <ArchiveTopicButton id={topic.id} />}
                 </div>
                 <div className="flex flex-wrap gap-2">
                   {sectionsInScope.map((section) => {
                     const progress = progressBySectionId.get(section.id);
-                    return (
+                    return canEdit ? (
                       <ProgressToggle
                         key={section.id}
                         curriculumId={topic.id}
@@ -95,6 +99,13 @@ export default async function CurriculumPage({
                         sectionName={section.name}
                         completed={!!progress?.completedAt}
                       />
+                    ) : (
+                      <span
+                        key={section.id}
+                        className="rounded-md border border-border px-3 py-1.5 text-sm text-muted-foreground"
+                      >
+                        {section.name}: {progress?.completedAt ? "Done" : "Pending"}
+                      </span>
                     );
                   })}
                 </div>
