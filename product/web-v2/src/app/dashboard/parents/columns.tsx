@@ -1,6 +1,7 @@
 "use client";
 
 import type { ColumnDef } from "@tanstack/react-table";
+import Link from "next/link";
 import type { Parent } from "@/lib/mock/parents";
 import { ChildrenCell } from "./children-cell";
 import { ParentRowActions } from "./row-actions";
@@ -10,7 +11,11 @@ export const parentColumns: ColumnDef<Parent>[] = [
     accessorKey: "fullName",
     header: "Parent",
     meta: { label: "Parent" },
-    cell: ({ row }) => <span className="font-medium text-foreground">{row.original.fullName}</span>,
+    cell: ({ row }) => (
+      <Link href={`/dashboard/parents/${row.original.id}`} className="font-medium text-foreground hover:underline">
+        {row.original.fullName}
+      </Link>
+    ),
   },
   {
     id: "contact",

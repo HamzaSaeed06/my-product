@@ -1,5 +1,27 @@
 # web-v2 Progress
 
+## 2026-09-14 — Parents: table + a real detail page (correction round)
+
+Follow-up feedback on the just-shipped Parents table, three parts:
+
+1. **"Link child" moved into the row-actions dropdown**, out of the always-visible table
+   cell. This required converting it from a `Popover` to a `Dialog`
+   (`link-child-dialog.tsx`, replacing `link-child-popover.tsx`) — a Popover needs a
+   persistent trigger element to anchor to, which a closed dropdown menu item no longer
+   provides once clicked. Same two fields (student Combobox + relationship input) either way.
+2. **The Children table cell is now a count** ("2 children"), not inline chips — a parent
+   with many children would otherwise blow out the row's height unpredictably. The count
+   links to...
+3. **...a new Parent detail page** (`/dashboard/parents/[parentId]`), same rail + main shape
+   as Student Detail: identity/contact facts framed in a sticky left rail (no tabs — there's
+   only one content type here, so a tab bar would be structure for its own sake), each
+   linked child shown as its own card with avatar, a link through to their full Student
+   Detail page, class/section/campus, and **today's known attendance percentage + fee
+   status** as `StatusDot`s. Deliberately **not** a fabricated attendance trend line — a
+   real day-by-day trend needs the Attendance module's own data (a later batch); showing
+   only the current known percentage keeps this honest, same principle as Student Detail's
+   own Attendance tab already showing an `Empty` state rather than invented history.
+
 ## 2026-09-14 — People batch complete (Phase B, batch 2)
 
 All 5 concepts built on mock data, typecheck/lint clean, all routes verified 200:
