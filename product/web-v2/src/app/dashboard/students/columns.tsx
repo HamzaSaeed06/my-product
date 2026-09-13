@@ -40,6 +40,7 @@ export const studentColumns: ColumnDef<Student>[] = [
   {
     accessorKey: "fullName",
     header: sortableHeader("Student"),
+    meta: { label: "Student" },
     cell: ({ row }) => (
       <div className="flex flex-col">
         <span className="font-medium text-foreground">{row.original.fullName}</span>
@@ -50,15 +51,18 @@ export const studentColumns: ColumnDef<Student>[] = [
   {
     accessorKey: "campusName",
     header: "Campus",
+    meta: { label: "Campus" },
   },
   {
     id: "class_section",
     header: "Class",
+    meta: { label: "Class" },
     accessorFn: (row) => `${row.className} - ${row.section}`,
   },
   {
     accessorKey: "guardianName",
     header: "Guardian",
+    meta: { label: "Guardian" },
     cell: ({ row }) => (
       <div className="flex flex-col">
         <span>{row.original.guardianName}</span>
@@ -69,11 +73,13 @@ export const studentColumns: ColumnDef<Student>[] = [
   {
     accessorKey: "attendancePct",
     header: sortableHeader("Attendance"),
+    meta: { label: "Attendance" },
     cell: ({ row }) => <span className="font-mono tabular-nums">{row.original.attendancePct}%</span>,
   },
   {
     accessorKey: "feeStatus",
     header: "Fee status",
+    meta: { label: "Fee status" },
     cell: ({ row }) => (
       <StatusDot tone={FEE_STATUS_TONE[row.original.feeStatus]}>{FEE_STATUS_LABEL[row.original.feeStatus]}</StatusDot>
     ),
@@ -81,6 +87,7 @@ export const studentColumns: ColumnDef<Student>[] = [
   {
     accessorKey: "status",
     header: "Status",
+    meta: { label: "Status" },
     cell: ({ row }) => <StudentStatusPopover student={row.original} />,
   },
   {

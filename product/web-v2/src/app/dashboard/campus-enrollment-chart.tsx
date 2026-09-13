@@ -1,6 +1,6 @@
 "use client";
 
-import { Area, AreaChart, CartesianGrid, XAxis } from "recharts";
+import { CartesianGrid, Line, LineChart, XAxis } from "recharts";
 import {
   Card,
   CardContent,
@@ -25,6 +25,9 @@ const chartConfig = {
   hilltop: { label: "Hilltop", color: "var(--chart-4)" },
 } satisfies ChartConfig;
 
+// Plain lines, no area fill underneath — the source design system's own
+// restraint applies here too: a gradient wash under a trend line is
+// decoration competing with the data, not a reading aid.
 export function CampusEnrollmentChart({ data }: { data: EnrollmentPoint[] }) {
   return (
     <Card>
@@ -34,16 +37,16 @@ export function CampusEnrollmentChart({ data }: { data: EnrollmentPoint[] }) {
       </CardHeader>
       <CardContent>
         <ChartContainer config={chartConfig} className="aspect-auto h-[260px] w-full">
-          <AreaChart data={data} margin={{ left: 0, right: 12 }}>
+          <LineChart data={data} margin={{ left: 0, right: 12 }}>
             <CartesianGrid vertical={false} />
             <XAxis dataKey="month" tickLine={false} axisLine={false} tickMargin={8} />
             <ChartTooltip content={<ChartTooltipContent indicator="line" />} />
             <ChartLegend content={<ChartLegendContent />} />
-            <Area dataKey="main" type="monotone" stroke="var(--color-main)" fill="var(--color-main)" fillOpacity={0.12} strokeWidth={2} />
-            <Area dataKey="north" type="monotone" stroke="var(--color-north)" fill="var(--color-north)" fillOpacity={0.1} strokeWidth={2} />
-            <Area dataKey="riverside" type="monotone" stroke="var(--color-riverside)" fill="var(--color-riverside)" fillOpacity={0.1} strokeWidth={2} />
-            <Area dataKey="hilltop" type="monotone" stroke="var(--color-hilltop)" fill="var(--color-hilltop)" fillOpacity={0.1} strokeWidth={2} />
-          </AreaChart>
+            <Line dataKey="main" type="linear" stroke="var(--color-main)" strokeWidth={2} dot={false} />
+            <Line dataKey="north" type="linear" stroke="var(--color-north)" strokeWidth={2} dot={false} />
+            <Line dataKey="riverside" type="linear" stroke="var(--color-riverside)" strokeWidth={2} dot={false} />
+            <Line dataKey="hilltop" type="linear" stroke="var(--color-hilltop)" strokeWidth={2} dot={false} />
+          </LineChart>
         </ChartContainer>
       </CardContent>
     </Card>

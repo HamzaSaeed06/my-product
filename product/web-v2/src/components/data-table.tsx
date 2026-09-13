@@ -30,6 +30,14 @@ import {
 import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty";
 import { Inbox } from "lucide-react";
 
+declare module "@tanstack/react-table" {
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars -- required by TanStack's own module-augmentation signature
+  interface ColumnMeta<TData, TValue> {
+    /** Human-readable name for the column-visibility menu — falls back to a formatted id when absent. */
+    label?: string;
+  }
+}
+
 interface DataTableProps<TData, TValue> {
   columns: ColumnDef<TData, TValue>[];
   data: TData[];
@@ -75,18 +83,18 @@ export function DataTable<TData, TValue>({
             Columns
             <ChevronDown className="size-3.5" />
           </DropdownMenuTrigger>
-          <DropdownMenuContent align="end">
+          <DropdownMenuContent align="end" className="w-52">
             {table
               .getAllColumns()
               .filter((column) => column.getCanHide())
               .map((column) => (
                 <DropdownMenuCheckboxItem
                   key={column.id}
-                  className="capitalize"
+                  className="pr-9"
                   checked={column.getIsVisible()}
                   onCheckedChange={(value) => column.toggleVisibility(!!value)}
                 >
-                  {column.id.replace(/_/g, " ")}
+                  {column.columnDef.meta?.label ?? column.id.replace(/_/g, " ")}
                 </DropdownMenuCheckboxItem>
               ))}
           </DropdownMenuContent>
