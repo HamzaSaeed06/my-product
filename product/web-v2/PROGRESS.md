@@ -1,5 +1,56 @@
 # web-v2 Progress
 
+## 2026-09-14 — People batch complete (Phase B, batch 2)
+
+All 5 concepts built on mock data, typecheck/lint clean, all routes verified 200:
+
+- **Users** (`/dashboard/users`) — the most structurally involved page in this batch. A User
+  is a login identity with zero fields for role/campus — access comes entirely from
+  `UserRole` grants (a user can hold several, each optionally scoped to one campus).
+  Create (Sheet: fullName/email/temp-password, no role picked here — matches the real
+  backend, `user.create` and role-assignment are separate permissions). Role management
+  lives in one dedicated `ManageRolesSheet` per user (current roles listed with a Remove
+  button each, plus a grant-a-role form below it) rather than scattered per-badge popovers
+  — assigning and removing are two sides of one task. Removing a role or deactivating the
+  whole account both use `ConfirmDialog`, called out explicitly in the copy as killing
+  active sessions immediately.
+- **Parents** (`/dashboard/parents`) — deliberately **not** a `DataTable`. Each parent has a
+  variable-length list of linked children, which doesn't flatten into a table row without
+  duplicating the parent's info per child — a card grid keeps the nesting visible instead
+  (matches the old frontend's own structural choice here, confirmed during this batch's
+  research, and it's the right call independent of that). Linking a child is a `Popover`
+  (Combobox + a relationship text field — two fields tied to one card); unlinking uses
+  `ConfirmDialog` since it's a real relationship removal, even though "the student's own
+  record is unaffected."
+- **Teachers** (`/dashboard/teachers`) — profiles 1:1 with a User that already holds the
+  Teacher role. The create picker is deliberately narrowed to Teacher-role users with no
+  profile yet (computed from `mockAppUsers` × `mockTeachers`), so a duplicate profile for
+  the same user structurally can't be created from this Sheet. Edit only touches
+  employeeCode/qualification/phone — the linked user is immutable, shown read-only.
+- **Subjects** (`/dashboard/subjects`) — same shape as Classes: institute-wide catalog, no
+  campus scoping, Create/Edit (Sheet) + Archive (blocked-if-active-assignments messaging).
+- **Teacher Assignments** (`/dashboard/teacher-assignments`) — the many-to-many linking
+  point (Teacher × Subject × Section). Picking a Section in the create Sheet fixes class,
+  campus, and academic year all at once — no separate class/campus/year pickers that could
+  let those mismatch the section's actual values. No edit action exists (matches the real
+  backend) — only create new or "End assignment" (`ConfirmDialog`, archives rather than
+  deletes, preserving history).
+
+**New mock data**: `roles.ts` (7 system roles + `requiresCampus` flag), `app-users.ts` (the
+richer multi-role `AppUser` shape for the Users page — kept separate from the existing
+`mock/users.ts`'s simpler single-role `StaffUser` list, which stays as the lighter-weight
+picker source Institute & Structure's Incharge Scopes/Delegations Sheets already depend on;
+not worth breaking those to unify the two shapes this pass), `teachers.ts`, `subjects.ts`,
+`teacher-assignments.ts`, `parents.ts`.
+
+**Sidebar**: full People group now listed (Students, Parents, Teachers, Teacher Assignments,
+Subjects, Users), permission keys added to the mock viewer matching names confirmed against
+the real backend/docs during this batch's research pass — no guessed permission names this
+time (unlike Feature Config's `feature_config.manage` from the previous batch).
+
+**Next**: stop here for review, then continue with **Admissions & Enrollment** (Admissions,
+Admission Inquiries, Enrollments) or whichever batch the user prioritizes next.
+
 ## 2026-09-14 — Institute & Structure batch complete (Phase B, batch 1 of many)
 
 All 9 concepts in this batch are built on mock data, typecheck/lint clean, all routes

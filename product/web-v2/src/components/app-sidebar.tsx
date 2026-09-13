@@ -15,6 +15,10 @@ import {
   UserCheck2,
   Languages,
   SlidersHorizontal,
+  Contact,
+  UserSquare2,
+  BookMarked,
+  UsersRound,
   type LucideIcon,
 } from "lucide-react";
 import {
@@ -53,6 +57,10 @@ const NAV_GROUPS: { label: string; items: NavItem[] }[] = [
     label: "People",
     items: [
       { href: "/dashboard/students", label: "Students", icon: GraduationCap, anyOf: ["student.view"] },
+      { href: "/dashboard/parents", label: "Parents", icon: Contact, anyOf: ["parent.view"] },
+      { href: "/dashboard/teachers", label: "Teachers", icon: UserSquare2, anyOf: ["teacher.view"] },
+      { href: "/dashboard/teacher-assignments", label: "Teacher Assignments", icon: UsersRound, anyOf: ["teacher_assignment.view"] },
+      { href: "/dashboard/subjects", label: "Subjects", icon: BookMarked, anyOf: ["subject.view"] },
       { href: "/dashboard/users", label: "Users", icon: UsersIcon, anyOf: ["user.view"] },
     ],
   },
