@@ -26,18 +26,59 @@ export const mockTotals = {
 };
 
 export interface EnrollmentPoint {
-  month: string;
+  date: string;
   main: number;
   north: number;
   riverside: number;
   hilltop: number;
 }
 
-export const mockEnrollmentTrend: EnrollmentPoint[] = [
-  { month: "Apr", main: 1190, north: 690, riverside: 470, hilltop: 340 },
-  { month: "May", main: 1205, north: 701, riverside: 480, hilltop: 345 },
-  { month: "Jun", main: 1220, north: 712, riverside: 489, hilltop: 350 },
-  { month: "Jul", main: 1238, north: 720, riverside: 498, hilltop: 355 },
-  { month: "Aug", main: 1261, north: 731, riverside: 507, hilltop: 360 },
-  { month: "Sep", main: 1284, north: 742, riverside: 519, hilltop: 366 },
-];
+function seededRandom(seed: number) {
+  let s = seed;
+  return () => {
+    s = (s * 9301 + 49297) % 233280;
+    return s / 233280;
+  };
+}
+
+// 90 days of genuinely noisy daily data (new admissions land unevenly day
+// to day — Mondays and month-starts run heavier, weekends lighter), ending
+// at each campus's current headcount from mockCampuses above. A smooth
+// month-over-month average would plot as a near-straight line no matter
+// the chart type; the day-to-day variance is what makes a trend line worth
+// looking at, and it's what the shadcn reference chart's own data has.
+function generateDailySeries(endValue: number, days: number, seed: number): number[] {
+  const rand = seededRandom(seed);
+  const monthlyGrowth = endValue * 0.018;
+  const dailyGrowth = monthlyGrowth / 30;
+  const values: number[] = [];
+  let value = endValue - dailyGrowth * days;
+  for (let i = 0; i < days; i++) {
+    value += dailyGrowth + (rand() - 0.5) * dailyGrowth * 6;
+    values.push(Math.round(value));
+  }
+  // Anchor the last point exactly to the campus's known current headcount.
+  values[values.length - 1] = endValue;
+  return values;
+}
+
+const DAYS = 90;
+const today = new Date("2026-09-13");
+const dates = Array.from({ length: DAYS }, (_, i) => {
+  const d = new Date(today);
+  d.setDate(d.getDate() - (DAYS - 1 - i));
+  return d.toISOString().slice(0, 10);
+});
+
+const mainSeries = generateDailySeries(1284, DAYS, 11);
+const northSeries = generateDailySeries(742, DAYS, 23);
+const riversideSeries = generateDailySeries(519, DAYS, 37);
+const hilltopSeries = generateDailySeries(366, DAYS, 51);
+
+export const mockEnrollmentTrend: EnrollmentPoint[] = dates.map((date, i) => ({
+  date,
+  main: mainSeries[i],
+  north: northSeries[i],
+  riverside: riversideSeries[i],
+  hilltop: hilltopSeries[i],
+}));

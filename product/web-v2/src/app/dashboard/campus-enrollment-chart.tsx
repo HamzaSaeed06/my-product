@@ -20,14 +20,16 @@ import {
 } from "@/components/ui/chart";
 import { mockCampuses, type EnrollmentPoint } from "@/lib/mock/campuses";
 
-// Mirrors shadcn's own "Area Chart - Interactive" reference exactly
-// (stacked areas, type="natural", per-series linearGradient fill,
-// cursor-less dot tooltip, a bordered header row with the filter controls
-// pinned right) adapted to this page's data and an extra Campus filter.
-// Series deliberately skip --chart-2 (the geist focus-blue) — that color
-// has exactly one job in this system (the focus ring), so the chart uses
-// the other three chart tokens instead.
-const CAMPUS_SERIES: { key: keyof Omit<EnrollmentPoint, "month">; campusId: string; label: string; color: string }[] = [
+// Mirrors shadcn's own "Area Chart - Interactive" reference exactly:
+// daily data (not monthly averages — averages plot as a near-straight line
+// regardless of chart type; day-to-day variance is what makes a trend line
+// worth reading), stacked areas, type="natural", per-series linearGradient
+// fill, cursor-less dot tooltip, day-range filtering against the data's own
+// last date, bordered header row with filters pinned right. Series
+// deliberately skip --chart-2 (the geist focus-blue) — that color has
+// exactly one job in this system (the focus ring), so the chart uses the
+// other three chart tokens instead.
+const CAMPUS_SERIES: { key: keyof Omit<EnrollmentPoint, "date">; campusId: string; label: string; color: string }[] = [
   { key: "hilltop", campusId: "cmp_hilltop", label: "Hilltop", color: "var(--chart-5)" },
   { key: "riverside", campusId: "cmp_riverside", label: "Riverside", color: "var(--chart-4)" },
   { key: "north", campusId: "cmp_north", label: "North Town", color: "var(--chart-3)" },
@@ -35,17 +37,29 @@ const CAMPUS_SERIES: { key: keyof Omit<EnrollmentPoint, "month">; campusId: stri
 ];
 
 const RANGE_OPTIONS = [
-  { value: "3", label: "Last 3 months" },
-  { value: "6", label: "Last 6 months" },
+  { value: "90", label: "Last 3 months" },
+  { value: "30", label: "Last 30 days" },
+  { value: "7", label: "Last 7 days" },
 ];
 
 const CAMPUS_FILTER_OPTIONS = [{ value: "all", label: "All campuses" }, ...mockCampuses.map((c) => ({ value: c.id, label: c.name }))];
 
+function formatShortDate(value: string) {
+  return new Date(value).toLocaleDateString("en-US", { month: "short", day: "numeric" });
+}
+
 export function CampusEnrollmentChart({ data }: { data: EnrollmentPoint[] }) {
-  const [range, setRange] = useState("6");
+  const [range, setRange] = useState("90");
   const [campus, setCampus] = useState("all");
 
-  const filteredData = useMemo(() => data.slice(-Number(range)), [data, range]);
+  const filteredData = useMemo(() => {
+    const lastPoint = data[data.length - 1];
+    if (!lastPoint) return data;
+    const startDate = new Date(lastPoint.date);
+    startDate.setDate(startDate.getDate() - Number(range));
+    return data.filter((point) => new Date(point.date) >= startDate);
+  }, [data, range]);
+
   const visibleSeries = campus === "all" ? CAMPUS_SERIES : CAMPUS_SERIES.filter((s) => s.campusId === campus);
 
   const chartConfig = useMemo(
@@ -73,7 +87,7 @@ export function CampusEnrollmentChart({ data }: { data: EnrollmentPoint[] }) {
               ))}
             </SelectContent>
           </Select>
-          <Select value={range} onValueChange={(v) => setRange(v ?? "6")}>
+          <Select value={range} onValueChange={(v) => setRange(v ?? "90")}>
             <SelectTrigger className="w-[150px] rounded-lg" aria-label="Select a range">
               <SelectValue>{(value: string) => RANGE_OPTIONS.find((o) => o.value === value)?.label}</SelectValue>
             </SelectTrigger>
@@ -99,8 +113,18 @@ export function CampusEnrollmentChart({ data }: { data: EnrollmentPoint[] }) {
               ))}
             </defs>
             <CartesianGrid vertical={false} />
-            <XAxis dataKey="month" tickLine={false} axisLine={false} tickMargin={8} />
-            <ChartTooltip cursor={false} content={<ChartTooltipContent indicator="dot" />} />
+            <XAxis
+              dataKey="date"
+              tickLine={false}
+              axisLine={false}
+              tickMargin={8}
+              minTickGap={32}
+              tickFormatter={formatShortDate}
+            />
+            <ChartTooltip
+              cursor={false}
+              content={<ChartTooltipContent indicator="dot" labelFormatter={(value) => formatShortDate(value)} />}
+            />
             {visibleSeries.map((s) => (
               <Area
                 key={s.key}
