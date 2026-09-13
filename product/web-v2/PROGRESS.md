@@ -1,5 +1,25 @@
 # web-v2 Progress
 
+## 2026-09-13 — Chart matched exactly to shadcn's reference; Select label bug fixed
+
+The user pasted shadcn's actual "Area Chart - Interactive" source and asked for it applied
+exactly (not re-approximated). Two real fixes came out of the diff against what was built:
+
+- **Areas weren't stacked** (`stackId="a"` was missing) — four independent, overlapping
+  semi-transparent fills read as a muddy dark blob wherever campus lines were close
+  together. Stacked, per the reference, they read cleanly. Header restructured to match the
+  reference exactly too: a bordered `CardHeader` row with filters pinned right via
+  `sm:ml-auto`, cursor-less dot tooltip.
+- **`SelectValue` was showing the raw stored value ("all", "6", "PAID") instead of the
+  matching option's label**, on every `Select` in the app. Root cause: this codebase's
+  shadcn style is `base-nova` (`@base-ui/react`), and base-ui's `Select.Value` does not
+  auto-resolve a value to its item's rendered label the way Radix's does — it needs an
+  explicit `children` render function (`<SelectValue>{(value) => label}</SelectValue>`).
+  Fixed on both chart filters and the Students list's Fee status/Status selects. **Any new
+  `<Select>` added in Phase B must pass this render-function children — the plain
+  `<SelectValue placeholder="..." />` form silently shows raw values once something is
+  selected**, and is easy to miss since it looks correct before any value is picked.
+
 ## 2026-09-13 — Chart rebuilt as gradient area chart + filters; tables left-aligned
 
 Fifth round of same-day feedback, with a reference screenshot of shadcn's own "Area Chart -
