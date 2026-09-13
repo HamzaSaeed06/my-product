@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { apiRequest } from "@/lib/apiClient";
+import { getCurrentUser } from "@/lib/session";
 import { PageHeader } from "@/components/page-header";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
@@ -39,14 +40,25 @@ interface Assessment {
 }
 
 export default async function AssessmentsPage() {
+  // Mirrors assessment.create/edit from routes.ts. Incharge holds
+  // assessment.view + assessment.correct only (correction happens on the
+  // assessment detail page, not here) — no create, no edit/archive. Same
+  // crash class as Leaves/Complaints/Substitutions/Homework: the
+  // sections/classes/campuses/academic-years/subjects/teachers fetches
+  // exist solely to feed the Create dialog, and campus.view/
+  // academic_year.view/subject.view aren't in Incharge's grant either.
+  const permissions = (await getCurrentUser())?.permissions ?? [];
+  const canCreate = permissions.includes("assessment.create");
+  const canEdit = permissions.includes("assessment.edit");
+
   const [assessments, rawSections, classes, campuses, academicYears, subjects, teachers] = await Promise.all([
     apiRequest<Assessment[]>("/api/v1/assessments"),
-    apiRequest<RawSection[]>("/api/v1/sections"),
-    apiRequest<NamedOption[]>("/api/v1/classes"),
-    apiRequest<NamedOption[]>("/api/v1/campuses"),
-    apiRequest<NamedOption[]>("/api/v1/academic-years"),
-    apiRequest<NamedOption[]>("/api/v1/subjects"),
-    apiRequest<Teacher[]>("/api/v1/teachers"),
+    canCreate ? apiRequest<RawSection[]>("/api/v1/sections") : Promise.resolve<RawSection[]>([]),
+    canCreate ? apiRequest<NamedOption[]>("/api/v1/classes") : Promise.resolve<NamedOption[]>([]),
+    canCreate ? apiRequest<NamedOption[]>("/api/v1/campuses") : Promise.resolve<NamedOption[]>([]),
+    canCreate ? apiRequest<NamedOption[]>("/api/v1/academic-years") : Promise.resolve<NamedOption[]>([]),
+    canCreate ? apiRequest<NamedOption[]>("/api/v1/subjects") : Promise.resolve<NamedOption[]>([]),
+    canCreate ? apiRequest<Teacher[]>("/api/v1/teachers") : Promise.resolve<Teacher[]>([]),
   ]);
 
   const classNameById = new Map(classes.map((c) => [c.id, c.name]));
@@ -72,7 +84,7 @@ export default async function AssessmentsPage() {
       <PageHeader
         title="Assessments"
         description="Create tests/quizzes, enter marks, then submit to lock them."
-        action={<CreateAssessmentDialog sections={sections} subjects={subjects} teachers={activeTeachers} />}
+        action={canCreate ? <CreateAssessmentDialog sections={sections} subjects={subjects} teachers={activeTeachers} /> : undefined}
       />
 
       {assessments.length === 0 ? (
@@ -88,7 +100,7 @@ export default async function AssessmentsPage() {
                 <TableHead>Total Marks</TableHead>
                 <TableHead>Date</TableHead>
                 <TableHead>Status</TableHead>
-                <TableHead className="text-right">Actions</TableHead>
+                {canEdit ? <TableHead className="text-right">Actions</TableHead> : null}
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -106,9 +118,11 @@ export default async function AssessmentsPage() {
                   <TableCell>
                     {a.status === "SUBMITTED" ? <Badge variant="secondary">Locked</Badge> : <Badge>Draft</Badge>}
                   </TableCell>
-                  <TableCell className="text-right">
-                    <ArchiveAssessmentButton id={a.id} />
-                  </TableCell>
+                  {canEdit ? (
+                    <TableCell className="text-right">
+                      <ArchiveAssessmentButton id={a.id} />
+                    </TableCell>
+                  ) : null}
                 </TableRow>
               ))}
             </TableBody>

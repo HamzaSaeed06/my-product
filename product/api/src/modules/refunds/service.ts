@@ -4,13 +4,22 @@ import { prisma } from "../../lib/prisma.js";
 import { writeAuditLog } from "../../lib/audit.js";
 import { HttpError } from "../../middleware/errorHandler.js";
 import { generateRefundNumber } from "../../lib/financeCodes.js";
+import { studentScopeWhereVia, type StudentScopeFilter } from "../../lib/scope.js";
 
-export async function listRefunds(filter: { status?: string }) {
+export async function listRefunds(filter: StudentScopeFilter & { status?: string }) {
   return prisma.refund.findMany({
-    where: { status: filter.status as never },
+    where: { ...studentScopeWhereVia(filter, "payment"), status: filter.status as never },
     include: { payment: true, requestedBy: { select: { id: true, fullName: true } } },
     orderBy: { createdAt: "desc" },
   });
+}
+
+// Thin getter for controllers that need to scope-check a refund by id
+// before deciding/completing it.
+export async function getRefundStudentId(id: string): Promise<string> {
+  const refund = await prisma.refund.findUnique({ where: { id }, select: { payment: { select: { studentId: true } } } });
+  if (!refund) throw new HttpError(404, "REFUND_NOT_FOUND", "Refund not found");
+  return refund.payment.studentId;
 }
 
 export async function createRefund(input: { paymentId: string; amount: string; reason: string; method?: string }, actorId: string) {

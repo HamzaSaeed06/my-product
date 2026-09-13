@@ -33,14 +33,21 @@ export function parseCookiePairs(setCookieHeaders: string[]): Record<string, str
   return pairs;
 }
 
-// Mirrors product/api's PublicUser (auth/service.ts) — roles/teacherId/
-// parentId/studentId drive Phase 7's role-based sidebar and portal
-// routing.
+// Mirrors product/api's PublicUser (auth/service.ts). `roles` decides the
+// UI *shape* (desktop admin shell vs. mobile portal shell — see
+// dashboard/layout.tsx) — a genuine "which shell" product decision, fine
+// to key on role. `permissions` is the actual, currently-effective grant
+// set (role grants + any active Delegation) and is what nav visibility and
+// action-button visibility must be driven by instead — checking `roles`
+// for that drifts the moment a permission changes without a matching
+// frontend edit (this happened: the admin sidebar hid Leaves from INCHARGE
+// and Users from CAMPUS_HEAD despite both holding the real permission).
 export interface ApiUser {
   id: string;
   email: string;
   fullName: string;
   roles: string[];
+  permissions: string[];
   teacherId: string | null;
   parentId: string | null;
   studentId: string | null;

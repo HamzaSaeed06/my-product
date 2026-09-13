@@ -1,6 +1,7 @@
 import type { Request, Response } from "express";
 import { z } from "zod";
 import * as usersService from "./service.js";
+import { getActorProfile } from "../../lib/scope.js";
 
 const createUserSchema = z.object({
   email: z.string().email(),
@@ -17,8 +18,10 @@ const setActiveSchema = z.object({ isActive: z.boolean() });
 
 const assignRoleSchema = z.object({ roleId: z.string().uuid(), campusId: z.string().uuid().nullable().optional() });
 
-export async function listUsersHandler(_req: Request, res: Response): Promise<void> {
-  res.status(200).json(await usersService.listUsers());
+export async function listUsersHandler(req: Request, res: Response): Promise<void> {
+  const profile = await getActorProfile(req.user!.id);
+  const campusIdIn = profile.campusIds.length > 0 ? profile.campusIds : undefined;
+  res.status(200).json(await usersService.listUsers(campusIdIn));
 }
 
 export async function createUserHandler(req: Request, res: Response): Promise<void> {

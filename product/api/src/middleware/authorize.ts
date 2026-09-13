@@ -1,6 +1,7 @@
 import type { NextFunction, Request, Response } from "express";
 import { prisma } from "../lib/prisma.js";
 import { HttpError } from "./errorHandler.js";
+import { getContextActiveDelegations } from "../lib/requestContext.js";
 
 // Phase 0 implements only the Role + Permission part of the authorization
 // formula (PRODUCT_SPEC.md §5: Role + Permission + Scope + Context + State).
@@ -27,6 +28,21 @@ export async function getUserPermissionKeys(userId: string): Promise<Set<string>
       keys.add(rolePermission.permission.key);
     }
   }
+
+  // Phase 11 Phase A2 — a currently-active Delegation grants the union of
+  // the delegated role's permissions too, not just this user's own roles.
+  const activeDelegations = getContextActiveDelegations();
+  if (activeDelegations.length > 0) {
+    const roleIds = [...new Set(activeDelegations.map((d) => d.roleId))];
+    const rolePermissions = await prisma.rolePermission.findMany({
+      where: { roleId: { in: roleIds } },
+      include: { permission: true },
+    });
+    for (const rolePermission of rolePermissions) {
+      keys.add(rolePermission.permission.key);
+    }
+  }
+
   return keys;
 }
 

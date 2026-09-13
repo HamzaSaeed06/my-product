@@ -7,15 +7,25 @@ let studentId: string;
 let assigneeUserId: string;
 let complaintId: string;
 let secondComplaintId: string;
+let campusId: string;
 
 describe("Complaints API (real database)", () => {
   beforeAll(async () => {
-    const [student, assignee] = await Promise.all([
+    // This student is deliberately created with no Enrollment at all (a
+    // bare profile, same as a real pre-admission record) — Complaint now
+    // requires a campusId (docs/PHASE_11A_CAMPUS_SCOPING_IMPLEMENTATION_PLAN.md
+    // Gap 2), and a student with no enrollment has no derivable campus, so
+    // an explicit campusId is passed on creation below, same as the
+    // "no student at all" anonymous-complaint case.
+    const institute = await prisma.institute.findFirstOrThrow();
+    const [student, assignee, campus] = await Promise.all([
       prisma.student.create({ data: { studentCode: `STU-CMPLT-${suffix}`, fullName: `Complaint Test ${suffix}` } }),
       prisma.user.create({ data: { email: `complaint-assignee-${suffix}@example.test`, passwordHash: "x", fullName: "Complaint Assignee" } }),
+      prisma.campus.create({ data: { instituteId: institute.id, name: `Complaint Test Campus ${suffix}` } }),
     ]);
     studentId = student.id;
     assigneeUserId = assignee.id;
+    campusId = campus.id;
   });
 
   afterAll(async () => {
@@ -25,12 +35,21 @@ describe("Complaints API (real database)", () => {
     if (secondComplaintId) await prisma.complaint.delete({ where: { id: secondComplaintId } }).catch(() => {});
     if (studentId) await prisma.student.delete({ where: { id: studentId } }).catch(() => {});
     if (assigneeUserId) await prisma.user.delete({ where: { id: assigneeUserId } }).catch(() => {});
+    if (campusId) await prisma.campus.delete({ where: { id: campusId } }).catch(() => {});
+  });
+
+  it("refuses creating a student-linked complaint with no derivable campus and no explicit campusId", async () => {
+    const res = await asSuperAdmin()
+      .post("/api/v1/complaints")
+      .send({ studentId, category: "Bullying", description: "Reported an incident in the playground" });
+    expect(res.status).toBe(400);
+    expect(res.body.error).toBe("CAMPUS_REQUIRED");
   });
 
   it("creates a complaint (OPEN)", async () => {
     const res = await asSuperAdmin()
       .post("/api/v1/complaints")
-      .send({ studentId, category: "Bullying", description: "Reported an incident in the playground" });
+      .send({ studentId, campusId, category: "Bullying", description: "Reported an incident in the playground" });
     expect(res.status).toBe(201);
     expect(res.body.status).toBe("OPEN");
     complaintId = res.body.id;
@@ -116,10 +135,18 @@ describe("Complaints API (real database)", () => {
     expect(res.body.notes.length).toBeGreaterThanOrEqual(1);
   });
 
-  it("creates a second, anonymous (no studentId) complaint", async () => {
+  it("refuses creating a campus-less, student-less complaint", async () => {
     const res = await asSuperAdmin()
       .post("/api/v1/complaints")
       .send({ category: "Facilities", description: "Broken window in room 4" });
+    expect(res.status).toBe(400);
+    expect(res.body.error).toBe("CAMPUS_REQUIRED");
+  });
+
+  it("creates a second, anonymous (no studentId) complaint with an explicit campusId", async () => {
+    const res = await asSuperAdmin()
+      .post("/api/v1/complaints")
+      .send({ campusId, category: "Facilities", description: "Broken window in room 4" });
     expect(res.status).toBe(201);
     expect(res.body.studentId).toBeNull();
     secondComplaintId = res.body.id;

@@ -99,6 +99,14 @@ export async function listAttendance(filter: {
   });
 }
 
+// Thin getter for controllers that need to scope-check an attendance
+// record by id before requesting a correction on it.
+export async function getAttendanceSectionId(id: string): Promise<string> {
+  const attendance = await prisma.attendance.findUnique({ where: { id }, select: { sectionId: true } });
+  if (!attendance) throw new HttpError(404, "ATTENDANCE_NOT_FOUND", "Attendance record not found");
+  return attendance.sectionId;
+}
+
 export async function requestAttendanceCorrection(
   attendanceId: string,
   input: { newStatus: AttendanceStatus; reason: string },
@@ -110,6 +118,8 @@ export async function requestAttendanceCorrection(
     throw new HttpError(400, "NO_CHANGE", "Requested status is the same as the current status");
   }
 
+  const section = await prisma.section.findUnique({ where: { id: attendance.sectionId }, select: { campusId: true } });
+
   return createApprovalRequest({
     type: "ATTENDANCE_CORRECTION",
     resource: "Attendance",
@@ -117,6 +127,7 @@ export async function requestAttendanceCorrection(
     requestedById: actorId,
     approverRole: "INCHARGE",
     payload: { attendanceId, oldStatus: attendance.status, newStatus: input.newStatus, reason: input.reason },
+    campusId: section?.campusId,
   });
 }
 

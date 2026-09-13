@@ -15,8 +15,17 @@ homeworkRouter.post(
   ...requirePermission("homework.create"),
   csrfProtection,
   writeRateLimiter,
-  documentUpload.single("file"),
+  documentUpload.array("files", 10),
   asyncHandler(controller.createHomeworkHandler)
+);
+
+homeworkRouter.post(
+  "/:homeworkId/attachments",
+  ...requirePermission("homework.edit"),
+  csrfProtection,
+  writeRateLimiter,
+  documentUpload.single("file"),
+  asyncHandler(controller.addHomeworkAttachmentHandler)
 );
 
 homeworkRouter.patch(

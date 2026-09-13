@@ -1,6 +1,7 @@
 import type { Request, Response } from "express";
 import { z } from "zod";
 import * as sectionsService from "./service.js";
+import { getActorProfile, assertCampusInScope } from "../../lib/scope.js";
 
 const listQuerySchema = z.object({
   classId: z.string().uuid().optional(),
@@ -25,22 +26,31 @@ const updateSchema = z.object({
 
 export async function listSectionsHandler(req: Request, res: Response): Promise<void> {
   const query = listQuerySchema.parse(req.query);
-  res.status(200).json(await sectionsService.listSections(query));
+  const profile = await getActorProfile(req.user!.id);
+  if (query.campusId) assertCampusInScope(profile, query.campusId);
+  const campusIdIn = !query.campusId && profile.campusIds.length > 0 ? profile.campusIds : undefined;
+  res.status(200).json(await sectionsService.listSections({ ...query, campusIdIn }));
 }
 
 export async function createSectionHandler(req: Request, res: Response): Promise<void> {
   const body = createSchema.parse(req.body);
+  const profile = await getActorProfile(req.user!.id);
+  assertCampusInScope(profile, body.campusId);
   const section = await sectionsService.createSection(body, req.user!.id);
   res.status(201).json(section);
 }
 
 export async function updateSectionHandler(req: Request, res: Response): Promise<void> {
   const body = updateSchema.parse(req.body);
+  const profile = await getActorProfile(req.user!.id);
+  assertCampusInScope(profile, await sectionsService.getSectionCampusId(req.params.sectionId!));
   const section = await sectionsService.updateSection(req.params.sectionId!, body, req.user!.id);
   res.status(200).json(section);
 }
 
 export async function archiveSectionHandler(req: Request, res: Response): Promise<void> {
+  const profile = await getActorProfile(req.user!.id);
+  assertCampusInScope(profile, await sectionsService.getSectionCampusId(req.params.sectionId!));
   const section = await sectionsService.archiveSection(req.params.sectionId!, req.user!.id);
   res.status(200).json(section);
 }

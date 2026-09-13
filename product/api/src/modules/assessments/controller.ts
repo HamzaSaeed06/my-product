@@ -1,7 +1,9 @@
 import type { Request, Response } from "express";
 import { z } from "zod";
 import * as service from "./service.js";
-import { getActorProfile, assertSectionQueryInScope } from "../../lib/scope.js";
+import { getActorProfile, resolveSectionScopeFilter, assertSectionInScope, assertCampusInScope } from "../../lib/scope.js";
+import { getApprovalRequestCampusId } from "../approvals/service.js";
+import { HttpError } from "../../middleware/errorHandler.js";
 
 const createSchema = z.object({
   subjectId: z.string().uuid(),
@@ -38,41 +40,59 @@ const decideSchema = z.object({
 
 export async function createAssessmentHandler(req: Request, res: Response): Promise<void> {
   const body = createSchema.parse(req.body);
+  const profile = await getActorProfile(req.user!.id);
+  await assertSectionInScope(profile, body.sectionId);
   res.status(201).json(await service.createAssessment(body, req.user!.id));
 }
 
 export async function listAssessmentsHandler(req: Request, res: Response): Promise<void> {
   const query = listQuerySchema.parse(req.query);
   const profile = await getActorProfile(req.user!.id);
-  await assertSectionQueryInScope(profile, query.sectionId);
-  res.status(200).json(await service.listAssessments(query));
+  const scope = await resolveSectionScopeFilter(profile, query.sectionId);
+  res.status(200).json(await service.listAssessments({ subjectId: query.subjectId, academicYearId: query.academicYearId, scope }));
 }
 
 export async function getAssessmentHandler(req: Request, res: Response): Promise<void> {
+  const profile = await getActorProfile(req.user!.id);
+  await assertSectionInScope(profile, await service.getAssessmentSectionId(req.params.assessmentId!));
   res.status(200).json(await service.getAssessment(req.params.assessmentId!));
 }
 
 export async function enterMarksHandler(req: Request, res: Response): Promise<void> {
   const body = enterMarksSchema.parse(req.body);
+  const profile = await getActorProfile(req.user!.id);
+  await assertSectionInScope(profile, await service.getAssessmentSectionId(req.params.assessmentId!));
   res.status(200).json(await service.enterMarks(req.params.assessmentId!, body, req.user!.id));
 }
 
 export async function submitAssessmentHandler(req: Request, res: Response): Promise<void> {
+  const profile = await getActorProfile(req.user!.id);
+  await assertSectionInScope(profile, await service.getAssessmentSectionId(req.params.assessmentId!));
   res.status(200).json(await service.submitAssessment(req.params.assessmentId!, req.user!.id));
 }
 
 export async function archiveAssessmentHandler(req: Request, res: Response): Promise<void> {
+  const profile = await getActorProfile(req.user!.id);
+  await assertSectionInScope(profile, await service.getAssessmentSectionId(req.params.assessmentId!));
   res.status(200).json(await service.archiveAssessment(req.params.assessmentId!, req.user!.id));
 }
 
 export async function requestMarksCorrectionHandler(req: Request, res: Response): Promise<void> {
   const body = correctionSchema.parse(req.body);
+  const profile = await getActorProfile(req.user!.id);
+  await assertSectionInScope(profile, await service.getAssessmentResultSectionId(req.params.resultId!));
   const request = await service.requestMarksCorrection(req.params.resultId!, body, req.user!.id);
   res.status(201).json(request);
 }
 
 export async function decideMarksCorrectionHandler(req: Request, res: Response): Promise<void> {
   const body = decideSchema.parse(req.body);
+  const profile = await getActorProfile(req.user!.id);
+  if (profile.campusIds.length > 0) {
+    const campusId = await getApprovalRequestCampusId(req.params.approvalId!);
+    if (!campusId) throw new HttpError(403, "OUT_OF_SCOPE", "Cannot verify this request's campus");
+    assertCampusInScope(profile, campusId);
+  }
   const result = await service.decideMarksCorrection(req.params.approvalId!, body.decision, body.decisionNote, req.user!.id);
   res.status(200).json(result);
 }

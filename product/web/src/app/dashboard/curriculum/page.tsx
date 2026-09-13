@@ -1,4 +1,5 @@
 import { apiRequest } from "@/lib/apiClient";
+import { getCurrentUser } from "@/lib/session";
 import { PageHeader } from "@/components/page-header";
 import { CurriculumFilters } from "./filters";
 import { CreateTopicDialog } from "./create-dialog";
@@ -31,6 +32,10 @@ export default async function CurriculumPage({
   searchParams: Promise<{ classId?: string; academicYearId?: string }>;
 }) {
   const { classId: requestedClassId, academicYearId: requestedYearId } = await searchParams;
+  // curriculum.create is distinct from curriculum.edit (see routes.ts) —
+  // Incharge holds edit (toggle progress, archive an existing topic) but
+  // not create, so the "Add topic" dialog must not render for them.
+  const canCreate = ((await getCurrentUser())?.permissions ?? []).includes("curriculum.create");
 
   const [classes, academicYears, subjects, rawSections] = await Promise.all([
     apiRequest<NamedOption[]>("/api/v1/classes"),
@@ -60,7 +65,7 @@ export default async function CurriculumPage({
       <PageHeader
         title="Curriculum"
         description="Track syllabus topics and teaching progress per section."
-        action={<CreateTopicDialog classId={classId} academicYearId={academicYearId} subjects={subjects} />}
+        action={canCreate ? <CreateTopicDialog classId={classId} academicYearId={academicYearId} subjects={subjects} /> : undefined}
       />
 
       <CurriculumFilters classes={classes} academicYears={academicYears} selectedClassId={classId} selectedYearId={academicYearId} />

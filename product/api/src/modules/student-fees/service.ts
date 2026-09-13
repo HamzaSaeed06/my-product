@@ -2,13 +2,14 @@ import { Prisma } from "@prisma/client";
 import { prisma } from "../../lib/prisma.js";
 import { writeAuditLog } from "../../lib/audit.js";
 import { HttpError } from "../../middleware/errorHandler.js";
+import { studentScopeWhereDirect, type StudentScopeFilter } from "../../lib/scope.js";
 
 function include() {
   return { feeStructure: { include: { klass: true, feeCategory: true } } } as const;
 }
 
-export async function listStudentFees(filter: { studentId?: string }) {
-  return prisma.studentFee.findMany({ where: { ...filter, archivedAt: null }, include: include(), orderBy: { createdAt: "desc" } });
+export async function listStudentFees(filter: StudentScopeFilter) {
+  return prisma.studentFee.findMany({ where: { ...studentScopeWhereDirect(filter), archivedAt: null }, include: include(), orderBy: { createdAt: "desc" } });
 }
 
 export async function assignStudentFee(
@@ -34,6 +35,14 @@ export async function assignStudentFee(
     }
     throw err;
   }
+}
+
+// Thin getter for controllers that need to scope-check a student-fee
+// assignment by id before archiving it.
+export async function getStudentFeeStudentId(id: string): Promise<string> {
+  const studentFee = await prisma.studentFee.findUnique({ where: { id }, select: { studentId: true } });
+  if (!studentFee) throw new HttpError(404, "STUDENT_FEE_NOT_FOUND", "Student fee assignment not found");
+  return studentFee.studentId;
 }
 
 export async function archiveStudentFee(id: string, actorId: string) {

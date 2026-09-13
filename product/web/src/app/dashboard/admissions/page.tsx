@@ -36,9 +36,14 @@ function statusBadge(status: Admission["status"]) {
   return <Badge variant="secondary">{status.charAt(0) + status.slice(1).toLowerCase()}</Badge>;
 }
 
-export default async function AdmissionsPage() {
+export default async function AdmissionsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ campusId?: string }>;
+}) {
+  const { campusId } = await searchParams;
   const [admissions, students, campuses, classes, academicYears] = await Promise.all([
-    apiRequest<Admission[]>("/api/v1/admissions"),
+    apiRequest<Admission[]>(`/api/v1/admissions${campusId ? `?campusId=${campusId}` : ""}`),
     apiRequest<StudentOption[]>("/api/v1/students?status=ACTIVE"),
     apiRequest<NamedOption[]>("/api/v1/campuses"),
     apiRequest<NamedOption[]>("/api/v1/classes"),

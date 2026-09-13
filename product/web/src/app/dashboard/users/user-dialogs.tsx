@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -41,6 +42,14 @@ export function CreateUserDialog() {
   );
 }
 
+// Campus Head/Office are campus-scoped roles — the backend
+// refuses assigning either with no campusId (CAMPUS_REQUIRED_FOR_ROLE,
+// added alongside the 2026-09-12 campus-scoping work, since scope.ts now
+// derives their entire visibility from this field). Mirrored here so the
+// form actually guides the user to the right thing instead of the old
+// (now-incorrect) advice to leave it blank for these two roles.
+const CAMPUS_REQUIRED_ROLE_NAMES = new Set(["CAMPUS_HEAD", "OFFICE"]);
+
 export function AssignRoleDialog({
   userId,
   userName,
@@ -52,18 +61,26 @@ export function AssignRoleDialog({
   roles: RoleOption[];
   campuses: CampusOption[];
 }) {
+  const [selectedRoleId, setSelectedRoleId] = useState<string | null>(null);
+  const selectedRole = roles.find((r) => r.id === selectedRoleId);
+  const campusRequired = selectedRole ? CAMPUS_REQUIRED_ROLE_NAMES.has(selectedRole.name) : false;
+
   return (
     <FormDialog
       triggerLabel="Assign role"
       title={`Assign a role to ${userName}`}
-      description="Campus is only relevant for a campus-scoped role (e.g. Incharge, Office, Teacher at one campus) — leave it as All campuses for Principal/Office roles that aren't scoped."
+      description={
+        campusRequired
+          ? `${selectedRole!.name} is a campus-scoped role — pick which campus this assignment is for.`
+          : "Campus only matters for a campus-scoped role (Campus Head, Office, or a Teacher/Incharge tied to one campus) — leave it unset for an institute-wide role like Super Admin."
+      }
       submitLabel="Assign"
       action={assignRole}
     >
       <input type="hidden" name="userId" value={userId} />
       <div className="flex flex-col gap-2">
         <Label htmlFor={`role-${userId}`}>Role</Label>
-        <Select name="roleId" required>
+        <Select name="roleId" required onValueChange={(value) => setSelectedRoleId(value as string | null)}>
           <SelectTrigger id={`role-${userId}`} className="w-full">
             <SelectValue placeholder="Select a role" />
           </SelectTrigger>
@@ -77,10 +94,10 @@ export function AssignRoleDialog({
         </Select>
       </div>
       <div className="flex flex-col gap-2">
-        <Label htmlFor={`campus-${userId}`}>Campus (optional)</Label>
-        <Select name="campusId">
+        <Label htmlFor={`campus-${userId}`}>{campusRequired ? "Campus (required)" : "Campus (optional)"}</Label>
+        <Select name="campusId" required={campusRequired}>
           <SelectTrigger id={`campus-${userId}`} className="w-full">
-            <SelectValue placeholder="All campuses" />
+            <SelectValue placeholder={campusRequired ? "Select a campus" : "All campuses"} />
           </SelectTrigger>
           <SelectContent>
             {campuses.map((campus) => (

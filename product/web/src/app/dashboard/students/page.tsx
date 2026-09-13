@@ -17,12 +17,14 @@ interface Student {
 export default async function StudentsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ q?: string }>;
+  searchParams: Promise<{ q?: string; campusId?: string }>;
 }) {
-  const { q = "" } = await searchParams;
+  const { q = "", campusId } = await searchParams;
 
   const students = await apiRequest<Student[]>(
-    q ? `/api/v1/students/search?q=${encodeURIComponent(q)}` : "/api/v1/students"
+    q
+      ? `/api/v1/students/search?q=${encodeURIComponent(q)}`
+      : `/api/v1/students${campusId ? `?campusId=${campusId}` : ""}`
   );
 
   return (

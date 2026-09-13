@@ -5,17 +5,26 @@ import { setAuthCookies, clearAuthCookies, COOKIE_NAMES } from "../../lib/cookie
 import { HttpError } from "../../middleware/errorHandler.js";
 import { generateCsrfToken } from "../../lib/tokens.js";
 
-const loginSchema = z.object({
-  email: z.string().email(),
-  password: z.string().min(1),
-  mfaCode: z.string().optional(),
-});
+// Accepts either field: "identifier" is the real, current name (can be an
+// email, a CNIC, or a studentCode — Phase 11 Phase C-addendum); "email" is
+// kept as an alias purely so the existing frontend login form (which still
+// POSTs {email, password}) keeps working unchanged until it's updated to
+// use the new field name and a non-email-typed input. At least one must be
+// present.
+const loginSchema = z
+  .object({
+    identifier: z.string().min(1).optional(),
+    email: z.string().min(1).optional(),
+    password: z.string().min(1),
+    mfaCode: z.string().optional(),
+  })
+  .refine((data) => data.identifier || data.email, { message: "identifier is required" });
 
 export async function loginHandler(req: Request, res: Response): Promise<void> {
   const body = loginSchema.parse(req.body);
 
   const { user, tokens } = await authService.login({
-    email: body.email,
+    identifier: (body.identifier ?? body.email)!,
     password: body.password,
     mfaCode: body.mfaCode,
     deviceInfo: req.get("user-agent") ?? null,

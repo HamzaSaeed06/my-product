@@ -2,12 +2,28 @@ import { prisma } from "../../lib/prisma.js";
 import { writeAuditLog } from "../../lib/audit.js";
 import { HttpError } from "../../middleware/errorHandler.js";
 
-export async function listAdmissions(filter: { studentId?: string; status?: "PENDING" | "APPROVED" | "REJECTED" | "WITHDRAWN" }) {
+export async function listAdmissions(filter: {
+  studentId?: string;
+  status?: "PENDING" | "APPROVED" | "REJECTED" | "WITHDRAWN";
+  // Campus Head/Office's own campus(es) — Admission has a direct campusId
+  // column, so this is a plain filter, not a join. See
+  // docs/PHASE_11A_CAMPUS_SCOPING_IMPLEMENTATION_PLAN.md Group 1.
+  campusIdIn?: string[];
+}) {
   return prisma.admission.findMany({
-    where: { studentId: filter.studentId, status: filter.status },
+    where: { studentId: filter.studentId, status: filter.status, campusId: filter.campusIdIn ? { in: filter.campusIdIn } : undefined },
     include: { student: true, campus: true, klass: true, academicYear: true },
     orderBy: { appliedAt: "desc" },
   });
+}
+
+// Thin getter for controllers that need to scope-check an admission by id
+// before deciding/withdrawing it (assertCampusInScope needs the record's
+// campusId first) — not exposed as its own route.
+export async function getAdmissionCampusId(id: string): Promise<string> {
+  const admission = await prisma.admission.findUnique({ where: { id }, select: { campusId: true } });
+  if (!admission) throw new HttpError(404, "ADMISSION_NOT_FOUND", "Admission not found");
+  return admission.campusId;
 }
 
 // Admission ≠ Enrollment (spec) — this only records the application.

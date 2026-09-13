@@ -56,7 +56,7 @@ async function FinancialReportContent({ searchParams }: Props) {
   if (campusId) query.set("campusId", campusId);
   const report = await apiRequest<FinancialReport>(`/api/v1/reports/financial?${query.toString()}`);
 
-  const canExport = user?.roles.some((r) => ["SUPER_ADMIN", "PRINCIPAL", "OFFICE"].includes(r));
+  const canExport = user?.roles.some((r) => ["SUPER_ADMIN", "CAMPUS_HEAD", "OFFICE"].includes(r));
 
   return (
     <div>

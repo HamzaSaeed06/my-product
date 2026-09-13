@@ -9,7 +9,7 @@ const prisma = new PrismaClient();
 // builds that feature — don't guess ahead of the code that enforces it.
 const CORE_ROLES = [
   "SUPER_ADMIN",
-  "PRINCIPAL",
+  "CAMPUS_HEAD",
   "INCHARGE",
   "OFFICE",
   "TEACHER",
@@ -87,6 +87,11 @@ const PHASE_2_PERMISSIONS = [
   ["admission.create", "Create admission applications"],
   ["admission.approve", "Approve admission applications"],
   ["admission.reject", "Reject admission applications"],
+  // Phase 11 Phase C — pre-enrollment stage, lighter-weight than a full
+  // Admission (no Student row created until deliberately converted).
+  ["admission_inquiry.view", "View admission inquiries"],
+  ["admission_inquiry.create", "Create/update admission inquiries"],
+  ["admission_inquiry.convert", "Convert an admission inquiry into a real Admission"],
   ["enrollment.view", "View enrollments"],
   ["enrollment.create", "Create enrollments"],
   ["enrollment.transfer", "Transfer a student's class/section"],
@@ -122,6 +127,11 @@ const PHASE_3_PERMISSIONS = [
   ["homework.create", "Create homework"],
   ["homework.edit", "Edit homework"],
   ["homework.publish", "Publish homework"],
+  // Phase 11 Phase D — a lighter running log than Homework: no
+  // draft/publish lifecycle, so one "create" permission covers create,
+  // edit, and archive (matches the feature's own "lightweight" intent).
+  ["class_diary.view", "View class diary entries"],
+  ["class_diary.create", "Post/edit/archive a class diary entry"],
   ["assessment.view", "View assessments/tests"],
   ["assessment.create", "Create assessments/tests"],
   ["assessment.edit", "Edit assessments/tests"],
@@ -211,6 +221,11 @@ const PHASE_8_PERMISSIONS = [
   ["report.view_admissions", "View admission reports"],
   ["report.view_staff", "View staff reports"],
   ["report.export", "Export report data"],
+  // Not one of the report.view_X keys above deliberately — see the
+  // comment on the route in reports/routes.ts. Not granted to any
+  // non-SUPER_ADMIN role in this seed (SUPER_ADMIN gets it via the
+  // blanket grant below).
+  ["institute.monitor", "View the cross-campus institute monitoring dashboard"],
 ] as const;
 
 // Phase 9: Online Payment Integration. payment_gateway.manage is
@@ -220,6 +235,25 @@ const PHASE_8_PERMISSIONS = [
 const PHASE_9_PERMISSIONS = [
   ["payment_gateway.manage", "Manage online payment gateway configuration"],
   ["payment.pay_online", "Initiate an online payment for an invoice"],
+] as const;
+
+// Phase 11 Phase A2: Delegation. Deliberately only 3 keys — the
+// SUPER_ADMIN-vs-CAMPUS_HEAD "who may create/revoke" rule from
+// docs/PHASE_11_MULTI_CAMPUS_AND_WORKFLOWS.md is enforced by WHICH roles
+// hold delegation.create/revoke (below), not by extra permission keys.
+const PHASE_11_PERMISSIONS = [
+  ["delegation.view", "View delegations"],
+  ["delegation.create", "Grant a temporary role delegation"],
+  ["delegation.revoke", "Revoke a delegation"],
+  // Phase 11 Phase A3: Staff attendance with anti-spoofing verification.
+  // staff_attendance.qr_manage is deliberately separate from .view — it's
+  // "what gets printed/displayed", not attendance data, and must stay
+  // restricted (see the comment on the route).
+  ["staff_attendance.view", "View staff attendance/check-in records"],
+  ["staff_attendance.checkin", "Self check-in via QR"],
+  ["staff_attendance.mark", "Manually mark another staff member's attendance"],
+  ["staff_attendance.remote_approve", "Grant a REMOTE_APPROVED day for legitimate remote work"],
+  ["staff_attendance.qr_manage", "View the current QR check-in token to display/print"],
 ] as const;
 
 const ALL_PERMISSIONS = [
@@ -232,6 +266,7 @@ const ALL_PERMISSIONS = [
   ...PHASE_6_PERMISSIONS,
   ...PHASE_8_PERMISSIONS,
   ...PHASE_9_PERMISSIONS,
+  ...PHASE_11_PERMISSIONS,
 ];
 
 // Phase 7: every non-SUPER_ADMIN role's permission grant, derived from
@@ -245,39 +280,115 @@ const ALL_PERMISSIONS = [
 // src/lib/scope.ts — a permission grant here means "this role may use this
 // endpoint at all", not "this role sees everyone's data".
 const ROLE_PERMISSIONS: Record<Exclude<(typeof CORE_ROLES)[number], "SUPER_ADMIN">, string[]> = {
-  // Campus-wide oversight + the "critical actions" spec calls out
-  // (class-jump promotions, financial approvals) at the top of the
-  // approval chain above Office.
-  PRINCIPAL: [
+  // Campus Head (role name still "CAMPUS_HEAD" pending the Role.systemKey
+  // rename discussed in docs/DYNAMIC_INSTITUTION_ARCHITECTURE.md Gap 2) —
+  // full operational head of one campus. Per the user's explicit
+  // 2026-09-12 decision (see docs/ROLE_PERMISSION_MATRIX.md): elevated
+  // above Incharge/Office/Teacher, below Super Admin. This is Incharge's
+  // + Office's campus-level authority, PLUS Campus Head's own exclusive
+  // controls (class/section/subject/exam ownership, timetable publish,
+  // gateway config) — deliberately NOT a blind copy of every Office/
+  // Incharge grant: `user.create/edit/disable` (assign/manage staff) is
+  // withheld until the Users module has real campus-scoping (no backend
+  // guard exists yet — granting it today would let a Campus Head create a
+  // SUPER_ADMIN account), and `payment.record` stays Office-exclusive
+  // (segregation of duties: the approver of refunds/waivers/reversals
+  // should not also be the one keying in daily cash).
+  CAMPUS_HEAD: [
     "institute.view",
     "campus.view",
     "academic_year.view",
+    // See own campus's staff (needed for the Incharge Scopes page and
+    // generally to know who's on their campus) — read-only, now that
+    // listUsers() is campus-scoped. user.create/edit/disable stay withheld
+    // (see the big comment above this block).
+    "user.view",
+    // See own campus's Incharge scopes — matches
+    // docs/ROLE_PERMISSION_MATRIX.md's "see (not necessarily edit)"
+    // decision; create/edit/revoke stays Super-Admin-only for now.
+    "incharge_scope.view",
+    // Academic structure — Campus Head owns this for their campus, not
+    // just views it (docs/ROLE_PERMISSION_MATRIX.md gap).
     "class.view",
+    "class.create",
+    "class.edit",
     "section.view",
-    "student.view",
-    "teacher.view",
-    "parent.view",
+    "section.create",
+    "section.edit",
     "subject.view",
-    "admission.view",
-    "enrollment.view",
+    "subject.create",
+    "subject.edit",
+    "student.view",
+    "student.create",
+    "student.edit",
+    "student.archive",
+    "parent.view",
+    "parent.create",
+    "parent.edit",
+    "teacher.view",
+    // Found 2026-09-13 auditing the Teachers page against real grants:
+    // teachers/controller.ts already has campus-scoping logic written
+    // specifically for "Campus Head/Office" creating/editing/archiving a
+    // Teacher profile (a target user's TEACHER role must be at the actor's
+    // own campus) — the enforcement existed, but the permission grant to
+    // actually use it was never added, unlike user.create (withheld with a
+    // stated reason: Users has no campus-scoping guard yet). No such
+    // reason applies here, so this was a plain oversight, not a
+    // deliberate withholding.
+    "teacher.create",
+    "teacher.edit",
+    "teacher.archive",
     "teacher_assignment.view",
+    "admission.view",
+    "admission.create",
+    "admission.approve",
+    "admission.reject",
+    "enrollment.view",
+    "enrollment.create",
+    "enrollment.transfer",
+    "enrollment.withdraw",
+    // Timetable/substitution — same operational authority as Incharge,
+    // plus the publish step the spec reserves for Campus Head.
     "timetable.view",
-    "attendance.view",
-    "teacher_attendance.view",
+    "timetable.create",
+    "timetable.edit",
+    "timetable.publish",
     "substitution.view",
+    "substitution.create",
+    "substitution.cancel",
+    "attendance.view",
+    "attendance.correct",
+    "teacher_attendance.view",
     "curriculum.view",
+    "curriculum.create",
+    "curriculum.edit",
     "homework.view",
+    "class_diary.view",
     "assessment.view",
+    "assessment.correct",
+    // Exams — Campus Head's own explicit authority per spec (Tests/Exams/
+    // Exam schedules), not just Incharge-inherited oversight.
     "exam.view",
+    "exam.create",
+    "exam.publish",
     "result.view",
     "report_card.view",
     "promotion.view",
     "promotion.approve",
+    // Finance — configuration/oversight authority, deliberately not
+    // day-to-day cash entry (see comment above).
     "fee_structure.view",
+    "fee_structure.create",
+    "fee_structure.edit",
     "fee_assignment.view",
+    "fee_assignment.create",
+    "fee_assignment.edit",
     "invoice.view",
+    "invoice.create",
+    "invoice.void",
     "invoice.export",
     "payment.view",
+    "payment.reverse",
     "refund.view",
     "refund.approve",
     "discount.view",
@@ -286,6 +397,15 @@ const ROLE_PERMISSIONS: Record<Exclude<(typeof CORE_ROLES)[number], "SUPER_ADMIN
     "waiver.approve",
     "cash_closing.view",
     "cash_closing.approve",
+    // Gateway config WITHHELD, unlike everything else in this block —
+    // checked the schema while wiring the frontend (2026-09-12) and
+    // PaymentGateway has NO campusId at all: it's one shared, institute-
+    // wide gateway ("if more than one is active, the oldest active one is
+    // used" — Phase 9's own design). Granting this to Campus Head would
+    // let any one campus's head disable online payments for every other
+    // campus. Re-add only once docs/DYNAMIC_INSTITUTION_ARCHITECTURE.md's
+    // Gap 3 (FeatureConfig) exists to actually gate it, per the plan
+    // already written in docs/ROLE_PERMISSION_MATRIX.md.
     "leave.view",
     "leave.approve",
     "leave.reject",
@@ -295,6 +415,8 @@ const ROLE_PERMISSIONS: Record<Exclude<(typeof CORE_ROLES)[number], "SUPER_ADMIN
     "approval.view",
     "approval.decide",
     "document.view",
+    "document.upload",
+    "document.manage",
     "notification.view",
     "report.view_academic",
     "report.view_attendance",
@@ -302,6 +424,16 @@ const ROLE_PERMISSIONS: Record<Exclude<(typeof CORE_ROLES)[number], "SUPER_ADMIN
     "report.view_admissions",
     "report.view_staff",
     "report.export",
+    // Own-campus only — enforced by assertCampusInScope in the delegations
+    // controller, not by this grant alone.
+    "delegation.view",
+    "delegation.create",
+    "delegation.revoke",
+    "staff_attendance.view",
+    "staff_attendance.checkin",
+    "staff_attendance.mark",
+    "staff_attendance.remote_approve",
+    "staff_attendance.qr_manage",
   ],
   // Scoped class/section management — the permission grant is broad (same
   // shape as Teacher/Office for the resources Incharges touch); the
@@ -311,33 +443,69 @@ const ROLE_PERMISSIONS: Record<Exclude<(typeof CORE_ROLES)[number], "SUPER_ADMIN
   INCHARGE: [
     "class.view",
     "section.view",
+    // Both added 2026-09-13, found auditing the dashboard frontend against
+    // this exact permission set: Incharge holds timetable.create/edit and
+    // curriculum.edit below but had no way to fetch the subject list (GET
+    // /api/v1/subjects → subject.view) or academic-year list (GET
+    // /api/v1/academic-years → academic_year.view) those features filter
+    // by — the Timetable subject picker rendered empty, and Curriculum's
+    // class/year filter hit its "create a class and academic year first"
+    // empty state even when both existed. Both are shared, non-sensitive
+    // reference lists (no campus scoping on either endpoint) — unlike
+    // campus.view, which stays withheld since Incharge's oversight is
+    // deliberately section-scoped, not institute-wide.
+    "subject.view",
+    "academic_year.view",
     "exam.view",
     "student.view",
     "teacher.view",
+    // Phase 11 Phase C: Incharge could not create an Enrollment (assign a
+    // section) at all before this — Office was the only role that could.
+    "enrollment.view",
+    "enrollment.create",
+    "admission_inquiry.view",
+    "admission_inquiry.create",
+    "admission_inquiry.convert",
     "timetable.view",
     "timetable.create",
     "timetable.edit",
+    // Substitution was missing entirely (only CAMPUS_HEAD had .view) despite
+    // Incharge already owning full timetable authority and the spec
+    // explicitly listing "Teacher substitution" under Incharge — added
+    // 2026-09-12 alongside the Campus Head permission expansion.
+    "substitution.view",
+    "substitution.create",
+    "substitution.cancel",
     "attendance.view",
     "attendance.correct",
     "teacher_attendance.view",
     "curriculum.view",
     "curriculum.edit",
     "homework.view",
+    "class_diary.view",
     "assessment.view",
     "assessment.correct",
     "result.view",
     "complaint.view",
     "complaint.assign",
     "leave.view",
+    "leave.approve",
+    "leave.reject",
     "notification.view",
     "report.view_academic",
     "report.view_attendance",
+    "staff_attendance.view",
+    "staff_attendance.checkin",
+    "staff_attendance.mark",
   ],
   // Administrative staff: admissions, records, fee collection, leave/
   // complaint intake — per spec's "Office: administrative staff (admissions,
   // fees, records)".
   OFFICE: [
     "campus.view",
+    "admission_inquiry.view",
+    "admission_inquiry.create",
+    "admission_inquiry.convert",
     "student.view",
     "student.create",
     "student.edit",
@@ -346,6 +514,12 @@ const ROLE_PERMISSIONS: Record<Exclude<(typeof CORE_ROLES)[number], "SUPER_ADMIN
     "parent.create",
     "parent.edit",
     "teacher.view",
+    // Same fix as Campus Head above: teachers/controller.ts already has
+    // campus-scoped create/edit/archive logic written for Campus
+    // Head/Office specifically — the grant to use it was just missing.
+    "teacher.create",
+    "teacher.edit",
+    "teacher.archive",
     "class.view",
     "section.view",
     "academic_year.view",
@@ -389,6 +563,9 @@ const ROLE_PERMISSIONS: Record<Exclude<(typeof CORE_ROLES)[number], "SUPER_ADMIN
     "report.view_financial",
     "report.view_admissions",
     "report.export",
+    "staff_attendance.view",
+    "staff_attendance.checkin",
+    "staff_attendance.qr_manage",
   ],
   // Teaching staff: own classes' academics, attendance, homework, marks —
   // per spec's "Teacher: teaching staff (academics, attendance, homework)".
@@ -408,6 +585,8 @@ const ROLE_PERMISSIONS: Record<Exclude<(typeof CORE_ROLES)[number], "SUPER_ADMIN
     "homework.create",
     "homework.edit",
     "homework.publish",
+    "class_diary.view",
+    "class_diary.create",
     "assessment.view",
     "assessment.create",
     "assessment.edit",
@@ -421,9 +600,15 @@ const ROLE_PERMISSIONS: Record<Exclude<(typeof CORE_ROLES)[number], "SUPER_ADMIN
     "leave.view",
     "leave.create",
     "leave.cancel",
+    // A Class Teacher (Section.classTeacherId) is the forwarding target for
+    // leave requests per docs/PHASE_11_MULTI_CAMPUS_AND_WORKFLOWS.md Phase
+    // B — added alongside Incharge's same grant, 2026-09-12.
+    "leave.approve",
+    "leave.reject",
     "document.view",
     "document.upload",
     "notification.view",
+    "staff_attendance.checkin",
   ],
   // Guardian: view own children, pay fees, raise requests — per spec's
   // "Parent: student guardian (view children, pay fees, requests)". Read-
@@ -433,6 +618,7 @@ const ROLE_PERMISSIONS: Record<Exclude<(typeof CORE_ROLES)[number], "SUPER_ADMIN
     "timetable.view",
     "attendance.view",
     "homework.view",
+    "class_diary.view",
     "assessment.view",
     "result.view",
     "report_card.view",
@@ -454,6 +640,7 @@ const ROLE_PERMISSIONS: Record<Exclude<(typeof CORE_ROLES)[number], "SUPER_ADMIN
     "timetable.view",
     "attendance.view",
     "homework.view",
+    "class_diary.view",
     "assessment.view",
     "result.view",
     "report_card.view",
@@ -463,11 +650,17 @@ const ROLE_PERMISSIONS: Record<Exclude<(typeof CORE_ROLES)[number], "SUPER_ADMIN
 };
 
 async function main(): Promise<void> {
+  // Phase 12 Gap 2: matched by systemKey, not name — name is now a freely
+  // editable display label (an institute may have renamed "CAMPUS_HEAD" to
+  // "Director"), so re-running this seed after a rename must find the same
+  // existing row by its stable key, never create a confusing duplicate
+  // system role under its original name. `update: {}` deliberately never
+  // touches `name` — a rename must never be silently reverted by a seed run.
   for (const roleName of CORE_ROLES) {
     await prisma.role.upsert({
-      where: { name: roleName },
+      where: { systemKey: roleName },
       update: {},
-      create: { name: roleName, isSystem: true },
+      create: { name: roleName, systemKey: roleName, isSystem: true },
     });
   }
   console.log(`Seeded ${CORE_ROLES.length} core roles.`);
@@ -481,7 +674,7 @@ async function main(): Promise<void> {
   }
   console.log(`Seeded ${ALL_PERMISSIONS.length} permissions.`);
 
-  const superAdminRole = await prisma.role.findUniqueOrThrow({ where: { name: "SUPER_ADMIN" } });
+  const superAdminRole = await prisma.role.findUniqueOrThrow({ where: { systemKey: "SUPER_ADMIN" } });
   const allPermissions = await prisma.permission.findMany();
 
   for (const permission of allPermissions) {
@@ -496,7 +689,7 @@ async function main(): Promise<void> {
   const permissionByKey = new Map(allPermissions.map((p) => [p.key, p.id]));
 
   for (const [roleName, keys] of Object.entries(ROLE_PERMISSIONS)) {
-    const role = await prisma.role.findUniqueOrThrow({ where: { name: roleName } });
+    const role = await prisma.role.findUniqueOrThrow({ where: { systemKey: roleName } });
     for (const key of keys) {
       const permissionId = permissionByKey.get(key);
       if (!permissionId) throw new Error(`ROLE_PERMISSIONS['${roleName}'] references unknown permission key '${key}'`);

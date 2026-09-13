@@ -26,6 +26,16 @@ complaintsRouter.post(
   asyncHandler(controller.assignComplaintHandler)
 );
 
+// Same permission as assign — forwarding is a reassignment, available to
+// whoever's currently allowed to reassign the complaint (Phase 11 Phase B).
+complaintsRouter.post(
+  "/:complaintId/forward",
+  ...requirePermission("complaint.assign"),
+  csrfProtection,
+  writeRateLimiter,
+  asyncHandler(controller.forwardComplaintHandler)
+);
+
 complaintsRouter.post(
   "/:complaintId/start-progress",
   ...requirePermission("complaint.assign"),

@@ -29,14 +29,18 @@ export async function listTeacherAttendanceHandler(req: Request, res: Response):
   const profile = await getActorProfile(req.user!.id);
 
   let teacherId = query.teacherId;
-  if (profile.roles.includes("TEACHER") && !profile.roles.some((r) => ["SUPER_ADMIN", "PRINCIPAL", "OFFICE"].includes(r))) {
+  if (profile.roles.includes("TEACHER") && !profile.roles.some((r) => ["SUPER_ADMIN", "CAMPUS_HEAD", "OFFICE"].includes(r))) {
     if (teacherId && teacherId !== profile.teacherId) {
       throw new HttpError(403, "OUT_OF_SCOPE", "You do not have access to this teacher's attendance");
     }
     teacherId = profile.teacherId ?? undefined;
   }
 
-  res.status(200).json(await service.listTeacherAttendance({ teacherId, date: query.date }));
+  // CAMPUS_HEAD/OFFICE: narrow to their own campus(es) — added 2026-09-12,
+  // this branch previously fell through unfiltered for these two roles.
+  const campusIdIn = profile.campusIds.length > 0 ? profile.campusIds : undefined;
+
+  res.status(200).json(await service.listTeacherAttendance({ teacherId, date: query.date, campusIdIn }));
 }
 
 export async function correctTeacherAttendanceHandler(req: Request, res: Response): Promise<void> {

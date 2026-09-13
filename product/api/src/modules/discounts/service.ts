@@ -1,10 +1,11 @@
 import { prisma } from "../../lib/prisma.js";
 import { writeAuditLog } from "../../lib/audit.js";
 import { HttpError } from "../../middleware/errorHandler.js";
+import { studentScopeWhereDirect, type StudentScopeFilter } from "../../lib/scope.js";
 
-export async function listDiscounts(filter: { studentId?: string; status?: string }) {
+export async function listDiscounts(filter: StudentScopeFilter & { status?: string }) {
   return prisma.discount.findMany({
-    where: { studentId: filter.studentId, status: filter.status as never },
+    where: { ...studentScopeWhereDirect(filter), status: filter.status as never },
     include: { feeStructure: true },
     orderBy: { createdAt: "desc" },
   });
@@ -36,6 +37,14 @@ export async function createDiscount(
   await writeAuditLog({ actorId, action: "CREATE", resource: "Discount", recordId: discount.id, newValue: input });
 
   return discount;
+}
+
+// Thin getter for controllers that need to scope-check a discount by id
+// before deciding it.
+export async function getDiscountStudentId(id: string): Promise<string> {
+  const discount = await prisma.discount.findUnique({ where: { id }, select: { studentId: true } });
+  if (!discount) throw new HttpError(404, "DISCOUNT_NOT_FOUND", "Discount not found");
+  return discount.studentId;
 }
 
 export async function decideDiscount(id: string, decision: "APPROVED" | "REJECTED", actorId: string) {

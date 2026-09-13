@@ -2,6 +2,7 @@ import { Prisma } from "@prisma/client";
 import { prisma } from "../../lib/prisma.js";
 import { writeAuditLog } from "../../lib/audit.js";
 import { HttpError } from "../../middleware/errorHandler.js";
+import { studentScopeWhereDirect, type StudentScopeFilter } from "../../lib/scope.js";
 import { createApprovalRequest } from "../approvals/service.js";
 import { recalculateInvoiceStatus } from "../invoices/service.js";
 import {
@@ -112,9 +113,9 @@ export async function recordPayment(
   return result;
 }
 
-export async function listPayments(filter: { studentId?: string; studentIdIn?: string[] }) {
+export async function listPayments(filter: StudentScopeFilter) {
   return prisma.payment.findMany({
-    where: { studentId: filter.studentIdIn ? { in: filter.studentIdIn } : filter.studentId },
+    where: studentScopeWhereDirect(filter),
     include: paymentInclude(),
     orderBy: { createdAt: "desc" },
   });
@@ -125,13 +126,19 @@ export async function requestPaymentReversal(paymentId: string, reason: string, 
   if (!payment) throw new HttpError(404, "PAYMENT_NOT_FOUND", "Payment not found");
   if (payment.status === "REVERSED") throw new HttpError(409, "ALREADY_REVERSED", "Payment is already reversed");
 
+  const enrollment = await prisma.enrollment.findFirst({
+    where: { studentId: payment.studentId, status: "ACTIVE" },
+    include: { section: true },
+  });
+
   return createApprovalRequest({
     type: "PAYMENT_REVERSAL",
     resource: "Payment",
     recordId: paymentId,
     requestedById: actorId,
-    approverRole: "PRINCIPAL",
+    approverRole: "CAMPUS_HEAD",
     payload: { paymentId, reason },
+    campusId: enrollment?.section.campusId,
   });
 }
 
@@ -193,8 +200,24 @@ export async function decidePaymentReversal(
   return updatedRequest;
 }
 
-export async function listCreditTransactions(filter: { studentId?: string }) {
-  return prisma.creditTransaction.findMany({ where: filter, orderBy: { createdAt: "desc" } });
+export async function listCreditTransactions(filter: StudentScopeFilter) {
+  return prisma.creditTransaction.findMany({ where: studentScopeWhereDirect(filter), orderBy: { createdAt: "desc" } });
+}
+
+// Thin getter for controllers that need to scope-check a payment by id
+// before requesting its reversal.
+export async function getPaymentStudentId(paymentId: string): Promise<string> {
+  const payment = await prisma.payment.findUnique({ where: { id: paymentId }, select: { studentId: true } });
+  if (!payment) throw new HttpError(404, "PAYMENT_NOT_FOUND", "Payment not found");
+  return payment.studentId;
+}
+
+// Same, for an invoice — used before initiating a payment attempt against
+// it (a Parent must only be able to pay their own child's invoice).
+export async function getInvoiceStudentId(invoiceId: string): Promise<string> {
+  const invoice = await prisma.invoice.findUnique({ where: { id: invoiceId }, select: { studentId: true } });
+  if (!invoice) throw new HttpError(400, "INVOICE_NOT_FOUND", "Invoice not found");
+  return invoice.studentId;
 }
 
 // ── Online payment scaffolding (spec's Workflow #2 + rules #8/#9/#10) ──

@@ -31,9 +31,18 @@ export async function markTeacherAttendance(
   return record;
 }
 
-export async function listTeacherAttendance(filter: { teacherId?: string; date?: string }) {
+export async function listTeacherAttendance(filter: { teacherId?: string; date?: string; campusIdIn?: string[] }) {
   return prisma.teacherAttendance.findMany({
-    where: { teacherId: filter.teacherId, date: filter.date ? new Date(filter.date) : undefined },
+    where: {
+      teacherId: filter.teacherId,
+      date: filter.date ? new Date(filter.date) : undefined,
+      // A Teacher's campus is their own TEACHER UserRole's campusId, not a
+      // joined class/section — see
+      // docs/PHASE_11A_CAMPUS_SCOPING_IMPLEMENTATION_PLAN.md Group 3.
+      teacher: filter.campusIdIn
+        ? { user: { userRoles: { some: { role: { name: "TEACHER" }, campusId: { in: filter.campusIdIn } } } } }
+        : undefined,
+    },
     include: { teacher: { include: { user: { select: { fullName: true } } } } },
     orderBy: { date: "desc" },
   });

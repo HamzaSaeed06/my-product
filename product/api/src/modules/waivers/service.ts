@@ -3,13 +3,29 @@ import { prisma } from "../../lib/prisma.js";
 import { writeAuditLog } from "../../lib/audit.js";
 import { HttpError } from "../../middleware/errorHandler.js";
 import { recalculateInvoiceStatus } from "../invoices/service.js";
+import { studentScopeWhereVia, type StudentScopeFilter } from "../../lib/scope.js";
 
-export async function listWaivers(filter: { invoiceId?: string; status?: string }) {
+export async function listWaivers(filter: StudentScopeFilter & { invoiceId?: string; status?: string }) {
+  const { invoiceId, ...studentFilter } = filter;
   return prisma.waiver.findMany({
-    where: { invoiceId: filter.invoiceId, status: filter.status as never },
+    where: { invoiceId, ...studentScopeWhereVia(studentFilter, "invoice"), status: filter.status as never },
     include: { invoice: true, requestedBy: { select: { id: true, fullName: true } } },
     orderBy: { createdAt: "desc" },
   });
+}
+
+// Thin getters for controllers that need to scope-check before creating/
+// deciding a waiver.
+export async function getInvoiceStudentIdForWaiver(invoiceId: string): Promise<string> {
+  const invoice = await prisma.invoice.findUnique({ where: { id: invoiceId }, select: { studentId: true } });
+  if (!invoice) throw new HttpError(400, "INVOICE_NOT_FOUND", "Invoice not found");
+  return invoice.studentId;
+}
+
+export async function getWaiverStudentId(id: string): Promise<string> {
+  const waiver = await prisma.waiver.findUnique({ where: { id }, select: { invoice: { select: { studentId: true } } } });
+  if (!waiver) throw new HttpError(404, "WAIVER_NOT_FOUND", "Waiver not found");
+  return waiver.invoice.studentId;
 }
 
 export async function createWaiver(input: { invoiceId: string; amount: string; reason: string }, actorId: string) {

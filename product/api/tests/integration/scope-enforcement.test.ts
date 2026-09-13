@@ -170,6 +170,42 @@ describe("Phase 7 scope enforcement (real database)", () => {
       expect(res.status).toBe(400);
       expect(res.body.error).toBe("SECTION_REQUIRED");
     });
+
+    // Phase 11 Phase D: createHomeworkHandler previously had no scope check
+    // at all — any actor holding homework.create could post to any
+    // section by just knowing its id. Verified fixed here.
+    it("refuses creating homework for a section they're not assigned to", async () => {
+      const res = await teacherClient
+        .post("/api/v1/homework")
+        .send({ subjectId, sectionId: sectionOutId, classId: classOutId, teacherId, title: "Should be refused", dueDate: "2026-09-20" });
+      expect(res.status).toBe(403);
+      expect(res.body.error).toBe("OUT_OF_SCOPE");
+    });
+
+    it("allows creating homework for their own assigned section", async () => {
+      const res = await teacherClient
+        .post("/api/v1/homework")
+        .send({ subjectId, sectionId: sectionInId, classId: classInId, teacherId, title: "Scope Test Homework", dueDate: "2026-09-20" });
+      expect(res.status).toBe(201);
+      await prisma.homework.delete({ where: { id: res.body.id } }).catch(() => {});
+    });
+
+    // Same underlying scope check, new Phase D module.
+    it("refuses posting a class diary entry for a section they're not assigned to", async () => {
+      const res = await teacherClient
+        .post("/api/v1/class-diary")
+        .send({ sectionId: sectionOutId, teacherId, date: "2026-09-12", note: "Should be refused" });
+      expect(res.status).toBe(403);
+      expect(res.body.error).toBe("OUT_OF_SCOPE");
+    });
+
+    it("allows posting a class diary entry for their own assigned section", async () => {
+      const res = await teacherClient
+        .post("/api/v1/class-diary")
+        .send({ sectionId: sectionInId, teacherId, date: "2026-09-12", note: "Scope Test Diary Entry" });
+      expect(res.status).toBe(201);
+      await prisma.classDiaryEntry.delete({ where: { id: res.body.id } }).catch(() => {});
+    });
   });
 
   describe("Parent — sees only own children", () => {

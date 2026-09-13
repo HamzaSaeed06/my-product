@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { apiRequest } from "@/lib/apiClient";
+import { getCurrentUser } from "@/lib/session";
 import { PageHeader } from "@/components/page-header";
 import { Badge } from "@/components/ui/badge";
 import { ResultsFilters } from "./filters";
@@ -57,14 +58,31 @@ export default async function ResultsPage({
 }) {
   const { examId: requestedExamId, sectionId: requestedSectionId } = await searchParams;
 
+  // Mirrors result.edit/review/finalize/publish/correct + approval.view
+  // from routes.ts. In the dashboard shell, only Super Admin currently
+  // holds any of the result-workflow permissions — Campus Head/Incharge/
+  // Office all have result.view only (entering/advancing results is a
+  // Teacher action in the portal shell) — so this page is view-only for
+  // them: no Enter marks, no status-advance button, no correction review.
+  const permissions = (await getCurrentUser())?.permissions ?? [];
+  const canEditResults = permissions.includes("result.edit");
+  const canAdvanceStatus =
+    canEditResults ||
+    permissions.includes("result.review") ||
+    permissions.includes("result.finalize") ||
+    permissions.includes("result.publish");
+  const canCorrect = permissions.includes("result.correct");
+  const canViewApprovals = permissions.includes("approval.view");
+  const canViewCampuses = permissions.includes("campus.view");
+
   const [exams, rawSections, classes, campuses, academicYears, subjects, pendingApprovals] = await Promise.all([
     apiRequest<Exam[]>("/api/v1/exams"),
     apiRequest<RawSection[]>("/api/v1/sections"),
     apiRequest<NamedOption[]>("/api/v1/classes"),
-    apiRequest<NamedOption[]>("/api/v1/campuses"),
+    canViewCampuses ? apiRequest<NamedOption[]>("/api/v1/campuses") : Promise.resolve<NamedOption[]>([]),
     apiRequest<NamedOption[]>("/api/v1/academic-years"),
     apiRequest<NamedOption[]>("/api/v1/subjects"),
-    apiRequest<ApprovalRequest[]>("/api/v1/approvals?status=PENDING"),
+    canViewApprovals ? apiRequest<ApprovalRequest[]>("/api/v1/approvals?status=PENDING") : Promise.resolve<ApprovalRequest[]>([]),
   ]);
 
   const classNameById = new Map(classes.map((c) => [c.id, c.name]));
@@ -110,6 +128,8 @@ export default async function ResultsPage({
           examId={selectedExamId}
           sectionId={sectionChoices.find((s) => s.id === requestedSectionId)?.id ?? sectionChoices[0]!.id}
           subjects={subjects}
+          canEditResults={canEditResults}
+          canAdvanceStatus={canAdvanceStatus}
         />
       )}
 
@@ -127,7 +147,7 @@ export default async function ResultsPage({
                     Requested by {approval.requestedBy.fullName}: &ldquo;{approval.payload.reason}&rdquo;
                   </p>
                 </div>
-                <DecideResultCorrectionButtons approvalId={approval.id} />
+                {canCorrect ? <DecideResultCorrectionButtons approvalId={approval.id} /> : null}
               </div>
             ))}
           </div>
@@ -137,7 +157,19 @@ export default async function ResultsPage({
   );
 }
 
-async function ResultsBody({ examId, sectionId, subjects }: { examId: string; sectionId: string; subjects: NamedOption[] }) {
+async function ResultsBody({
+  examId,
+  sectionId,
+  subjects,
+  canEditResults,
+  canAdvanceStatus,
+}: {
+  examId: string;
+  sectionId: string;
+  subjects: NamedOption[];
+  canEditResults: boolean;
+  canAdvanceStatus: boolean;
+}) {
   const results = await apiRequest<Result[]>(`/api/v1/results?examId=${examId}&sectionId=${sectionId}`);
 
   if (results.length === 0) {
@@ -155,7 +187,7 @@ async function ResultsBody({ examId, sectionId, subjects }: { examId: string; se
             </div>
             <div className="flex items-center gap-2">
               <Badge variant={result.status === "PUBLISHED" ? "default" : "secondary"}>{result.status}</Badge>
-              <StatusActionButton resultId={result.id} status={result.status} />
+              {canAdvanceStatus ? <StatusActionButton resultId={result.id} status={result.status} /> : null}
               {result.status === "FINALIZED" || result.status === "PUBLISHED" ? (
                 <Link href="/dashboard/report-cards" className="text-xs text-muted-foreground hover:underline">
                   Report cards →
@@ -171,12 +203,12 @@ async function ResultsBody({ examId, sectionId, subjects }: { examId: string; se
                 <span className="text-muted-foreground">
                   {item.marksObtained}/{item.totalMarks} {item.grade ? `(${item.grade})` : ""}
                 </span>
-                {result.status === "FINALIZED" || result.status === "PUBLISHED" ? (
+                {canEditResults && (result.status === "FINALIZED" || result.status === "PUBLISHED") ? (
                   <RequestResultCorrectionDialog itemId={item.id} currentMarks={item.marksObtained} totalMarks={item.totalMarks} />
                 ) : null}
               </div>
             ))}
-            {result.status === "DRAFT" ? <EnterItemDialog resultId={result.id} subjects={subjects} /> : null}
+            {canEditResults && result.status === "DRAFT" ? <EnterItemDialog resultId={result.id} subjects={subjects} /> : null}
           </div>
         </div>
       ))}

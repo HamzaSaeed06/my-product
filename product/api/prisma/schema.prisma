@@ -91,7 +91,9 @@ model User {
   reconciliationExceptionsResolved ReconciliationException[]
 
   leavesRequested       Leave[]          @relation("LeaveRequestedBy")
+  leavesAssigned        Leave[]          @relation("LeaveAssignedTo")
   leavesDecided         Leave[]          @relation("LeaveDecidedBy")
+  admissionInquiriesCreated AdmissionInquiry[]
   complaintsSubmitted   Complaint[]      @relation("ComplaintSubmittedBy")
   complaintsAssigned    Complaint[]      @relation("ComplaintAssignedTo")
   complaintNotesAuthored ComplaintNote[]
@@ -100,6 +102,13 @@ model User {
   parentProfile  Parent?
 
   paymentAttemptsInitiated PaymentAttempt[]
+
+  delegationsGranted   Delegation[] @relation("DelegationGrantedBy")
+  delegationsReceived  Delegation[] @relation("DelegationDelegateTo")
+  delegationsRevoked   Delegation[] @relation("DelegationRevokedBy")
+
+  staffAttendances       StaffAttendance[] @relation("StaffAttendanceUser")
+  staffAttendancesMarked StaffAttendance[] @relation("StaffAttendanceMarkedBy")
 
   @@map("users")
 }
@@ -121,7 +130,18 @@ model Permission {
 
 model Role {
   id          String    @id @default(uuid())
-  name        String    @unique // SUPER_ADMIN | PRINCIPAL | INCHARGE | OFFICE | TEACHER | PARENT | STUDENT | custom
+  // Phase 12 Gap 2: a free-editable DISPLAY LABEL now (an institute can
+  // rename "Campus Head" to "Director") — never read by authorization
+  // code anymore. Still unique so two roles can't show the same label.
+  name        String    @unique
+  // The stable identity authorization code keys off instead: set once by
+  // the seed script for the 7 system roles (SUPER_ADMIN, CAMPUS_HEAD,
+  // INCHARGE, OFFICE, TEACHER, PARENT, STUDENT) and never changed
+  // afterward, regardless of what `name` becomes. Null for a custom,
+  // institute-defined role — it behaves purely through its granted
+  // permissions, no special-cased business logic anywhere. Never settable
+  // via any public API — only prisma/seed.ts ever writes this column.
+  systemKey   String?   @unique
   description String?
   isSystem    Boolean   @default(true) // the 7 core roles; system roles cannot be archived
   archivedAt  DateTime? // no-hard-delete policy — archive instead of deleting a role
@@ -130,6 +150,7 @@ model Role {
 
   rolePermissions RolePermission[]
   userRoles       UserRole[]
+  delegations     Delegation[]
 
   @@map("roles")
 }
@@ -192,24 +213,62 @@ model Session {
 // ─────────────────────────────────────────────────────────────────────────
 
 model AuditLog {
-  id         String   @id @default(uuid())
-  actorId    String?
-  action     String // e.g. CREATE | UPDATE | APPROVE | REVERSE | VOID
-  resource   String // e.g. "Result", "Payment", "UserRole"
-  recordId   String?
-  oldValue   Json?
-  newValue   Json?
-  reason     String?
-  approvedBy String?
-  ipAddress  String?
-  userAgent  String?
-  createdAt  DateTime @default(now())
+  id              String   @id @default(uuid())
+  actorId         String?
+  action          String // e.g. CREATE | UPDATE | APPROVE | REVERSE | VOID
+  resource        String // e.g. "Result", "Payment", "UserRole"
+  recordId        String?
+  oldValue        Json?
+  newValue        Json?
+  reason          String?
+  approvedBy      String?
+  ipAddress       String?
+  userAgent       String?
+  // Phase 11 Phase A2 — set automatically (see lib/audit.ts, lib/requestContext.ts)
+  // whenever the actor was acting under a currently-active Delegation at the
+  // moment of this action, per the design's "non-negotiable for
+  // accountability" requirement. Never set by a caller directly.
+  viaDelegationId String?
+  createdAt       DateTime @default(now())
 
-  actor User? @relation("AuditActor", fields: [actorId], references: [id])
+  actor         User?       @relation("AuditActor", fields: [actorId], references: [id])
+  viaDelegation Delegation? @relation(fields: [viaDelegationId], references: [id])
 
   @@index([resource, recordId])
   @@index([actorId])
   @@map("audit_logs")
+}
+
+// Phase 11 Phase A2 — a general, time-boxed grant of one role's permissions
+// (scoped to one campus) to another user, e.g. covering for staff absence.
+// Not a Receptionist-specific hack: usable for any role/any staff-absence
+// scenario, per the user's explicit "condition based dynamically, hardcoded
+// nahi" correction. Permission/scope widening is computed live at request
+// time (lib/requestContext.ts + lib/delegation.ts) — no cron job needed,
+// same pattern already proven for License state.
+model Delegation {
+  id               String    @id @default(uuid())
+  grantedByUserId  String
+  delegateToUserId String
+  roleId           String
+  campusId         String
+  validFrom        DateTime
+  validUntil       DateTime
+  reason           String
+  revokedAt        DateTime?
+  revokedById      String?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  grantedBy  User       @relation("DelegationGrantedBy", fields: [grantedByUserId], references: [id])
+  delegateTo User       @relation("DelegationDelegateTo", fields: [delegateToUserId], references: [id])
+  revokedBy  User?      @relation("DelegationRevokedBy", fields: [revokedById], references: [id])
+  role       Role       @relation(fields: [roleId], references: [id])
+  campus     Campus     @relation(fields: [campusId], references: [id])
+  auditLogs  AuditLog[]
+
+  @@index([delegateToUserId, validFrom, validUntil])
+  @@map("delegations")
 }
 
 // ─────────────────────────────────────────────────────────────────────────
@@ -235,9 +294,18 @@ model ApprovalRequest {
   decisionNote  String?
   createdAt     DateTime       @default(now())
   decidedAt     DateTime?
+  // Nullable, and deliberately unpopulated by any caller yet — schema added
+  // 2026-09-12 alongside the other Phase 11A scoping columns so this
+  // migration doesn't need repeating. Wiring createApprovalRequest()'s
+  // callers to actually pass it, and gating decide-routes by it, is Group 6
+  // of docs/PHASE_11A_CAMPUS_SCOPING_IMPLEMENTATION_PLAN.md — deliberately
+  // last, since it depends on every other module's campus-derivation
+  // already being correct.
+  campusId      String?
 
-  requestedBy User  @relation("ApprovalRequestedBy", fields: [requestedById], references: [id])
-  decidedBy   User? @relation("ApprovalDecidedBy", fields: [decidedById], references: [id])
+  requestedBy User   @relation("ApprovalRequestedBy", fields: [requestedById], references: [id])
+  decidedBy   User?  @relation("ApprovalDecidedBy", fields: [decidedById], references: [id])
+  campus      Campus? @relation(fields: [campusId], references: [id])
 
   @@index([status])
   @@map("approval_requests")
@@ -263,9 +331,9 @@ model Document {
   uploadedById String
   createdAt    DateTime @default(now())
 
-  uploadedBy      User             @relation("DocumentUploadedBy", fields: [uploadedById], references: [id])
-  studentDocument StudentDocument?
-  homework        Homework?
+  uploadedBy         User                @relation("DocumentUploadedBy", fields: [uploadedById], references: [id])
+  studentDocument    StudentDocument?
+  homeworkAttachment HomeworkAttachment?
 
   @@index([ownerType, ownerId])
   @@map("documents")
@@ -340,10 +408,12 @@ model Institute {
   createdAt DateTime      @default(now())
   updatedAt DateTime      @updatedAt
 
-  settings InstituteSettings?
-  campuses Campus[]
-  classes  Class[]
-  subjects Subject[]
+  settings             InstituteSettings?
+  campuses             Campus[]
+  classes              Class[]
+  subjects             Subject[]
+  terminologyOverrides TerminologyOverride[]
+  featureConfigs       FeatureConfig[]
 
   feeCategories FeeCategory[]
   feeStructures FeeStructure[]
@@ -354,23 +424,76 @@ model Institute {
 // Kept separate from Institute per spec's explicit "Institute Settings
 // stored separately for clarity" business rule.
 model InstituteSettings {
-  id           String   @id @default(uuid())
-  instituteId  String   @unique
-  timezone     String   @default("UTC")
-  locale       String   @default("en")
-  currency     String   @default("USD")
-  // Configurable terminology (spec: "Student Label: Student" etc. — schools
-  // vs. academies vs. coaching centers use different words for the same
-  // concepts).
-  studentLabel String   @default("Student")
-  teacherLabel String   @default("Teacher")
-  classLabel   String   @default("Class")
-  sectionLabel String   @default("Section")
-  updatedAt    DateTime @updatedAt
+  id          String   @id @default(uuid())
+  instituteId String   @unique
+  timezone    String   @default("UTC")
+  locale      String   @default("en")
+  currency    String   @default("USD")
+  updatedAt   DateTime @updatedAt
 
   institute Institute @relation(fields: [instituteId], references: [id], onDelete: Cascade)
 
   @@map("institute_settings")
+}
+
+// Phase 12 Gap 1 — replaces the old fixed studentLabel/teacherLabel/
+// classLabel/sectionLabel columns that used to live on InstituteSettings
+// (Phase 1's narrower first attempt at the same idea, per spec's "Student
+// Label: Student" — found stored but functionally inert, same as
+// Institute.type, when this was designed: set via the settings form,
+// never actually read anywhere else). This table generalizes that to any
+// entity, with a real singular/plural distinction, while institute/
+// service.ts's legacy 4-field API shape stays byte-for-byte compatible for
+// the existing settings form (see lib/terminology.ts).
+model TerminologyOverride {
+  id            String   @id @default(uuid())
+  instituteId   String
+  canonicalKey  String // "STUDENT" | "TEACHER" | "CLASS" | "SECTION" | "SUBJECT" | "CAMPUS" | "ENROLLMENT"
+  singularLabel String
+  pluralLabel   String
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  institute Institute @relation(fields: [instituteId], references: [id], onDelete: Cascade)
+
+  @@unique([instituteId, canonicalKey])
+  @@map("terminology_overrides")
+}
+
+// Phase 12 Gap 3 — one generic table replacing a bespoke governance column
+// per feature. Mirrors Google Cloud's Organization Policy hierarchy model:
+// MANDATORY (institute value always wins, no campus override permitted),
+// INSTITUTE_DEFAULT (a campus row overrides if present, else inherits),
+// CAMPUS_CONTROLLED (institute row is only a starting suggestion; each
+// campus manages its own independently). `policyMode` is only meaningful
+// on the institute-level row (campusId: null) — see lib/featureConfig.ts's
+// resolveFeatureConfig(), the one shared resolution function every
+// feature reads through instead of duplicating this logic.
+enum FeatureConfigPolicyMode {
+  MANDATORY
+  INSTITUTE_DEFAULT
+  CAMPUS_CONTROLLED
+}
+
+model FeatureConfig {
+  id          String                   @id @default(uuid())
+  instituteId String
+  // Null = the institute-level row (exactly one per featureKey — enforced
+  // in application code, not the DB: Postgres treats NULL as distinct in a
+  // unique index, so @@unique below only actually constrains campus-level
+  // rows; see lib/featureConfig.ts).
+  campusId    String?
+  featureKey  String
+  policyMode  FeatureConfigPolicyMode?
+  valueJson   Json
+  createdAt   DateTime                 @default(now())
+  updatedAt   DateTime                 @updatedAt
+
+  institute Institute @relation(fields: [instituteId], references: [id], onDelete: Cascade)
+  campus    Campus?   @relation(fields: [campusId], references: [id], onDelete: Cascade)
+
+  @@unique([instituteId, campusId, featureKey])
+  @@map("feature_configs")
 }
 
 model Campus {
@@ -389,6 +512,14 @@ model Campus {
   inchargeScopes InchargeScope[]
   admissions     Admission[]
   cashClosings   CashClosing[]
+  feeStructures  FeeStructure[]
+  invoices       Invoice[]
+  complaints     Complaint[]
+  approvalRequests ApprovalRequest[]
+  admissionInquiries AdmissionInquiry[]
+  delegations        Delegation[]
+  staffAttendances   StaffAttendance[]
+  featureConfigs     FeatureConfig[]
 
   @@map("campuses")
 }
@@ -454,6 +585,7 @@ model Class {
   examSchedules       ExamSchedule[]
   promotionsAsTarget  Promotion[]
   feeStructures       FeeStructure[]
+  admissionInquiries  AdmissionInquiry[]
 
   @@unique([instituteId, name])
   @@map("classes")
@@ -485,6 +617,7 @@ model Section {
   attendance          Attendance[]
   curriculumProgress  CurriculumProgress[]
   homework            Homework[]
+  classDiaryEntries   ClassDiaryEntry[]
   assessments         Assessment[]
   examSchedules       ExamSchedule[]
   results             Result[]
@@ -578,6 +711,12 @@ model Student {
   gender      String?
   phone       String?
   address     String?
+  // The child's own CNIC/B-Form number. Optional at the DB level,
+  // deliberately — many young children in Pakistan have no B-Form yet, so
+  // this must never block enrollment. A real value is treated as a strong
+  // duplicate-detection signal and a valid login identifier (Phase 11
+  // Phase C-addendum). @unique still allows any number of NULL rows.
+  nationalId  String?       @unique
   photoUrl    String?
   status      StudentStatus @default(ACTIVE)
   withdrawnAt DateTime?
@@ -608,6 +747,7 @@ model Student {
   discounts         Discount[]
   leaves            Leave[]
   complaints        Complaint[]
+  admissionInquiry  AdmissionInquiry?
 
   @@map("students")
 }
@@ -618,6 +758,10 @@ model Parent {
   phone     String
   email     String?
   address   String?
+  // The parent's own CNIC — same optionality/uniqueness reasoning as
+  // Student.nationalId (Phase 11 Phase C-addendum): a strong duplicate
+  // signal and a valid login identifier for a family with no email.
+  nationalId String?  @unique
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -678,6 +822,7 @@ model Teacher {
   substitutionsAsOriginal    Substitution[]      @relation("SubstitutionOriginal")
   substitutionsAsSubstitute  Substitution[]      @relation("SubstitutionSubstitute")
   homework                   Homework[]
+  classDiaryEntries          ClassDiaryEntry[]
   assessments                Assessment[]
   leaves                     Leave[]
 
@@ -697,12 +842,13 @@ model Subject {
   institute   Institute           @relation(fields: [instituteId], references: [id], onDelete: Cascade)
   assignments TeacherAssignment[]
 
-  timetableEntries TimetableEntry[]
-  curricula        Curriculum[]
-  homework         Homework[]
-  assessments      Assessment[]
-  examSchedules    ExamSchedule[]
-  resultItems      ResultItem[]
+  timetableEntries  TimetableEntry[]
+  curricula         Curriculum[]
+  homework          Homework[]
+  classDiaryEntries ClassDiaryEntry[]
+  assessments       Assessment[]
+  examSchedules     ExamSchedule[]
+  resultItems       ResultItem[]
 
   @@unique([instituteId, name])
   @@map("subjects")
@@ -741,6 +887,44 @@ model Admission {
 
   @@index([studentId])
   @@map("admissions")
+}
+
+enum AdmissionInquiryStatus {
+  NEW
+  CONTACTED
+  CONVERTED
+  CLOSED
+}
+
+// Pre-enrollment stage (Phase 11 Phase C) — a parent who inquires but
+// never commits shouldn't leave a permanent Student row behind. Nothing
+// heavier than this row exists until someone deliberately converts it.
+// classId is optional (a parent might not know which class/program yet);
+// campusId is required — an inquiry always belongs to whichever campus
+// took the call/visit.
+model AdmissionInquiry {
+  id              String                 @id @default(uuid())
+  campusId        String
+  classId         String?
+  childName       String
+  parentName      String
+  parentPhone     String
+  parentEmail     String?
+  source          String?
+  status          AdmissionInquiryStatus @default(NEW)
+  notes           String?
+  createdById     String
+  convertedStudentId String?             @unique
+  createdAt       DateTime               @default(now())
+  updatedAt       DateTime               @updatedAt
+
+  campus          Campus  @relation(fields: [campusId], references: [id])
+  klass           Class?  @relation(fields: [classId], references: [id])
+  createdBy       User    @relation(fields: [createdById], references: [id])
+  convertedStudent Student? @relation(fields: [convertedStudentId], references: [id])
+
+  @@index([campusId, status])
+  @@map("admission_inquiries")
 }
 
 enum EnrollmentStatus {
@@ -955,6 +1139,51 @@ model TeacherAttendance {
   @@map("teacher_attendance")
 }
 
+// Phase 11 Phase A3 — a different fact than TeacherAttendance's
+// present/absent/leave STATUS: this is WHEN a staff member (Campus Head,
+// Incharge, Teacher, or Office) physically checked in and HOW that was
+// verified. User-keyed (not Teacher-keyed) since it must also cover
+// Campus Head/Incharge/Office, none of whom have a Teacher record.
+// Deliberately kept separate from TeacherAttendance rather than merged
+// into it — merging would mean migrating an existing, working, tested
+// model to a different key (Teacher -> User) for a loosely-related
+// concept; auto-deriving one from the other is a real future integration,
+// not done this pass (see the session log entry for what's left open).
+enum StaffCheckInMethod {
+  QR
+  MANUAL
+  REMOTE_APPROVED
+}
+
+enum StaffCheckInVerifiedStatus {
+  VERIFIED
+  UNVERIFIED
+  MANUAL_OVERRIDE
+}
+
+model StaffAttendance {
+  id             String                     @id @default(uuid())
+  userId         String
+  campusId       String
+  date           DateTime                   @db.Date
+  checkInAt      DateTime
+  checkInMethod  StaffCheckInMethod
+  verifiedStatus StaffCheckInVerifiedStatus
+  ipAddress      String?
+  geoLat         Float?
+  geoLng         Float?
+  markedById     String?
+  createdAt      DateTime                   @default(now())
+
+  user     User   @relation("StaffAttendanceUser", fields: [userId], references: [id])
+  campus   Campus @relation(fields: [campusId], references: [id])
+  markedBy User?  @relation("StaffAttendanceMarkedBy", fields: [markedById], references: [id])
+
+  @@unique([userId, date])
+  @@index([campusId, date])
+  @@map("staff_attendances")
+}
+
 // Covers one specific TimetableEntry (one class period) on one date —
 // "cancel" instead of delete, per the no-hard-delete policy.
 model Substitution {
@@ -1035,20 +1264,59 @@ model Homework {
   title       String
   description String?
   dueDate     DateTime
-  documentId  String?        @unique
   status      HomeworkStatus @default(DRAFT)
   publishedAt DateTime?
   archivedAt  DateTime?
   createdAt   DateTime       @default(now())
   updatedAt   DateTime       @updatedAt
 
-  subject  Subject   @relation(fields: [subjectId], references: [id])
-  section  Section   @relation(fields: [sectionId], references: [id])
-  klass    Class     @relation(fields: [classId], references: [id])
-  teacher  Teacher   @relation(fields: [teacherId], references: [id])
-  document Document? @relation(fields: [documentId], references: [id])
+  subject     Subject              @relation(fields: [subjectId], references: [id])
+  section     Section              @relation(fields: [sectionId], references: [id])
+  klass       Class                @relation(fields: [classId], references: [id])
+  teacher     Teacher              @relation(fields: [teacherId], references: [id])
+  attachments HomeworkAttachment[]
 
   @@map("homework")
+}
+
+// Phase 11 Phase D — replaces the old single `Homework.documentId`: a
+// homework post can now carry multiple files, added at creation or later
+// (a Teacher realizing they forgot to attach the worksheet).
+model HomeworkAttachment {
+  id         String   @id @default(uuid())
+  homeworkId String
+  documentId String   @unique
+  createdAt  DateTime @default(now())
+
+  homework Homework @relation(fields: [homeworkId], references: [id], onDelete: Cascade)
+  document Document @relation(fields: [documentId], references: [id])
+
+  @@index([homeworkId])
+  @@map("homework_attachments")
+}
+
+// Phase 11 Phase D — a lighter-weight running log ("today we covered X"),
+// distinct from formal graded/dated Homework: no attachments, no
+// draft/publish lifecycle, just a fast note a Teacher can post per section
+// per day. Same visibility as Homework (Parent/Student can read it) but a
+// much lighter creation flow.
+model ClassDiaryEntry {
+  id         String    @id @default(uuid())
+  sectionId  String
+  subjectId  String?
+  teacherId  String
+  date       DateTime  @db.Date
+  note       String
+  archivedAt DateTime?
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+
+  section Section  @relation(fields: [sectionId], references: [id])
+  subject Subject? @relation(fields: [subjectId], references: [id])
+  teacher Teacher  @relation(fields: [teacherId], references: [id])
+
+  @@index([sectionId, date])
+  @@map("class_diary_entries")
 }
 
 enum AssessmentStatus {
@@ -1340,9 +1608,17 @@ enum FeeFrequency {
 
 // A template ("Class 5 Tuition — Monthly — 5,000") — StudentFee is the
 // actual per-student assignment of one of these.
+// campusId is nullable and deliberate, not an oversight: null means an
+// institute-wide fee structure (visible/usable at every campus, managed by
+// Office/Super Admin), a value means campus-specific (managed by that
+// campus's Campus Head only) — see docs/PHASE_11A_CAMPUS_SCOPING_
+// IMPLEMENTATION_PLAN.md "Gap 1". Added 2026-09-12 specifically because
+// Campus Head's fee_structure.create/.edit grant (seed.ts) would otherwise
+// let one campus edit every other campus's fee structures.
 model FeeStructure {
   id            String       @id @default(uuid())
   instituteId   String
+  campusId      String?
   classId       String
   feeCategoryId String
   name          String
@@ -1355,6 +1631,7 @@ model FeeStructure {
   updatedAt     DateTime     @updatedAt
 
   institute   Institute    @relation(fields: [instituteId], references: [id], onDelete: Cascade)
+  campus      Campus?      @relation(fields: [campusId], references: [id])
   klass       Class        @relation(fields: [classId], references: [id])
   feeCategory FeeCategory  @relation(fields: [feeCategoryId], references: [id])
   studentFees StudentFee[]
@@ -1391,6 +1668,14 @@ model Invoice {
   id            String        @id @default(uuid())
   invoiceNumber String        @unique
   studentId     String
+  // Snapshot of the student's campus (via their active Enrollment) AT THE
+  // TIME this invoice was generated — deliberately not "always current
+  // enrollment," so an invoice stays visible to the campus that issued it
+  // even if the student later transfers campuses. Nullable only because a
+  // student can theoretically have no active enrollment when invoiced
+  // directly (rare, but not disallowed by the Student/Enrollment models).
+  // See docs/PHASE_11A_CAMPUS_SCOPING_IMPLEMENTATION_PLAN.md.
+  campusId      String?
   totalAmount   Decimal       @db.Decimal(12, 2)
   dueDate       DateTime
   status        InvoiceStatus @default(UNPAID)
@@ -1400,6 +1685,7 @@ model Invoice {
   updatedAt     DateTime      @updatedAt
 
   student     Student             @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  campus      Campus?             @relation(fields: [campusId], references: [id])
   items       InvoiceItem[]
   allocations PaymentAllocation[]
   attempts    PaymentAttempt[]
@@ -1865,6 +2151,13 @@ model Leave {
   isRetrospective Boolean         @default(false)
   status         LeaveStatus      @default(PENDING)
   requestedById  String
+  // Who's currently responsible for deciding this — auto-resolved to the
+  // student's section Incharge at creation (Phase 11 Phase B), forwardable
+  // to that section's Class Teacher. Nullable: falls back to null (Office/
+  // Campus Head handle it directly) when no Incharge can be resolved, e.g.
+  // a student with no active enrollment yet, or a TEACHER-subject leave.
+  // Mirrors Complaint.assignedToId, added later for the same reason.
+  assignedToId   String?
   decidedById    String?
   decidedAt      DateTime?
   decisionNote   String?
@@ -1874,6 +2167,7 @@ model Leave {
   student     Student? @relation(fields: [studentId], references: [id], onDelete: Cascade)
   teacher     Teacher? @relation(fields: [teacherId], references: [id], onDelete: Cascade)
   requestedBy User     @relation("LeaveRequestedBy", fields: [requestedById], references: [id])
+  assignedTo  User?    @relation("LeaveAssignedTo", fields: [assignedToId], references: [id])
   decidedBy   User?    @relation("LeaveDecidedBy", fields: [decidedById], references: [id])
 
   @@index([studentId, fromDate, toDate])
@@ -1897,6 +2191,14 @@ enum ComplaintStatus {
 model Complaint {
   id             String          @id @default(uuid())
   studentId      String?
+  // Required, unlike studentId — a complaint not about any specific student
+  // (e.g. a general facility complaint) still needs a campus home for
+  // scoping to work; the service layer derives it from the student's active
+  // enrollment when studentId is given, or requires it explicitly
+  // otherwise. See docs/PHASE_11A_CAMPUS_SCOPING_IMPLEMENTATION_PLAN.md
+  // "Gap 2" — added 2026-09-12, this model previously had no campus anchor
+  // at all when studentId was null.
+  campusId       String
   category       String
   description    String
   status         ComplaintStatus @default(OPEN)
@@ -1909,6 +2211,7 @@ model Complaint {
   updatedAt      DateTime        @updatedAt
 
   student     Student?        @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  campus      Campus          @relation(fields: [campusId], references: [id])
   submittedBy User            @relation("ComplaintSubmittedBy", fields: [submittedById], references: [id])
   assignedTo  User?           @relation("ComplaintAssignedTo", fields: [assignedToId], references: [id])
   notes       ComplaintNote[]

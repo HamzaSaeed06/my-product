@@ -16,12 +16,16 @@ If you are an agent (human or AI) picking up this project cold, read in this ord
    guidelines, testing strategy, one detailed section per phase). This is the
    **"what to build"** reference. Treat it as stable/locked — see the note at
    its top before editing it.
-4. **`archive/`** — historical planning documents from an earlier, abandoned
-   attempt at this product (codenamed at `D:\sm`, which used a different,
-   now-discarded multi-tenant architecture). Kept only for context on past
-   decisions. **Do not treat anything in `archive/` as current truth** — it
-   describes a different codebase that this project does not use or migrate
-   from. This project starts from zero code.
+4. **`PHASE_11_MULTI_CAMPUS_AND_WORKFLOWS.md`**, **`ROLE_PERMISSION_MATRIX.md`**,
+   **`DYNAMIC_INSTITUTION_ARCHITECTURE.md`** — design docs for Phase 11/12, not yet approved for coding. See
+   `PHASE_TRACKER.md`'s Phase 11/12 rows.
+5. **`ENGINEERING_PRINCIPLES.md`** — standing rules (edge-case checklist, never-trust-the-frontend,
+   no-hardcoding, feature-completion definition) that apply to every phase, not just a specific one.
+
+(`archive/` — historical planning docs from an earlier, abandoned attempt at this product, codenamed
+`D:\sm` — was deleted 2026-09-12 with the user's confirmation; it described a different, discarded
+multi-tenant architecture this project never used. If you're reading this and `archive/` still shows up
+somewhere, it's stale — check `PROJECT_STATUS.md`'s session log.)
 
 ## Working conventions for every agent/session
 
@@ -47,3 +51,6 @@ If you are an agent (human or AI) picking up this project cold, read in this ord
   (own domain, own hosting, own database, customer-owned). The provider
   platform (Phase 10) never touches customer operational data. See
   `PRODUCT_SPEC.md` §2.
+- **Every phase is also gated by `ENGINEERING_PRINCIPLES.md`** — edge cases, never-trust-the-frontend,
+  no hardcoded business assumptions (class/section/role names, etc.), and the full feature-completion
+  definition. Read it once, then keep it in mind every session — it isn't repeated per phase doc.

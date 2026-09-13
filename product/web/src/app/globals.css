@@ -41,6 +41,10 @@
   --color-card: var(--card);
   --color-brand-accent-foreground: var(--brand-accent-foreground);
   --color-brand-accent: var(--brand-accent);
+  --color-success-foreground: var(--success-foreground);
+  --color-success: var(--success);
+  --color-warning-foreground: var(--warning-foreground);
+  --color-warning: var(--warning);
   --radius-sm: calc(var(--radius) * 0.6);
   --radius-md: calc(var(--radius) * 0.8);
   --radius-lg: var(--radius);
@@ -79,6 +83,16 @@
   --ring: oklch(0.32 0.13 142);
   --brand-accent: oklch(0.72 0.14 75);
   --brand-accent-foreground: oklch(1 0 0);
+  /* Status vocabulary (product.md: "standardize hover/focus/.../success/
+     warning") — distinct from --primary despite the shared green family
+     (this is a green-brand product; a slightly different hue/chroma keeps
+     "positive metric" from reading as "clickable brand action"). Used at
+     full opacity for text, /10-/20 for tinted backgrounds — same pattern
+     as the existing --destructive token. */
+  --success: oklch(0.6 0.16 152);
+  --success-foreground: oklch(0.98 0.01 152);
+  --warning: oklch(0.72 0.16 70);
+  --warning-foreground: oklch(0.98 0.01 70);
   --chart-1: oklch(0.32 0.13 142);
   --chart-2: oklch(0.72 0.14 75);
   --chart-3: oklch(0.556 0 0);
@@ -116,6 +130,10 @@
   --ring: oklch(0.55 0.14 142);
   --brand-accent: oklch(0.75 0.14 75);
   --brand-accent-foreground: oklch(0.15 0.02 75);
+  --success: oklch(0.72 0.17 152);
+  --success-foreground: oklch(0.15 0.02 152);
+  --warning: oklch(0.78 0.17 70);
+  --warning-foreground: oklch(0.15 0.02 70);
   --chart-1: oklch(0.55 0.14 142);
   --chart-2: oklch(0.75 0.14 75);
   --chart-3: oklch(0.556 0 0);

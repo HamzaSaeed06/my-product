@@ -22,8 +22,13 @@ function toPublic(user: {
   };
 }
 
-export async function listUsers() {
+export async function listUsers(campusIdIn?: string[]) {
   const users = await prisma.user.findMany({
+    // A user's "campus" is any UserRole they hold with a campusId in it —
+    // Campus Head/Office see only users who have at least one role at
+    // their own campus(es). See
+    // docs/PHASE_11A_CAMPUS_SCOPING_IMPLEMENTATION_PLAN.md Group 3.
+    where: campusIdIn ? { userRoles: { some: { campusId: { in: campusIdIn } } } } : undefined,
     include: { userRoles: { include: { role: true } } },
     orderBy: { createdAt: "desc" },
   });
@@ -133,6 +138,21 @@ export async function assignRole(
   ]);
   if (!user) throw new HttpError(404, "USER_NOT_FOUND", "User not found");
   if (!role || role.archivedAt) throw new HttpError(404, "ROLE_NOT_FOUND", "Role not found or archived");
+
+  // CAMPUS_HEAD/OFFICE are campus-scoped roles (docs/PHASE_11_MULTI_CAMPUS_
+  // AND_WORKFLOWS.md Phase A) — a no-campus assignment would be a data-
+  // entry mistake, not a valid "unscoped" state, since lib/scope.ts now
+  // derives their entire visibility from this field. Service-layer check,
+  // not a DB constraint, since campusId must stay nullable for every other
+  // role.
+  const roleKey = role.systemKey ?? role.name;
+  if ((roleKey === "CAMPUS_HEAD" || roleKey === "OFFICE") && !campusId) {
+    throw new HttpError(400, "CAMPUS_REQUIRED_FOR_ROLE", `${role.name} must be assigned with a campusId`);
+  }
+  if (campusId) {
+    const campus = await prisma.campus.findUnique({ where: { id: campusId } });
+    if (!campus || campus.archivedAt) throw new HttpError(400, "CAMPUS_NOT_FOUND", "Campus not found or archived");
+  }
 
   // findFirst, not findUnique on the compound key: Postgres treats NULL as
   // distinct in unique indexes, so the DB constraint alone wouldn't catch a

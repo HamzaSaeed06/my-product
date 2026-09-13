@@ -61,6 +61,23 @@ export async function getResult(id: string) {
   return result;
 }
 
+// Thin getters for controllers that need to scope-check a result (or one
+// of its items, by resultItemId) before acting on it.
+export async function getResultSectionId(id: string): Promise<string> {
+  const result = await prisma.result.findUnique({ where: { id }, select: { sectionId: true } });
+  if (!result) throw new HttpError(404, "RESULT_NOT_FOUND", "Result not found");
+  return result.sectionId;
+}
+
+export async function getResultItemSectionId(resultItemId: string): Promise<string> {
+  const item = await prisma.resultItem.findUnique({
+    where: { id: resultItemId },
+    select: { result: { select: { sectionId: true } } },
+  });
+  if (!item) throw new HttpError(404, "RESULT_ITEM_NOT_FOUND", "Result item not found");
+  return item.result.sectionId;
+}
+
 // Editing an item is only allowed while the parent Result is DRAFT — once
 // submitted, use the workflow transitions; once finalized/published, use
 // requestResultCorrection instead of a direct edit.
@@ -176,13 +193,16 @@ export async function requestResultCorrection(
     throw new HttpError(400, "NO_CHANGE", "Requested marks are the same as the current marks");
   }
 
+  const section = await prisma.section.findUnique({ where: { id: item.result.sectionId }, select: { campusId: true } });
+
   return createApprovalRequest({
     type: "RESULT_CORRECTION",
     resource: "ResultItem",
     recordId: resultItemId,
     requestedById: actorId,
-    approverRole: "PRINCIPAL",
+    approverRole: "CAMPUS_HEAD",
     payload: { resultItemId, oldMarks: item.marksObtained, newMarks: input.newMarks, reason: input.reason },
+    campusId: section?.campusId,
   });
 }
 

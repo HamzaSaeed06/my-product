@@ -48,7 +48,7 @@ async function StaffReportContent({ searchParams }: Props) {
   if (campusId) query.set("campusId", campusId);
   const report = await apiRequest<StaffReport>(`/api/v1/reports/staff?${query.toString()}`);
 
-  const canExport = user?.roles.some((r) => ["SUPER_ADMIN", "PRINCIPAL"].includes(r));
+  const canExport = user?.roles.some((r) => ["SUPER_ADMIN", "CAMPUS_HEAD"].includes(r));
 
   const attendanceByTeacher = new Map(report.attendance.map((a) => [a.teacherId, a]));
   const leaveByTeacher = new Map(report.leaveStatistics.map((l) => [l.teacherId, l]));

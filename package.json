@@ -10,6 +10,7 @@
   ],
   "scripts": {
     "dev:api": "npm run dev --workspace=product/api",
+    "dev:web": "npm run dev --workspace=product/web",
     "build:api": "npm run build --workspace=product/api",
     "test:api": "npm run test --workspace=product/api",
     "test:api:integration": "npm run test:integration --workspace=product/api",

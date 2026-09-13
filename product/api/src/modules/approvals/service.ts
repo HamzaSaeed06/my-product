@@ -14,6 +14,14 @@ export async function createApprovalRequest(input: {
   requestedById: string;
   approverRole?: string;
   payload?: Prisma.InputJsonValue;
+  // Which campus this request concerns — every current caller (payment
+  // reversal, attendance/assessment/result correction, class-jump
+  // promotion) can derive this from the section/student/payment it's
+  // about. Nullable only because a future caller might genuinely have no
+  // campus-scoped subject; not populating it means a campus-assigned
+  // actor can never decide that request (fails closed, not open). See
+  // docs/PHASE_11A_CAMPUS_SCOPING_IMPLEMENTATION_PLAN.md Group 6.
+  campusId?: string;
 }) {
   const request = await prisma.approvalRequest.create({
     data: {
@@ -23,6 +31,7 @@ export async function createApprovalRequest(input: {
       requestedById: input.requestedById,
       approverRole: input.approverRole,
       payload: input.payload,
+      campusId: input.campusId,
     },
   });
 
@@ -37,12 +46,23 @@ export async function createApprovalRequest(input: {
   return request;
 }
 
-export async function listApprovalRequests(filter: { status?: ApprovalStatus }) {
+export async function listApprovalRequests(filter: { status?: ApprovalStatus; campusIdIn?: string[] }) {
   return prisma.approvalRequest.findMany({
-    where: filter.status ? { status: filter.status } : undefined,
+    where: {
+      status: filter.status,
+      campusId: filter.campusIdIn ? { in: filter.campusIdIn } : undefined,
+    },
     include: { requestedBy: { select: { id: true, fullName: true, email: true } } },
     orderBy: { createdAt: "desc" },
   });
+}
+
+// Thin getter for controllers that need to scope-check an approval
+// request by id before deciding it.
+export async function getApprovalRequestCampusId(id: string): Promise<string | null> {
+  const request = await prisma.approvalRequest.findUnique({ where: { id }, select: { campusId: true } });
+  if (!request) throw new HttpError(404, "APPROVAL_NOT_FOUND", "Approval request not found");
+  return request.campusId;
 }
 
 export async function decideApprovalRequest(

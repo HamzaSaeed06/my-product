@@ -1,4 +1,5 @@
 import { apiRequest } from "@/lib/apiClient";
+import { getCurrentUser } from "@/lib/session";
 import { PageHeader } from "@/components/page-header";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
@@ -36,21 +37,39 @@ const STATUS_VARIANT: Record<string, "default" | "secondary" | "destructive"> = 
 };
 
 export default async function LeavesPage() {
+  const currentUser = await getCurrentUser();
+  // Mirrors leave.create/leave.approve/leave.reject/leave.cancel from
+  // routes.ts. Real bug this fixed: /api/v1/students requires the caller
+  // to either be unrestricted, hold a campus scope, or name a sectionId
+  // (see lib/scope.ts assertSectionQueryInScope) — Incharge holds none of
+  // those (their scope is a specific section via IncargeScope, not a
+  // campus), so the old unconditional fetch (feeding a "Create leave"
+  // dialog nobody in the dashboard shell but Super Admin can even submit —
+  // Campus Head/Incharge/Office all lack leave.create) 500'd the entire
+  // page before Incharge could see the leave queue this session's
+  // auto-routing feature exists to route to them.
+  const permissions = currentUser?.permissions ?? [];
+  const canCreate = permissions.includes("leave.create");
+  const canApprove = permissions.includes("leave.approve");
+  const canReject = permissions.includes("leave.reject");
+  const canCancel = permissions.includes("leave.cancel");
+
   const [leaves, students, teachers] = await Promise.all([
     apiRequest<Leave[]>("/api/v1/leaves"),
-    apiRequest<Student[]>("/api/v1/students"),
-    apiRequest<Teacher[]>("/api/v1/teachers"),
+    canCreate ? apiRequest<Student[]>("/api/v1/students") : Promise.resolve<Student[]>([]),
+    canCreate ? apiRequest<Teacher[]>("/api/v1/teachers") : Promise.resolve<Teacher[]>([]),
   ]);
 
   const studentOptions = students.map((s) => ({ id: s.id, label: `${s.fullName} (${s.studentCode})` }));
   const teacherOptions = teachers.map((t) => ({ id: t.id, label: t.user.fullName }));
+  const canAct = canApprove || canReject || canCancel;
 
   return (
     <div>
       <PageHeader
         title="Leaves"
         description="Student and teacher leave requests. An approved student leave auto-marks attendance as LEAVE for its covered dates."
-        action={<CreateLeaveDialog students={studentOptions} teachers={teacherOptions} />}
+        action={canCreate ? <CreateLeaveDialog students={studentOptions} teachers={teacherOptions} /> : undefined}
       />
 
       {leaves.length === 0 ? (
@@ -64,7 +83,7 @@ export default async function LeavesPage() {
                 <TableHead>Dates</TableHead>
                 <TableHead>Reason</TableHead>
                 <TableHead>Status</TableHead>
-                <TableHead className="text-right">Actions</TableHead>
+                {canAct ? <TableHead className="text-right">Actions</TableHead> : null}
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -90,9 +109,17 @@ export default async function LeavesPage() {
                   <TableCell>
                     <Badge variant={STATUS_VARIANT[leave.status]}>{leave.status}</Badge>
                   </TableCell>
-                  <TableCell className="text-right">
-                    <LeaveActionButtons id={leave.id} status={leave.status} />
-                  </TableCell>
+                  {canAct ? (
+                    <TableCell className="text-right">
+                      <LeaveActionButtons
+                        id={leave.id}
+                        status={leave.status}
+                        canApprove={canApprove}
+                        canReject={canReject}
+                        canCancel={canCancel}
+                      />
+                    </TableCell>
+                  ) : null}
                 </TableRow>
               ))}
             </TableBody>

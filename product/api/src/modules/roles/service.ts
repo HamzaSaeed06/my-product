@@ -11,6 +11,11 @@ export async function listRoles() {
   return roles.map((role) => ({
     id: role.id,
     name: role.name,
+    // Phase 12 Gap 2 — null for a custom, institute-defined role. Exposed
+    // so a future frontend can tell "this is one of the 7 system roles,
+    // renamed" apart from "this is a genuinely custom role" without
+    // guessing from the (now arbitrary) display name.
+    systemKey: role.systemKey,
     description: role.description,
     isSystem: role.isSystem,
     archivedAt: role.archivedAt,
@@ -39,24 +44,36 @@ export async function createRole(input: { name: string; description?: string }, 
   return role;
 }
 
-export async function updateRoleDescription(
+// Phase 12 Gap 2: renaming `name` — including for one of the 7 system
+// roles — is exactly the capability this whole systemKey migration exists
+// to make safe. `systemKey` is never part of `input`, so it can never be
+// touched here regardless of what a caller sends.
+export async function updateRole(
   roleId: string,
-  description: string | undefined,
+  input: { name?: string; description?: string },
   actorId: string
 ) {
   const role = await prisma.role.findUnique({ where: { id: roleId } });
   if (!role) throw new HttpError(404, "ROLE_NOT_FOUND", "Role not found");
   if (role.archivedAt) throw new HttpError(409, "ROLE_ARCHIVED", "Cannot edit an archived role");
 
-  const updated = await prisma.role.update({ where: { id: roleId }, data: { description } });
+  if (input.name && input.name !== role.name) {
+    const existing = await prisma.role.findUnique({ where: { name: input.name } });
+    if (existing) throw new HttpError(409, "ROLE_EXISTS", `A role named "${input.name}" already exists`);
+  }
+
+  const updated = await prisma.role.update({
+    where: { id: roleId },
+    data: { name: input.name, description: input.description },
+  });
 
   await writeAuditLog({
     actorId,
     action: "UPDATE",
     resource: "Role",
     recordId: roleId,
-    oldValue: { description: role.description },
-    newValue: { description: updated.description },
+    oldValue: { name: role.name, description: role.description },
+    newValue: { name: updated.name, description: updated.description },
   });
 
   return updated;

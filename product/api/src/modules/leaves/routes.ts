@@ -32,3 +32,13 @@ leavesRouter.post(
   writeRateLimiter,
   asyncHandler(controller.cancelLeaveHandler)
 );
+
+// Same permission as deciding — forwarding is an action available to
+// whoever is currently allowed to act on the leave (Phase 11 Phase B).
+leavesRouter.post(
+  "/:leaveId/forward",
+  ...requirePermission("leave.approve"),
+  csrfProtection,
+  writeRateLimiter,
+  asyncHandler(controller.forwardLeaveHandler)
+);

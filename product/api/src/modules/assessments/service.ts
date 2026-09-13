@@ -46,14 +46,36 @@ export async function createAssessment(
   return assessment;
 }
 
-export async function listAssessments(filter: { sectionId?: string; subjectId?: string; academicYearId?: string }) {
-  return prisma.assessment.findMany({ where: { ...filter, archivedAt: null }, include: include(), orderBy: { assessmentDate: "desc" } });
+export async function listAssessments(filter: {
+  subjectId?: string;
+  academicYearId?: string;
+  scope: { sectionId?: string } | { section: { campusId: { in: string[] } } };
+}) {
+  const { scope, ...rest } = filter;
+  return prisma.assessment.findMany({ where: { ...rest, ...scope, archivedAt: null }, include: include(), orderBy: { assessmentDate: "desc" } });
 }
 
 export async function getAssessment(id: string) {
   const assessment = await prisma.assessment.findUnique({ where: { id }, include: include() });
   if (!assessment) throw new HttpError(404, "ASSESSMENT_NOT_FOUND", "Assessment not found");
   return assessment;
+}
+
+// Thin getters for controllers that need to scope-check an assessment (or
+// one of its results, by assessmentResultId) before acting on it.
+export async function getAssessmentSectionId(id: string): Promise<string> {
+  const assessment = await prisma.assessment.findUnique({ where: { id }, select: { sectionId: true } });
+  if (!assessment) throw new HttpError(404, "ASSESSMENT_NOT_FOUND", "Assessment not found");
+  return assessment.sectionId;
+}
+
+export async function getAssessmentResultSectionId(assessmentResultId: string): Promise<string> {
+  const result = await prisma.assessmentResult.findUnique({
+    where: { id: assessmentResultId },
+    select: { assessment: { select: { sectionId: true } } },
+  });
+  if (!result) throw new HttpError(404, "RESULT_NOT_FOUND", "Assessment result not found");
+  return result.assessment.sectionId;
 }
 
 // Entering marks is only allowed while DRAFT — once SUBMITTED, marks are
@@ -140,6 +162,8 @@ export async function requestMarksCorrection(
     throw new HttpError(400, "NO_CHANGE", "Requested marks are the same as the current marks");
   }
 
+  const section = await prisma.section.findUnique({ where: { id: result.assessment.sectionId }, select: { campusId: true } });
+
   return createApprovalRequest({
     type: "ASSESSMENT_MARKS_CORRECTION",
     resource: "AssessmentResult",
@@ -147,6 +171,7 @@ export async function requestMarksCorrection(
     requestedById: actorId,
     approverRole: "INCHARGE",
     payload: { assessmentResultId, oldMarks: result.marksObtained, newMarks: input.newMarks, reason: input.reason },
+    campusId: section?.campusId,
   });
 }
 

@@ -2,6 +2,7 @@ import { prisma } from "../../lib/prisma.js";
 import { writeAuditLog } from "../../lib/audit.js";
 import { HttpError } from "../../middleware/errorHandler.js";
 import { createNotification } from "../notifications/service.js";
+import { findInchargeUserIdsForSection } from "../incharge-scopes/service.js";
 
 function include() {
   return {
@@ -24,12 +25,18 @@ export async function listComplaints(filter: {
   studentIdIn?: string[];
   status?: string;
   assignedToId?: string;
+  // Campus Head/Office's own campus(es) — Complaint has a direct campusId
+  // column (unlike Invoice/Payment/etc., which derive it via enrollment),
+  // so this is a plain filter. See
+  // docs/PHASE_11A_CAMPUS_SCOPING_IMPLEMENTATION_PLAN.md Group 5.
+  campusIdIn?: string[];
 }) {
   return prisma.complaint.findMany({
     where: {
       studentId: filter.studentIdIn ? { in: filter.studentIdIn } : filter.studentId,
       assignedToId: filter.assignedToId,
       status: filter.status as never,
+      campusId: filter.campusIdIn ? { in: filter.campusIdIn } : undefined,
     },
     include: include(),
     orderBy: { createdAt: "desc" },
@@ -42,8 +49,40 @@ export async function getComplaint(id: string) {
   return complaint;
 }
 
+// Thin getter for controllers that need to scope-check a complaint by id
+// before assigning/progressing/resolving/closing/reopening it.
+export async function getComplaintCampusId(id: string): Promise<string> {
+  const complaint = await prisma.complaint.findUnique({ where: { id }, select: { campusId: true } });
+  if (!complaint) throw new HttpError(404, "COMPLAINT_NOT_FOUND", "Complaint not found");
+  return complaint.campusId;
+}
+
+// Resolves the campus (and, for auto-routing, the section) a complaint
+// belongs to: a student-linked complaint always derives it from that
+// student's active enrollment (never trusts a client-supplied campusId for
+// this case — the student's real campus is authoritative); a complaint
+// with no student requires an explicit campusId, since there's nothing
+// else to derive it from. See docs/PHASE_11A_CAMPUS_SCOPING_IMPLEMENTATION_PLAN.md "Gap 2".
+async function resolveComplaintCampusAndSection(
+  studentId: string | undefined,
+  explicitCampusId: string | undefined
+): Promise<{ campusId: string; sectionId: string | null }> {
+  if (studentId) {
+    const activeEnrollment = await prisma.enrollment.findFirst({
+      where: { studentId, status: "ACTIVE" },
+      include: { section: true },
+    });
+    if (activeEnrollment) return { campusId: activeEnrollment.section.campusId, sectionId: activeEnrollment.sectionId };
+    // A student with no active enrollment yet (mid-admission) has no
+    // derivable campus from enrollment — fall back to the explicit value,
+    // same rule PHASE_11A's plan gives for the analogous "students" list.
+  }
+  if (explicitCampusId) return { campusId: explicitCampusId, sectionId: null };
+  throw new HttpError(400, "CAMPUS_REQUIRED", "campusId is required when the complaint has no student with an active enrollment");
+}
+
 export async function createComplaint(
-  input: { studentId?: string; category: string; description: string },
+  input: { studentId?: string; campusId?: string; category: string; description: string },
   actorId: string
 ) {
   if (input.studentId) {
@@ -51,14 +90,88 @@ export async function createComplaint(
     if (!student || student.status === "ARCHIVED") throw new HttpError(400, "STUDENT_NOT_FOUND", "Student not found or archived");
   }
 
+  const { campusId, sectionId } = await resolveComplaintCampusAndSection(input.studentId, input.campusId);
+
+  // Phase 11 Phase B auto-routing: a student-linked complaint (with a
+  // resolvable section) auto-assigns to its Incharge, landing directly in
+  // ASSIGNED rather than sitting OPEN and unowned. A campus-less or
+  // no-active-enrollment complaint stays OPEN, exactly as before — nothing
+  // to route it to yet.
+  const inchargeUserIds = sectionId ? await findInchargeUserIdsForSection(sectionId) : [];
+  const assignedToId = inchargeUserIds[0];
+
   const complaint = await prisma.complaint.create({
-    data: { ...input, submittedById: actorId },
+    data: {
+      studentId: input.studentId,
+      category: input.category,
+      description: input.description,
+      campusId,
+      submittedById: actorId,
+      assignedToId,
+      status: assignedToId ? "ASSIGNED" : "OPEN",
+    },
     include: include(),
   });
 
-  await writeAuditLog({ actorId, action: "CREATE", resource: "Complaint", recordId: complaint.id, newValue: input });
+  await writeAuditLog({ actorId, action: "CREATE", resource: "Complaint", recordId: complaint.id, newValue: { ...input, campusId, assignedToId } });
+
+  await Promise.all(
+    inchargeUserIds.map((userId) =>
+      createNotification({
+        userId,
+        title: "New complaint assigned",
+        body: `A ${input.category} complaint needs your review.`,
+      })
+    )
+  );
 
   return complaint;
+}
+
+// Incharge forwards a complaint they're currently assigned to on to the
+// student's section Class Teacher (Section.classTeacherId) — Phase 11
+// Phase B, mirrors leaves/service.ts's forwardLeave. Deliberately doesn't
+// change status (stays ASSIGNED, just to a different person) — forwarding
+// isn't a state transition, just a reassignment, same as the existing
+// assign action.
+export async function forwardComplaint(id: string, actorId: string) {
+  const complaint = await prisma.complaint.findUnique({ where: { id } });
+  if (!complaint) throw new HttpError(404, "COMPLAINT_NOT_FOUND", "Complaint not found");
+  if (!complaint.studentId) {
+    throw new HttpError(400, "NOT_FORWARDABLE", "Only a student-linked complaint can be forwarded to a Class Teacher");
+  }
+  assertStatus(complaint.status, ["ASSIGNED", "IN_PROGRESS"]);
+
+  const enrollment = await prisma.enrollment.findFirst({
+    where: { studentId: complaint.studentId, status: "ACTIVE" },
+    include: { section: true },
+  });
+  if (!enrollment?.section.classTeacherId) {
+    throw new HttpError(400, "NO_CLASS_TEACHER", "This section has no Class Teacher assigned to forward to");
+  }
+
+  const updated = await prisma.complaint.update({
+    where: { id },
+    data: { assignedToId: enrollment.section.classTeacherId },
+    include: include(),
+  });
+
+  await writeAuditLog({
+    actorId,
+    action: "FORWARD",
+    resource: "Complaint",
+    recordId: id,
+    oldValue: { assignedToId: complaint.assignedToId },
+    newValue: { assignedToId: enrollment.section.classTeacherId },
+  });
+
+  await createNotification({
+    userId: enrollment.section.classTeacherId,
+    title: "Complaint forwarded to you",
+    body: `A ${complaint.category} complaint was forwarded to you for review.`,
+  });
+
+  return updated;
 }
 
 // OPEN or REOPENED -> ASSIGNED — the same action restarts a reopened

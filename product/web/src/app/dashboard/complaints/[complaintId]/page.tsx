@@ -35,7 +35,7 @@ interface Complaint {
   notes: ComplaintNote[];
 }
 
-const STAFF_ROLES = new Set(["SUPER_ADMIN", "PRINCIPAL", "INCHARGE", "OFFICE", "TEACHER"]);
+const STAFF_ROLES = new Set(["SUPER_ADMIN", "CAMPUS_HEAD", "INCHARGE", "OFFICE", "TEACHER"]);
 
 const STATUS_VARIANT: Record<string, "default" | "secondary" | "destructive"> = {
   OPEN: "secondary",

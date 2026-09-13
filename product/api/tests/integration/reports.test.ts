@@ -280,4 +280,21 @@ describe("Reports & Analytics API (real database)", () => {
       }
     });
   });
+
+  describe("Institute Overview (Super Admin cross-campus monitoring)", () => {
+    it("returns institute-wide totals and a per-campus breakdown for Super Admin", async () => {
+      const res = await asSuperAdmin().get("/api/v1/reports/institute-overview");
+      expect(res.status).toBe(200);
+      expect(typeof res.body.totals.campuses).toBe("number");
+      expect(typeof res.body.totals.students).toBe("number");
+      const ourCampus = res.body.perCampus.find((c: { id: string }) => c.id === campusId);
+      expect(ourCampus).toBeDefined();
+      expect(ourCampus.sections).toBeGreaterThanOrEqual(1);
+    });
+
+    it("refuses a non-Super-Admin (no institute.monitor permission)", async () => {
+      const res = await teacherOnlyClient.get("/api/v1/reports/institute-overview");
+      expect(res.status).toBe(403);
+    });
+  });
 });

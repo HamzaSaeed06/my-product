@@ -1,4 +1,5 @@
 import { apiRequest } from "@/lib/apiClient";
+import { getCurrentUser } from "@/lib/session";
 import { PageHeader } from "@/components/page-header";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
@@ -39,14 +40,25 @@ interface Homework {
 }
 
 export default async function HomeworkPage() {
+  // Mirrors homework.create/edit/publish from routes.ts. Incharge holds
+  // only homework.view, so besides hiding Create/Publish/Archive (which
+  // would otherwise render as buttons that always 403), this also avoids
+  // the same crash class fixed on Leaves/Complaints/Substitutions:
+  // campus.view/academic_year.view/subject.view aren't in Incharge's grant
+  // either, and those fetches exist only to feed the Create dialog.
+  const permissions = (await getCurrentUser())?.permissions ?? [];
+  const canCreate = permissions.includes("homework.create");
+  const canPublish = permissions.includes("homework.publish");
+  const canEdit = permissions.includes("homework.edit");
+
   const [homework, rawSections, classes, campuses, academicYears, subjects, teachers] = await Promise.all([
     apiRequest<Homework[]>("/api/v1/homework"),
-    apiRequest<RawSection[]>("/api/v1/sections"),
-    apiRequest<NamedOption[]>("/api/v1/classes"),
-    apiRequest<NamedOption[]>("/api/v1/campuses"),
-    apiRequest<NamedOption[]>("/api/v1/academic-years"),
-    apiRequest<NamedOption[]>("/api/v1/subjects"),
-    apiRequest<Teacher[]>("/api/v1/teachers"),
+    canCreate ? apiRequest<RawSection[]>("/api/v1/sections") : Promise.resolve<RawSection[]>([]),
+    canCreate ? apiRequest<NamedOption[]>("/api/v1/classes") : Promise.resolve<NamedOption[]>([]),
+    canCreate ? apiRequest<NamedOption[]>("/api/v1/campuses") : Promise.resolve<NamedOption[]>([]),
+    canCreate ? apiRequest<NamedOption[]>("/api/v1/academic-years") : Promise.resolve<NamedOption[]>([]),
+    canCreate ? apiRequest<NamedOption[]>("/api/v1/subjects") : Promise.resolve<NamedOption[]>([]),
+    canCreate ? apiRequest<Teacher[]>("/api/v1/teachers") : Promise.resolve<Teacher[]>([]),
   ]);
 
   const classNameById = new Map(classes.map((c) => [c.id, c.name]));
@@ -72,7 +84,7 @@ export default async function HomeworkPage() {
       <PageHeader
         title="Homework"
         description="Create homework for a section, attach a file, and publish when ready."
-        action={<CreateHomeworkDialog sections={sections} subjects={subjects} teachers={activeTeachers} />}
+        action={canCreate ? <CreateHomeworkDialog sections={sections} subjects={subjects} teachers={activeTeachers} /> : undefined}
       />
 
       {homework.length === 0 ? (
@@ -88,7 +100,7 @@ export default async function HomeworkPage() {
                 <TableHead>Teacher</TableHead>
                 <TableHead>Due</TableHead>
                 <TableHead>Status</TableHead>
-                <TableHead className="text-right">Actions</TableHead>
+                {canPublish || canEdit ? <TableHead className="text-right">Actions</TableHead> : null}
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -105,12 +117,14 @@ export default async function HomeworkPage() {
                   <TableCell>
                     {hw.status === "PUBLISHED" ? <Badge>Published</Badge> : <Badge variant="secondary">Draft</Badge>}
                   </TableCell>
-                  <TableCell className="text-right">
-                    <div className="flex justify-end gap-2">
-                      {hw.status === "DRAFT" ? <PublishHomeworkButton id={hw.id} /> : null}
-                      <ArchiveHomeworkButton id={hw.id} />
-                    </div>
-                  </TableCell>
+                  {canPublish || canEdit ? (
+                    <TableCell className="text-right">
+                      <div className="flex justify-end gap-2">
+                        {canPublish && hw.status === "DRAFT" ? <PublishHomeworkButton id={hw.id} /> : null}
+                        {canEdit ? <ArchiveHomeworkButton id={hw.id} /> : null}
+                      </div>
+                    </TableCell>
+                  ) : null}
                 </TableRow>
               ))}
             </TableBody>

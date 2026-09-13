@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { apiRequest } from "@/lib/apiClient";
+import { getCurrentUser } from "@/lib/session";
 import { PageHeader } from "@/components/page-header";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
@@ -19,6 +20,12 @@ interface Exam {
 }
 
 export default async function ExamsPage() {
+  // Mirrors exam.create/exam.publish from routes.ts — Incharge holds only
+  // exam.view (they review results, not run the exam series itself).
+  const permissions = (await getCurrentUser())?.permissions ?? [];
+  const canCreate = permissions.includes("exam.create");
+  const canPublish = permissions.includes("exam.publish");
+
   const [exams, academicYears] = await Promise.all([
     apiRequest<Exam[]>("/api/v1/exams"),
     apiRequest<NamedOption[]>("/api/v1/academic-years"),
@@ -31,7 +38,7 @@ export default async function ExamsPage() {
       <PageHeader
         title="Exams"
         description="Create an exam series, schedule papers per section, then publish."
-        action={<CreateExamDialog academicYears={academicYears} />}
+        action={canCreate ? <CreateExamDialog academicYears={academicYears} /> : undefined}
       />
 
       {exams.length === 0 ? (
@@ -44,7 +51,7 @@ export default async function ExamsPage() {
                 <TableHead>Name</TableHead>
                 <TableHead>Academic Year</TableHead>
                 <TableHead>Status</TableHead>
-                <TableHead className="text-right">Actions</TableHead>
+                {canPublish ? <TableHead className="text-right">Actions</TableHead> : null}
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -59,7 +66,11 @@ export default async function ExamsPage() {
                   <TableCell>
                     {exam.status === "PUBLISHED" ? <Badge>Published</Badge> : <Badge variant="secondary">Draft</Badge>}
                   </TableCell>
-                  <TableCell className="text-right">{exam.status === "DRAFT" ? <PublishExamButton id={exam.id} /> : null}</TableCell>
+                  {canPublish ? (
+                    <TableCell className="text-right">
+                      {exam.status === "DRAFT" ? <PublishExamButton id={exam.id} /> : null}
+                    </TableCell>
+                  ) : null}
                 </TableRow>
               ))}
             </TableBody>

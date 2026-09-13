@@ -3,9 +3,17 @@ import { prisma } from "../../lib/prisma.js";
 import { writeAuditLog } from "../../lib/audit.js";
 import { HttpError } from "../../middleware/errorHandler.js";
 
-export async function listTeacherAssignments(filter: { teacherId?: string; sectionId?: string; academicYearId?: string }) {
+export async function listTeacherAssignments(filter: {
+  teacherId?: string;
+  sectionId?: string;
+  academicYearId?: string;
+  // Campus Head/Office's own campus(es) — see
+  // docs/PHASE_11A_CAMPUS_SCOPING_IMPLEMENTATION_PLAN.md Group 2.
+  campusIdIn?: string[];
+}) {
+  const { campusIdIn, ...rest } = filter;
   return prisma.teacherAssignment.findMany({
-    where: { ...filter, archivedAt: null },
+    where: { ...rest, section: campusIdIn ? { campusId: { in: campusIdIn } } : undefined, archivedAt: null },
     include: { teacher: { include: { user: true } }, subject: true, klass: true, section: true, academicYear: true },
     orderBy: { createdAt: "desc" },
   });

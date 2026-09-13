@@ -5,7 +5,14 @@ import { getUserPermissionKeys } from "../../middleware/authorize.js";
 import { HttpError } from "../../middleware/errorHandler.js";
 import { getActorProfile, getOwnChildStudentIds, assertStudentInScope, assertSectionQueryInScope } from "../../lib/scope.js";
 
-const UNRESTRICTED_ROLES = new Set(["SUPER_ADMIN", "PRINCIPAL", "OFFICE"]);
+// Only SUPER_ADMIN is truly unrestricted — matches lib/scope.ts. CAMPUS_HEAD/
+// OFFICE get their own branch below (campus-filtered), not this set,
+// since 2026-09-12's campus-scoping change (this file used to keep its own
+// duplicate of scope.ts's old UNRESTRICTED_ROLES, which silently kept
+// CAMPUS_HEAD/OFFICE seeing every campus's students even after scope.ts
+// itself was fixed — the actual bug this comment is here to prevent
+// recurring).
+const UNRESTRICTED_ROLES = new Set(["SUPER_ADMIN"]);
 
 const statusEnum = z.enum(["ACTIVE", "WITHDRAWN", "ARCHIVED"]);
 
@@ -15,6 +22,9 @@ const createSchema = z.object({
   gender: z.string().max(30).optional(),
   phone: z.string().max(50).optional(),
   address: z.string().max(500).optional(),
+  // The child's own CNIC/B-Form — optional, many young children don't have
+  // one yet (Phase 11 Phase C-addendum).
+  nationalId: z.string().min(1).max(50).optional(),
 });
 
 const updateSchema = createSchema.partial();
@@ -29,6 +39,11 @@ export async function searchStudentsHandler(req: Request, res: Response): Promis
 const listQuerySchema = z.object({
   status: statusEnum.optional(),
   sectionId: z.string().uuid().optional(),
+  // Only meaningful for an unrestricted actor (SUPER_ADMIN) drilling into
+  // one campus, e.g. from the Institute Overview dashboard — a
+  // campus-assigned actor already gets this from their own campusIds, and
+  // the value here would just be redundant for them.
+  campusId: z.string().uuid().optional(),
 });
 
 export async function listStudentsHandler(req: Request, res: Response): Promise<void> {
@@ -36,7 +51,8 @@ export async function listStudentsHandler(req: Request, res: Response): Promise<
   const profile = await getActorProfile(req.user!.id);
 
   if (profile.roles.some((r) => UNRESTRICTED_ROLES.has(r))) {
-    res.status(200).json(await studentsService.listStudents(query));
+    const { campusId, ...rest } = query;
+    res.status(200).json(await studentsService.listStudents(campusId ? { ...rest, campusIdIn: [campusId] } : rest));
     return;
   }
 
@@ -50,8 +66,16 @@ export async function listStudentsHandler(req: Request, res: Response): Promise<
     return;
   }
 
-  // TEACHER / INCHARGE: no well-defined "all students in my scope" without
-  // a section, same reasoning as resolveStudentScopeFilter.
+  // CAMPUS_HEAD/OFFICE: well-defined as "every student across my campus(es)"
+  // even without a section, unlike TEACHER/INCHARGE below.
+  if (profile.campusIds.length > 0 && !query.sectionId) {
+    res.status(200).json(await studentsService.listStudents({ ...query, campusIdIn: profile.campusIds }));
+    return;
+  }
+
+  // TEACHER / INCHARGE (and CAMPUS_HEAD/OFFICE when a specific sectionId was
+  // requested): no well-defined "all students in my scope" without a
+  // section, same reasoning as resolveStudentScopeFilter.
   await assertSectionQueryInScope(profile, query.sectionId);
   res.status(200).json(await studentsService.listStudents(query));
 }

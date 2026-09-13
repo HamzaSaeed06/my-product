@@ -4,6 +4,8 @@ import { COOKIE_NAMES } from "../lib/cookies.js";
 import { verifyAccessToken } from "../lib/tokens.js";
 import { prisma } from "../lib/prisma.js";
 import { HttpError } from "./errorHandler.js";
+import { getActiveDelegationsForUser } from "../lib/delegation.js";
+import { runWithDelegationContext } from "../lib/requestContext.js";
 
 // Authenticates the request: verifies the access token JWT, then confirms
 // the backing Session is still valid (not revoked/expired). The extra DB
@@ -45,5 +47,10 @@ export async function authenticate(req: Request, _res: Response, next: NextFunct
   }
 
   req.user = { id: user.id, sessionId: session.id };
-  next();
+
+  // Phase 11 Phase A2 — computed once here, not repeated in every function
+  // that needs it (see requestContext.ts for why this can't just be a
+  // field on `req`).
+  const activeDelegations = await getActiveDelegationsForUser(user.id);
+  runWithDelegationContext(activeDelegations, () => next());
 }

@@ -51,7 +51,7 @@ async function AttendanceReportContent({ searchParams }: Props) {
   if (campusId) query.set("campusId", campusId);
   const report = await apiRequest<AttendanceReport>(`/api/v1/reports/attendance?${query.toString()}`);
 
-  const canExport = user?.roles.some((r) => ["SUPER_ADMIN", "PRINCIPAL"].includes(r));
+  const canExport = user?.roles.some((r) => ["SUPER_ADMIN", "CAMPUS_HEAD"].includes(r));
 
   return (
     <div>

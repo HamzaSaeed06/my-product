@@ -87,7 +87,7 @@ async function AcademicReportContent({ searchParams }: Props) {
         title="Academic Report"
         description={report.examName}
         action={
-          user?.roles.includes("SUPER_ADMIN") || user?.roles.includes("PRINCIPAL") || user?.roles.includes("OFFICE") ? (
+          user?.roles.includes("SUPER_ADMIN") || user?.roles.includes("CAMPUS_HEAD") || user?.roles.includes("OFFICE") ? (
             <ExportCsvButton category="academic" params={{ examId, ...(sectionId ? { sectionId } : {}) }} />
           ) : undefined
         }

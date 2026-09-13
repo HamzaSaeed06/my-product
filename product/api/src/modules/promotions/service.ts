@@ -3,6 +3,7 @@ import { writeAuditLog } from "../../lib/audit.js";
 import { HttpError } from "../../middleware/errorHandler.js";
 import { createApprovalRequest } from "../approvals/service.js";
 import { createEnrollment } from "../enrollments/service.js";
+import { studentScopeWhereDirect, type StudentScopeFilter } from "../../lib/scope.js";
 
 function include() {
   return {
@@ -74,13 +75,20 @@ export async function createPromotion(
   }
 
   if (input.decision === "CLASS_JUMP") {
+    // The source section's campus (the student's current campus, whose
+    // Campus Head is making this decision) — not the target section's,
+    // which could theoretically differ (cross-campus class-jump is an
+    // open question, see docs/PHASE_11A_CAMPUS_SCOPING_IMPLEMENTATION_PLAN.md).
+    const fromSection = await prisma.section.findUnique({ where: { id: fromEnrollment.sectionId }, select: { campusId: true } });
+
     await createApprovalRequest({
       type: "PROMOTION_CLASS_JUMP",
       resource: "Promotion",
       recordId: promotion.id,
       requestedById: actorId,
-      approverRole: "PRINCIPAL",
+      approverRole: "CAMPUS_HEAD",
       payload: { promotionId: promotion.id, reason: input.reason },
+      campusId: fromSection?.campusId,
     });
   }
 
@@ -121,8 +129,12 @@ async function executePromotion(promotionId: string, actorId: string) {
   return updated;
 }
 
-export async function listPromotions(filter: { studentId?: string; academicYearId?: string }) {
-  return prisma.promotion.findMany({ where: filter, include: include(), orderBy: { createdAt: "desc" } });
+export async function listPromotions(filter: StudentScopeFilter & { academicYearId?: string }) {
+  return prisma.promotion.findMany({
+    where: { ...studentScopeWhereDirect(filter), academicYearId: filter.academicYearId },
+    include: include(),
+    orderBy: { createdAt: "desc" },
+  });
 }
 
 export async function decidePromotionClassJump(

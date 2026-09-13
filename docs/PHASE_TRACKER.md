@@ -20,6 +20,15 @@ phase's state changes — this table is what a new agent scans first.
 | 8 | Reports & Analytics | Cross-module reporting (academic, attendance, finance, staff) | all prior | 3-4 wk | 🟡 |
 | 9 | Online Payment Integration | Payment gateway (Easypaisa/JazzCash-style), webhook idempotency, reconciliation | 5 | 3-4 wk | 🟢 |
 | 10 | Provider Platform | Provider-side control plane: customer/license/deployment management, heartbeat, support tickets | 1 | 4-5 wk | 🟢 |
+| 11 | Multi-Campus Governance & Workflow Routing | Campus Head/Office campus-scoping (**backend complete**), temporary delegation, staff attendance verification, leave/complaint routing, admission inquiries, CNIC/login-identifier, homework/syllabus flexibility, list-page UX overhaul | 1, 2, 6 | TBD | 🟡 |
+| 12 | Dynamic Institution Architecture | Configurable UI terminology (institute-scoped), role `systemKey`/display-name separation, generic institution-governance policy model (Mandatory/Default/Campus-Controlled), zero-friction single-campus setup | 11 (Gap 2 shares files with Phase 11 Phase A) | 2026-09-12 | 🟡 backend done, frontend not started |
+
+Design docs for Phases 11 and 12 exist and are under discussion, not yet approved for coding:
+[`PHASE_11_MULTI_CAMPUS_AND_WORKFLOWS.md`](PHASE_11_MULTI_CAMPUS_AND_WORKFLOWS.md),
+[`ROLE_PERMISSION_MATRIX.md`](ROLE_PERMISSION_MATRIX.md) (full role/permission gap analysis feeding into
+Phase 11), and [`DYNAMIC_INSTITUTION_ARCHITECTURE.md`](DYNAMIC_INSTITUTION_ARCHITECTURE.md). Standing
+engineering rules that apply to every phase (edge-case checklist, never-trust-the-frontend, no-hardcoding,
+feature-completion definition) are in [`ENGINEERING_PRINCIPLES.md`](ENGINEERING_PRINCIPLES.md).
 
 **Total estimated: ~6-9 months** for a single developer working sequentially;
 faster with parallelization across independent branches (e.g., Phase 6 can run
@@ -167,6 +176,54 @@ HTML. **All 11 phases in this table are now backend+frontend
 complete.** See also
 §1c/§1d/§1e/§1f/§1g/§1h/§1i/§1j/§1k/§1l/§1m/§1n/§1o/§1p/§1q/§1r/§1s/§1t/§1u/§1v
 for full detail.
+
+**Phase 11 — backend complete** (2026-09-12): Phase A's full campus-scoping
+foundation (`docs/PHASE_11A_CAMPUS_SCOPING_IMPLEMENTATION_PLAN.md` Groups
+1-6, all of it, including Finance/Complaints/Leaves/Reports/Approvals) is
+built and tested — `lib/scope.ts`'s `UNRESTRICTED_ROLES` is now just
+`SUPER_ADMIN`. The `PRINCIPAL` → `CAMPUS_HEAD` role rename is done (code +
+data). Phase B (Leave/Complaint auto-routing + forwarding to the covering
+Incharge/Class Teacher) is done. Phase C (Admission Inquiry pre-enrollment
+stage + login-by-identifier via studentCode/CNIC) is done. Phase D
+(Homework's single `documentId` replaced with a proper one-to-many
+`HomeworkAttachment` relation; a new lightweight `ClassDiaryEntry` "today
+we covered X" log; Campus Head already holds `curriculum.create/edit`) is
+done. Phase A2 (general-purpose temporary role Delegation, live-computed via
+an `AsyncLocalStorage` request context so permission/scope widening and
+audit-log tagging reach 137 existing call sites with zero changes to any of
+them) is done. Phase A3 (Staff attendance: anti-spoofing daily-rotating QR
+check-in with no cron job, manual/remote-approved fallbacks, and a
+financial-action gate on recording payments) is done. **Every phase above
+verified with real-database integration tests** (two full-suite regression
+passes across the whole session's changes, both clean once isolated re-runs
+ruled out Neon-latency-under-load flakiness — see `PROJECT_STATUS.md`
+§(as)/(at)), `tsc --noEmit` clean throughout — see `PROJECT_STATUS.md`
+§(aj) through §(aq) for the full per-phase detail, including the two real
+scope-check gaps closed this session in the create/update/publish/archive
+Homework write surface (previously had zero scope enforcement at all,
+mirroring earlier findings in Assessments/Payments/Attendance) and the new
+Class Diary module built to match it from day one.
+
+**Phase 12 — backend complete** (2026-09-12): before coding, researched
+whether the design doc's three proposed models match real production
+precedent rather than being ad-hoc — confirmed against Salesforce's Rename
+Tabs and Labels (Gap 1), Azure RBAC's own "use role ID not name" guidance
+(Gap 2), and Google Cloud's Organization Policy hierarchy (Gap 3). All four
+gaps built: `Role.systemKey` decouples authorization identity from a role's
+now-freely-editable display name (a real correctness gap in `prisma/
+seed.ts`'s role upsert — matched by `name`, which would have silently
+created a duplicate role after any rename — closed as part of this);
+`TerminologyOverride` generalizes (and replaces, via a compatible shim) a
+Phase 1 mechanism found stored-but-inert, same pattern as `Institute.type`;
+a generic `FeatureConfig` table replaces per-feature bespoke governance
+columns, proven end-to-end by gating Phase 11 A3's staff check-in methods
+through it; `createInstitute()` now auto-creates a default "Main Campus".
+Verified with 3 new dedicated test files, two full local-suite regression
+passes (53/53 files, 395/395 tests) plus targeted re-verification against
+the real Neon DB, `tsc --noEmit` clean throughout — see `PROJECT_STATUS.md`
+§(av)/(aw). **Only the frontend consumption of all this (terminology-aware
+page labels, a Roles-rename UI, a Feature-Config admin screen) remains,
+deferred to frontend work same as Phase 11's Phase E.**
 
 ## Notes on dependency ordering
 

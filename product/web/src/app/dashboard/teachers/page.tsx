@@ -1,4 +1,5 @@
 import { apiRequest } from "@/lib/apiClient";
+import { getCurrentUser } from "@/lib/session";
 import { PageHeader } from "@/components/page-header";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -21,10 +22,27 @@ interface Teacher {
   user: { id: string; fullName: string; email: string };
 }
 
-export default async function TeachersPage() {
+export default async function TeachersPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ campusId?: string }>;
+}) {
+  const { campusId } = await searchParams;
+
+  // Mirrors teacher.create/edit/archive from routes.ts — Office/Incharge
+  // hold teacher.view only (Incharge oversees existing teachers, doesn't
+  // onboard them). /api/v1/users needs user.view, which neither holds
+  // either — it's fetched solely to build the "link an existing user"
+  // dropdown for Create, so skip it entirely when canCreate is false
+  // rather than 403 the whole page.
+  const permissions = (await getCurrentUser())?.permissions ?? [];
+  const canCreate = permissions.includes("teacher.create");
+  const canEdit = permissions.includes("teacher.edit");
+  const canArchive = permissions.includes("teacher.archive");
+
   const [teachers, users] = await Promise.all([
-    apiRequest<Teacher[]>("/api/v1/teachers"),
-    apiRequest<UserWithRoles[]>("/api/v1/users"),
+    apiRequest<Teacher[]>(`/api/v1/teachers${campusId ? `?campusId=${campusId}` : ""}`),
+    canCreate ? apiRequest<UserWithRoles[]>("/api/v1/users") : Promise.resolve<UserWithRoles[]>([]),
   ]);
 
   const teacherUserIds = new Set(teachers.map((t) => t.user.id));
@@ -37,7 +55,7 @@ export default async function TeachersPage() {
       <PageHeader
         title="Teachers"
         description="Teaching-staff profiles, linked to a user account with the TEACHER role."
-        action={<CreateTeacherDialog eligibleUsers={eligibleUsers} />}
+        action={canCreate ? <CreateTeacherDialog eligibleUsers={eligibleUsers} /> : undefined}
       />
 
       {teachers.length === 0 ? (
@@ -51,7 +69,7 @@ export default async function TeachersPage() {
                 <TableHead>Employee code</TableHead>
                 <TableHead>Qualification</TableHead>
                 <TableHead>Status</TableHead>
-                <TableHead className="text-right">Actions</TableHead>
+                {canEdit || canArchive ? <TableHead className="text-right">Actions</TableHead> : null}
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -63,14 +81,16 @@ export default async function TeachersPage() {
                   <TableCell>
                     {teacher.status === "ARCHIVED" ? <Badge variant="secondary">Archived</Badge> : <Badge>Active</Badge>}
                   </TableCell>
-                  <TableCell className="flex justify-end gap-2">
-                    {teacher.status === "ACTIVE" && (
-                      <>
-                        <EditTeacherDialog teacher={teacher} />
-                        <ArchiveTeacherButton id={teacher.id} name={teacher.user.fullName} />
-                      </>
-                    )}
-                  </TableCell>
+                  {canEdit || canArchive ? (
+                    <TableCell className="flex justify-end gap-2">
+                      {teacher.status === "ACTIVE" && (
+                        <>
+                          {canEdit ? <EditTeacherDialog teacher={teacher} /> : null}
+                          {canArchive ? <ArchiveTeacherButton id={teacher.id} name={teacher.user.fullName} /> : null}
+                        </>
+                      )}
+                    </TableCell>
+                  ) : null}
                 </TableRow>
               ))}
             </TableBody>

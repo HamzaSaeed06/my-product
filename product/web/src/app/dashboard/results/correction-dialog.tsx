@@ -18,7 +18,7 @@ export function RequestResultCorrectionDialog({
     <FormDialog
       triggerLabel="Request correction"
       title="Request a result correction"
-      description={`Currently: ${currentMarks}/${totalMarks}. A Principal must approve this change.`}
+      description={`Currently: ${currentMarks}/${totalMarks}. A Campus Head must approve this change.`}
       action={(formData) => requestResultCorrection(itemId, formData)}
     >
       <div className="flex flex-col gap-2">

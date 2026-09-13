@@ -1,4 +1,5 @@
 import { apiRequest } from "@/lib/apiClient";
+import { getCurrentUser } from "@/lib/session";
 import { PageHeader } from "@/components/page-header";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
@@ -53,12 +54,23 @@ export default async function AttendancePage({
   const { sectionId: requestedSectionId, date: requestedDate } = await searchParams;
   const date = requestedDate ?? todayIso();
 
+  // Incharge holds attendance.view/correct/section.view/class.view but not
+  // campus.view, academic_year.view, or approval.view (deciding a
+  // correction request is Campus Head's job — see approvals module) — so
+  // campuses/academic-years degrade gracefully (label-only, same as
+  // Timetable/Substitutions) and the approvals fetch + "Pending
+  // corrections" section below is skipped entirely rather than 403ing.
+  const permissions = (await getCurrentUser())?.permissions ?? [];
+  const canViewCampuses = permissions.includes("campus.view");
+  const canViewAcademicYears = permissions.includes("academic_year.view");
+  const canViewApprovals = permissions.includes("approval.view");
+
   const [rawSections, classes, campuses, academicYears, pendingApprovals] = await Promise.all([
     apiRequest<RawSection[]>("/api/v1/sections"),
     apiRequest<NamedOption[]>("/api/v1/classes"),
-    apiRequest<NamedOption[]>("/api/v1/campuses"),
-    apiRequest<NamedOption[]>("/api/v1/academic-years"),
-    apiRequest<ApprovalRequest[]>("/api/v1/approvals?status=PENDING"),
+    canViewCampuses ? apiRequest<NamedOption[]>("/api/v1/campuses") : Promise.resolve<NamedOption[]>([]),
+    canViewAcademicYears ? apiRequest<NamedOption[]>("/api/v1/academic-years") : Promise.resolve<NamedOption[]>([]),
+    canViewApprovals ? apiRequest<ApprovalRequest[]>("/api/v1/approvals?status=PENDING") : Promise.resolve<ApprovalRequest[]>([]),
   ]);
 
   const classNameById = new Map(classes.map((c) => [c.id, c.name]));

@@ -19,7 +19,7 @@ function initials(fullName: string): string {
   return (first + last).toUpperCase();
 }
 
-const STAFF_ROLES = ["SUPER_ADMIN", "PRINCIPAL", "INCHARGE", "OFFICE"];
+const STAFF_ROLES = ["SUPER_ADMIN", "CAMPUS_HEAD", "INCHARGE", "OFFICE"];
 
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
   const user = await getCurrentUser();
@@ -72,7 +72,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
       </header>
 
       <div className="flex flex-1">
-        <DashboardSidebar roles={user.roles} />
+        <DashboardSidebar permissions={user.permissions} />
         <main className="min-w-0 flex-1 p-6">{children}</main>
       </div>
     </div>

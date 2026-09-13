@@ -1,5 +1,6 @@
 import type { Request } from "express";
 import { prisma } from "./prisma.js";
+import { getContextActiveDelegations } from "./requestContext.js";
 
 export interface AuditEntry {
   actorId?: string | null;
@@ -40,6 +41,15 @@ function redactSecrets(value: unknown): unknown {
 }
 
 export async function writeAuditLog(entry: AuditEntry): Promise<void> {
+  // Phase 11 Phase A2 — "non-negotiable for accountability": every action
+  // taken while a delegation is active gets tagged, automatically, at this
+  // single chokepoint (137 call sites across the codebase never need to
+  // know about delegation at all). Sourced from request-scoped context, not
+  // a fresh query — this function is called on effectively every write in
+  // the app and must not add a per-call DB round trip for what's normally
+  // an empty result.
+  const [activeDelegation] = getContextActiveDelegations();
+
   await prisma.auditLog.create({
     data: {
       actorId: entry.actorId ?? null,
@@ -52,6 +62,7 @@ export async function writeAuditLog(entry: AuditEntry): Promise<void> {
       approvedBy: entry.approvedBy ?? null,
       ipAddress: entry.ipAddress ?? entry.req?.ip ?? null,
       userAgent: entry.req?.get("user-agent") ?? null,
+      viaDelegationId: activeDelegation?.id ?? null,
     },
   });
 }

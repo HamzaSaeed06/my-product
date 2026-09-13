@@ -12,14 +12,43 @@ import { env } from "../../config/env.js";
 import { HttpError } from "../../middleware/errorHandler.js";
 import { getActorProfile } from "../../lib/scope.js";
 import { getLicenseInfo } from "../../lib/license.js";
+import { getUserPermissionKeys } from "../../middleware/authorize.js";
 import type { Request } from "express";
 
 interface LoginInput {
-  email: string;
+  // Renamed from "email" (Phase 11 Phase C-addendum) — resolved via email
+  // OR the linked Student's nationalId/studentCode OR the linked Parent's
+  // nationalId, whichever one actually has a value for that person. A
+  // family with no email at all can log in with the parent's CNIC; a
+  // student with neither email nor CNIC yet still has their own
+  // studentCode (every student gets one, unconditionally).
+  identifier: string;
   password: string;
   mfaCode?: string;
   deviceInfo?: string | null;
   ipAddress?: string | null;
+}
+
+// Tries each identifier kind in turn — email is checked first since it's
+// the common case and a single indexed lookup; the fallbacks only run if
+// email didn't match. Deliberately does not report which kind matched (or
+// whether any did) to the caller beyond "found a user or not" — same
+// credential-enumeration defense as the generic INVALID_CREDENTIALS
+// message below.
+async function resolveUserByIdentifier(identifier: string) {
+  const byEmail = await prisma.user.findUnique({ where: { email: identifier } });
+  if (byEmail) return byEmail;
+
+  const student = await prisma.student.findFirst({
+    where: { OR: [{ nationalId: identifier }, { studentCode: identifier }] },
+    select: { userId: true },
+  });
+  if (student?.userId) return prisma.user.findUnique({ where: { id: student.userId } });
+
+  const parent = await prisma.parent.findUnique({ where: { nationalId: identifier }, select: { userId: true } });
+  if (parent?.userId) return prisma.user.findUnique({ where: { id: parent.userId } });
+
+  return null;
 }
 
 interface AuthTokens {
@@ -38,18 +67,29 @@ export interface PublicUser {
   email: string;
   fullName: string;
   roles: string[];
+  // The actual, currently-effective permission set (role grants + any
+  // active Delegation — same union authorize.ts enforces server-side) —
+  // added because `roles` alone pushed the frontend toward hardcoding
+  // role-name checks to decide what to show, which drifts from the real
+  // grants the moment a permission is added/removed/delegated without a
+  // matching frontend edit (confirmed happening: the admin sidebar hid
+  // Leaves from INCHARGE and Users from CAMPUS_HEAD despite both holding
+  // the real permission). The frontend should render off this array, not
+  // off `roles`.
+  permissions: string[];
   teacherId: string | null;
   parentId: string | null;
   studentId: string | null;
 }
 
 async function toPublicUser(user: { id: string; email: string; fullName: string }): Promise<PublicUser> {
-  const profile = await getActorProfile(user.id);
+  const [profile, permissionKeys] = await Promise.all([getActorProfile(user.id), getUserPermissionKeys(user.id)]);
   return {
     id: user.id,
     email: user.email,
     fullName: user.fullName,
     roles: profile.roles,
+    permissions: [...permissionKeys].sort(),
     teacherId: profile.teacherId,
     parentId: profile.parentId,
     studentId: profile.studentId,
@@ -61,7 +101,7 @@ async function toPublicUser(user: { id: string; email: string; fullName: string 
 const INVALID_CREDENTIALS = "Invalid email or password";
 
 export async function login(input: LoginInput): Promise<{ user: PublicUser; tokens: AuthTokens }> {
-  const user = await prisma.user.findUnique({ where: { email: input.email } });
+  const user = await resolveUserByIdentifier(input.identifier);
 
   if (!user || !user.isActive) {
     throw new HttpError(401, "INVALID_CREDENTIALS", INVALID_CREDENTIALS);

@@ -2,15 +2,28 @@ import { prisma } from "../../lib/prisma.js";
 import { writeAuditLog } from "../../lib/audit.js";
 import { HttpError } from "../../middleware/errorHandler.js";
 
-export async function listSections(filter: { classId?: string; campusId?: string; academicYearId?: string }) {
+export async function listSections(filter: {
+  classId?: string;
+  campusId?: string;
+  academicYearId?: string;
+  campusIdIn?: string[];
+}) {
   return prisma.section.findMany({
     where: {
       classId: filter.classId,
-      campusId: filter.campusId,
+      campusId: filter.campusIdIn ? { in: filter.campusIdIn } : filter.campusId,
       academicYearId: filter.academicYearId,
     },
     orderBy: { name: "asc" },
   });
+}
+
+// Thin getter for controllers that need to scope-check a section by id
+// before editing/archiving it.
+export async function getSectionCampusId(id: string): Promise<string> {
+  const section = await prisma.section.findUnique({ where: { id }, select: { campusId: true } });
+  if (!section) throw new HttpError(404, "SECTION_NOT_FOUND", "Section not found");
+  return section.campusId;
 }
 
 async function assertParentsUsable(classId: string, campusId: string, academicYearId: string) {

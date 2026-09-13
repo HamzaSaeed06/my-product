@@ -4,12 +4,18 @@ import { HttpError } from "../../middleware/errorHandler.js";
 import { createDocumentRecord } from "../documents/service.js";
 
 function include() {
-  return { subject: true, section: true, klass: true, teacher: { include: { user: true } }, document: true } as const;
+  return {
+    subject: true,
+    section: true,
+    klass: true,
+    teacher: { include: { user: true } },
+    attachments: { include: { document: true } },
+  } as const;
 }
 
 export async function createHomework(
   input: { subjectId: string; sectionId: string; classId: string; teacherId: string; title: string; description?: string; dueDate: Date },
-  file: Express.Multer.File | undefined,
+  files: Express.Multer.File[],
   actorId: string
 ) {
   const [subject, section, teacher] = await Promise.all([
@@ -22,21 +28,56 @@ export async function createHomework(
   if (!teacher || teacher.status === "ARCHIVED") throw new HttpError(400, "TEACHER_NOT_FOUND", "Teacher not found or archived");
   if (section.classId !== input.classId) throw new HttpError(400, "SECTION_CLASS_MISMATCH", "This section does not belong to the given class");
 
-  let documentId: string | undefined;
-  if (file) {
+  // Files are uploaded (and land on disk, storage-limit-checked) one at a
+  // time via createDocumentRecord — same as every other document-backed
+  // module in this codebase, just looped for the (now) one-to-many case.
+  const documentIds: string[] = [];
+  for (const file of files) {
     const document = await createDocumentRecord(file, { category: "homework" }, actorId);
-    documentId = document.id;
+    documentIds.push(document.id);
   }
 
-  const homework = await prisma.homework.create({ data: { ...input, documentId }, include: include() });
+  const homework = await prisma.homework.create({
+    data: {
+      ...input,
+      attachments: { create: documentIds.map((documentId) => ({ documentId })) },
+    },
+    include: include(),
+  });
 
-  await writeAuditLog({ actorId, action: "CREATE", resource: "Homework", recordId: homework.id, newValue: { ...input, documentId } });
+  await writeAuditLog({ actorId, action: "CREATE", resource: "Homework", recordId: homework.id, newValue: { ...input, documentIds } });
 
   return homework;
 }
 
-export async function listHomework(filter: { sectionId?: string; subjectId?: string; classId?: string }) {
-  return prisma.homework.findMany({ where: { ...filter, archivedAt: null }, include: include(), orderBy: { dueDate: "asc" } });
+export async function addHomeworkAttachment(homeworkId: string, file: Express.Multer.File, actorId: string) {
+  const existing = await prisma.homework.findUnique({ where: { id: homeworkId } });
+  if (!existing || existing.archivedAt) throw new HttpError(404, "HOMEWORK_NOT_FOUND", "Homework not found");
+
+  const document = await createDocumentRecord(file, { category: "homework" }, actorId);
+  const attachment = await prisma.homeworkAttachment.create({
+    data: { homeworkId, documentId: document.id },
+    include: { document: true },
+  });
+
+  await writeAuditLog({ actorId, action: "CREATE", resource: "HomeworkAttachment", recordId: attachment.id, newValue: { homeworkId, documentId: document.id } });
+
+  return attachment;
+}
+
+export async function getHomeworkSectionId(id: string): Promise<string> {
+  const homework = await prisma.homework.findUnique({ where: { id }, select: { sectionId: true } });
+  if (!homework) throw new HttpError(404, "HOMEWORK_NOT_FOUND", "Homework not found");
+  return homework.sectionId;
+}
+
+export async function listHomework(filter: {
+  subjectId?: string;
+  classId?: string;
+  scope: { sectionId?: string } | { section: { campusId: { in: string[] } } };
+}) {
+  const { scope, ...rest } = filter;
+  return prisma.homework.findMany({ where: { ...rest, ...scope, archivedAt: null }, include: include(), orderBy: { dueDate: "asc" } });
 }
 
 export async function updateHomework(

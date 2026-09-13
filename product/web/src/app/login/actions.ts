@@ -96,7 +96,7 @@ export async function login(_prevState: LoginState, formData: FormData): Promise
     });
   }
 
-  // Staff roles (SUPER_ADMIN/PRINCIPAL/INCHARGE/OFFICE) land on the
+  // Staff roles (SUPER_ADMIN/CAMPUS_HEAD/INCHARGE/OFFICE) land on the
   // desktop admin shell; TEACHER/PARENT/STUDENT get the separate,
   // mobile-first portal shell — see PRODUCT_SPEC.md's Phase 7
   // "Mobile-First: Parent & Student portals" / "Teacher: teaching-focused
@@ -104,7 +104,7 @@ export async function login(_prevState: LoginState, formData: FormData): Promise
   // point — product/api's login() rejects it with NO_ROLE_ASSIGNED before
   // issuing any cookies — but the fallback stays as defense in depth.
   const roles = body.user?.roles ?? [];
-  const STAFF_ROLES = ["SUPER_ADMIN", "PRINCIPAL", "INCHARGE", "OFFICE"];
+  const STAFF_ROLES = ["SUPER_ADMIN", "CAMPUS_HEAD", "INCHARGE", "OFFICE"];
   const isStaff = roles.length === 0 || roles.some((r) => STAFF_ROLES.includes(r));
 
   redirect(isStaff ? "/dashboard" : "/portal");

@@ -2024,6 +2024,905 @@ Append a dated entry every session. Keep entries short — what changed, what's
 left, anything the next session needs to know that isn't obvious from the
 code/docs themselves.
 
+### 2026-09-12 (ag) — Docs synthesis: full role/permission spec + Dynamic Institution Architecture + standing engineering principles
+
+- The user provided a much fuller, formal requirements document (in Roman Urdu/English): a complete
+  role-permission matrix for all 7 roles (using "Campus Head" instead of "Principal"), a "Dynamic
+  Institution Architecture" mandate (product must support schools/academies/coaching centers/training
+  institutes via configurable terminology/roles, not hardcoded school assumptions), and a long list of
+  standing engineering principles (edge-case-first, never-trust-the-frontend, no-hardcoding,
+  feature-completion definition). Docs-only session, no code changed.
+- Renamed "Principal"/`PRINCIPAL` → "Campus Head"/`CAMPUS_HEAD` throughout
+  `PHASE_11_MULTI_CAMPUS_AND_WORKFLOWS.md` (role is still literally `PRINCIPAL` in the DB/seed today — this
+  is a doc-only rename pending the actual rename decision during implementation).
+- New doc `ROLE_PERMISSION_MATRIX.md`: checked the user's full per-role spec against the real
+  `ROLE_PERMISSIONS` object in `seed.ts` (not assumed) — found Campus Head's current permission grant
+  (`PRINCIPAL` in seed today) is almost entirely view+approve, missing nearly all create/edit authority the
+  spec expects of a "complete campus operational head." Incharge/Office/Teacher/Parent/Student already
+  closely match the spec, modulo gaps Phase 11 already identified. Nothing in `seed.ts` changed yet — this
+  is a gap analysis awaiting the user's confirmation (see the doc's "Open items" section).
+- New doc `DYNAMIC_INSTITUTION_ARCHITECTURE.md`: checked the actual schema first — `Institute.type` already
+  exists but is functionally inert (read nowhere outside its own settings form); `Class`/`Section`/`Subject`
+  are already free-text-named (not fixed enums), and `StudentParent` is already optional — so the real gap is
+  narrower than the requirement doc implies: (1) hardcoded English UI labels need an institute-scoped
+  `TerminologyOverride` table, not a data-model rewrite; (2) 8 files check `role.name === "PRINCIPAL"`
+  directly, which blocks role relabeling — needs a `Role.systemKey` used for authorization instead of the
+  editable display name; (3) the Mandatory/Institute-Default/Campus-Controlled governance idea (already
+  narrowly sketched in Phase 11 for Attendance Method/Payment Gateway) should generalize into one reusable
+  `FeatureConfig` table instead of being reinvented per feature.
+- New doc `ENGINEERING_PRINCIPLES.md`: the edge-case checklist, 16-question feature-completion gate,
+  never-trust-the-frontend chain, no-hardcoding rule, and production-mindset priorities, written once as a
+  standing reference (`docs/README.md` now links it) instead of repeating it per phase doc.
+- `PHASE_TRACKER.md`: added Phase 11 (Multi-Campus Governance & Workflow Routing) and Phase 12 (Dynamic
+  Institution Architecture) rows, both 🔴 Not Started — design docs exist, no code approved yet.
+- **Not done, needs the user directly**: `docs/archive/` (the discarded `D:\sm` planning docs) was flagged
+  by the user for deletion as unused clutter — the file-delete tool call was blocked by this environment's
+  own permission classifier (destructive-action guard). `docs/README.md` now notes this explicitly. Someone
+  needs to delete `docs/archive/` manually (`git rm -r docs/archive`) or re-run the deletion in a session/
+  permission mode that allows it.
+
+### 2026-09-12 (aj) — Phase 11 Phase A campus-scoping: foundation + Groups 1-3 built and tested
+
+- User said to stop planning and start building ("ab tumhara kaam karna shuru karo... production level"),
+  so this session moved from (ai)'s plan doc into real implementation, following that plan's own sequencing
+  rule: foundation first, never flip `scope.ts`'s `UNRESTRICTED_ROLES` until each consuming module has its
+  own filter, verified by running tests as each piece landed rather than all at the end.
+- **Schema migration** (`20260912080822_phase11a_campus_scoping_columns`, applied to the real Neon DB):
+  added `campusId` to `FeeStructure` (nullable — null means institute-wide, matching (ai)'s Gap 1 finding),
+  a `campusId` snapshot to `Invoice` (captured at invoicing time, so a later campus transfer doesn't move a
+  historical invoice's attribution), a required `campusId` to `Complaint` (matching (ai)'s Gap 2 — a
+  student-linked complaint derives it from the student's enrollment, a campus-less one requires it
+  explicitly, enforced in `complaints/service.ts`), and a nullable `campusId` on `ApprovalRequest` (schema
+  only — populating/using it is still Group 6, deliberately deferred).
+- **`lib/scope.ts` foundation**: `UNRESTRICTED_ROLES` is now just `{SUPER_ADMIN}` — `PRINCIPAL`/`OFFICE` get
+  a new `campusIds` field on `ActorProfile` (from their own `UserRole.campusId`), new
+  `assertCampusInScope`/`resolveCampusScopeFilter`/`resolveSectionScopeFilter` helpers, and new campus-aware
+  branches inside `assertSectionInScope`/`assertStudentInScope` (with a deliberate fallback to a student's
+  *most recent* enrollment, not just the active one, so Office/Campus Head can still see their own campus's
+  withdrawn/historical students — Teacher/Incharge don't get this fallback, their scope is genuinely
+  "currently," not historical). `users/service.ts`'s `assignRole` now requires a real, non-archived
+  `campusId` when assigning `PRINCIPAL`/`OFFICE` (`CAMPUS_REQUIRED_FOR_ROLE`).
+- **A real, pre-existing bug found while wiring this in, not by inspection**: `students/controller.ts` had
+  its own **duplicate** `UNRESTRICTED_ROLES` constant, separate from `scope.ts`'s — so fixing `scope.ts`
+  alone would have silently done nothing for the Students list, still showing every campus's students to
+  Campus Head/Office. Same exact pattern found and fixed in three more controllers
+  (`teacher-assignments`, `teacher-attendance`, `leaves`) that each had an inline
+  `["SUPER_ADMIN","PRINCIPAL","OFFICE"].includes(role)` bypass. Grepped the whole `src/modules` tree
+  afterward to confirm no fifth instance exists.
+- **Modules actually campus-scoped this session** (list + relevant write paths, matching the plan's Group
+  1-3): `campuses`, `admissions` (+create/approve/reject/withdraw), `cash-closing` (+create/approve),
+  `sections` (+create/update/archive), `incharge-scopes` (list; also granted `PRINCIPAL`
+  `incharge_scope.view` in `seed.ts`, a small gap the (ai) doc had flagged but not yet applied), `students`
+  (list — the duplicate-`UNRESTRICTED_ROLES` fix above), `teachers` (list +create/update/archive, scoped via
+  the teacher's own `TEACHER` `UserRole.campusId`, not a joined class/section), `teacher-assignments` (list),
+  `teacher-attendance` (list), `leaves` (list — a real subtlety here: a Leave list mixes STUDENT- and
+  TEACHER-subject rows, so campus-scoping it needed an `OR`, not a plain `AND`, or student-subject rows
+  would have silently vanished whenever the teacher-side filter was active — caught before shipping, not
+  after), `parents` (list, scoped via "at least one linked child currently enrolled at my campus"),
+  `homework`/`assessments` (list — added `resolveSectionScopeFilter` so Campus Head/Office can still list
+  "everything in my campus" without a section, instead of newly requiring one now that they're not
+  blanket-unrestricted).
+- **Full institute-wide 40-file suite was impractical this session** — even a 2-file subset took 166s
+  against Neon (confirmed not hung, just genuinely that slow over today's connection — the first attempt at
+  a full run was left running 8+ minutes with zero output, looked hung, and was stopped; a direct
+  `prisma.user.count()` immediately after confirmed the DB itself was fine, so the slowness is real Neon
+  latency this session, not a stuck connection). Followed this project's own established precedent from
+  Phase 9 (§1s: "targeted isolated re-runs of the files this phase touched") — ran all 19 integration test
+  files covering every module actually changed today (students, scope-enforcement, complaints, teachers,
+  teacher-assignments, teacher-attendance, leaves, leave-attendance-integration, admissions, cash-closing,
+  sections, incharge-scopes, fee-structures, fee-categories, invoices, student-fees, parents, homework,
+  assessments) against a dedicated `test-integration@myproduct.local` Super Admin created via the existing
+  `create-super-admin` script specifically so this didn't require touching the real admin account's
+  password. **Result: 138/138 passing** across all 19 files, after one real bug found and fixed by this
+  verification (not by inspection):
+  - `complaints.test.ts`'s fixture created a Student with no Enrollment at all and never passed a
+    `campusId` — exactly the case (aj)'s new `CAMPUS_REQUIRED` validation is supposed to catch, so all 16
+    tests after the first cascaded to 404 (the create returned 400, leaving `complaintId` undefined). This
+    confirmed the new validation is doing its job, not a bug in the validation itself — fixed the test
+    fixture to create a real `Campus` and pass `campusId` explicitly (matching how a real Office user
+    standing at a real campus would create this complaint), and added two new tests asserting the
+    `CAMPUS_REQUIRED` refusal itself is correct (previously nothing tested the failure path this change
+    introduced). Re-ran complaints.test.ts alone after the fix: 18/18 clean, then the full 19-file batch
+    together: 138/138.
+- `npx tsc --noEmit` clean after every single edit in this session (checked repeatedly, not just once at
+  the end) and `npm test` (unit, no DB) still 25/25.
+- **Not done yet, per (ai)'s own plan**: Groups 4-6 (finance beyond FeeStructure/Invoice's schema columns,
+  Complaint's full scoping beyond creation, Reports, Approvals) remain open. Also newly found during this
+  pass and not yet fixed: `parents/controller.ts`'s update/link/unlink actions don't yet re-verify the
+  target parent is in the actor's campus (only `listParentsHandler` was fixed); `leaves/controller.ts`'s
+  specific-`teacherId` query path doesn't independently verify that teacher's campus for Campus Head/Office
+  (pre-existing gap, not introduced today). Both flagged for the next pass rather than silently left
+  undocumented.
+
+### 2026-09-12 (ak) — Frontend catch-up for Campus Head + a real over-grant caught and reverted
+
+- User asked, correctly, why nothing in `product/web` had changed to match today's backend work — went
+  through the actual frontend code (not assumed) to find concrete gaps.
+- **Real over-grant found and reverted**: while checking whether `payment-gateways` needed a sidebar entry
+  for Campus Head, read `PaymentGateway`'s schema properly for the first time — it has **no `campusId` at
+  all**, it's one shared gateway for the whole institute ("if more than one is active, the oldest active one
+  is used," Phase 9's own design). (ah)'s `payment_gateway.manage` grant to `PRINCIPAL` would have let any
+  one campus's head disable online payments institute-wide. Reverted the seed.ts grant, and since `seed.ts`
+  is add-only (upserts, never revokes), had to delete that specific `RolePermission` row directly against
+  the live DB, then re-ran the seed for the new grants below. Verified directly: `PRINCIPAL`'s permission
+  set no longer includes it. Left `payment-gateways` out of the sidebar for Campus Head, correctly.
+- **`GET /users` had zero campus scoping** (returned every user in the institute to anyone with
+  `user.view`) — found while checking whether the Incharge Scopes page (which calls `/users` to display
+  names) was safe to expose to Campus Head. Fixed `listUsers()` to filter by "has a UserRole with campusId
+  in the actor's own campuses" when the actor isn't unrestricted, then granted `PRINCIPAL` a **read-only**
+  `user.view` (the create/edit/disable withholding from (ah)/(ah) stands unchanged).
+- **Two sidebar links were `roles: []`** (Super-Admin-only) despite Campus Head now having the matching
+  backend permission: Incharge Scopes (`incharge_scope.view`, granted in (ah)) now shows for `PRINCIPAL`.
+  Payment Gateways correctly stays hidden (see above).
+- **Incharge Scopes page**: added a `canManage` check (`SUPER_ADMIN` only, since Campus Head has view-only)
+  — hides the Create dialog and Edit/Revoke buttons for a view-only actor instead of showing controls that
+  would just 403 on click, and adjusts the empty-state copy accordingly.
+- **Users page's "Assign role" dialog had actively wrong guidance**: its description literally said *"leave
+  it as All campuses for Principal/Office roles that aren't scoped"* — exactly backwards from (aj)'s new
+  `CAMPUS_REQUIRED_FOR_ROLE` rule. Made the dialog stateful: selecting Principal or Office now flips the
+  Campus field to required, updates its label/placeholder, and swaps the description to say so — verified
+  live in the browser (created a test user, opened Assign Role, selected PRINCIPAL, watched the description
+  and Campus field update correctly in real time).
+- Verified: `tsc --noEmit` clean on both `product/api` and `product/web`; re-ran `users.test.ts` +
+  `incharge-scopes.test.ts` (18/18) after the `listUsers` change; live-clicked through the fix in the actual
+  running app (fresh DB from earlier this session, a real user created, role-assignment dialog exercised).
+- **Still not done**: this was a targeted pass on the two pages a Campus Head would hit immediately
+  (Users' assign-role dialog, Incharge Scopes), not a full audit of all ~35 dashboard pages for
+  Campus-Head-appropriate UI — e.g. no page yet shows "which campus am I viewing" context, and Finance/
+  Reports pages haven't been checked for anything Campus-Head-specific.
+
+### 2026-09-12 (al) — Super Admin "Institute Overview" monitoring dashboard built
+
+- User's complaint: Super Admin's `/dashboard` was a placeholder "Welcome, X" screen with no charts, no
+  filtering, nothing scalable — while its sidebar showed every campus-operational screen (Exams, Timetable,
+  Incharge Scopes, ...) unfiltered, same as a Campus Head. Ran this through the `impeccable` skill's
+  `shape` step first (confirmed with the user) rather than freehanding it, per this project's own UI
+  convention. Scoped to: build the monitoring dashboard now; leave the sidebar restructuring for later
+  (Super Admin still needs full operational access as the fallback operator for a campus with no Campus
+  Head yet, per `PHASE_11_MULTI_CAMPUS_AND_WORKFLOWS.md` — stripping the sidebar would break that).
+- **New backend endpoint** `GET /api/v1/reports/institute-overview` (new `institute.monitor` permission,
+  SUPER_ADMIN-only) — real Prisma `count()` queries only, never `findMany().length` (this was itself part
+  of the user's ask: "scalable hona chahiye"). Returns institute-wide totals (campuses/students/teachers/
+  pending admissions) plus a per-campus breakdown (students via active enrollment, teachers via their
+  `TEACHER` `UserRole.campusId`, sections, pending admissions) — reusing the exact derivation patterns
+  already established in this session's campus-scoping work, not new logic.
+- **New frontend page** replacing the placeholder: KPI stat cards, a `recharts` bar chart (students per
+  campus, reusing the existing Report Center's `BarChartCard` rather than a new charting approach), and a
+  per-campus table with "Students / Teachers / Admissions" drill-down links.
+- **Added `campusId` query-param support** to the Students, Teachers, and Admissions list endpoints
+  (frontend + backend) specifically so those drill-down links actually filter — previously only Admissions
+  had a `campusId` column exposed anywhere, and none of the three accepted it as a list filter for an
+  unrestricted (SUPER_ADMIN) actor.
+- **Live-verified in the browser**: created a real Campus via the actual UI, confirmed the dashboard's KPI
+  cards, chart, and table all update with real numbers (not stale/cached), clicked a "Students" drill-down
+  link, and confirmed via the backend's own query log that the resulting `GET /students` request actually
+  filtered by `section.campusId IN (...)` — not just accepted the query param cosmetically.
+- Added 2 new integration tests (`reports.test.ts`) for the new endpoint (Super Admin gets real per-campus
+  data; a non-Super-Admin is refused). Re-ran `students`/`admissions`/`teachers`/`scope-enforcement` test
+  files after the query-param additions: 34/34 clean. `tsc --noEmit` clean on both apps.
+- **Not done**: the broader "make the UI more interactive, use shadcn correctly" complaint was much wider
+  than one page — this session addressed it narrowly for the new Overview page and the two dialogs fixed in
+  (ak); a full pass across all ~35 dashboard pages is a separate, larger initiative, not started.
+
+### 2026-09-12 (am) — Groups 4 & 5 (Finance + Complaints/Leaves) campus-scoping — backend-only, tested
+
+- User: focus on backend logic only, frontend later; test everything thoroughly, one flow, tell me what's
+  left as a list first. Went through `PHASE_11A_CAMPUS_SCOPING_IMPLEMENTATION_PLAN.md`'s remaining groups
+  in order.
+- **New shared `scope.ts` primitives**: `StudentScopeFilter` gained a third shape, `studentCampusIn` — "every
+  student across my campus(es)," well-defined for PRINCIPAL/OFFICE (previously this case fell through
+  unfiltered, a documented gap from earlier in the session). Two new helpers turn any `StudentScopeFilter`
+  into real Prisma `where` fragments instead of every module hand-translating it: `studentScopeWhereDirect`
+  (models with a direct `studentId` column) and `studentScopeWhereVia` (models one relation away, e.g.
+  Waiver→Invoice→Student, Refund→Payment→Student).
+- **Group 4 (Finance) — campus-scoped and verified**: `fee-structures` (list/create/archive — Campus Head
+  can only create/archive a campus-specific one for their own campus, never an institute-wide one),
+  `student-fees`, `invoices` (list already had scoping; create/void didn't — fixed), `payments` (list;
+  record/reversal-request/initiate-payment-attempt didn't — fixed), `refunds`, `discounts`, `waivers` — all
+  list AND create/decide paths now scope-checked, not just list. **Two real, pre-existing bugs found and
+  fixed along the way, not campus-specific**: `createInvoiceHandler`/`voidInvoiceHandler` had zero scope
+  check at all (any Campus Head/Office could invoice or void any student, any campus); more seriously,
+  `initiatePaymentAttemptHandler` (the Parent "Pay Online" flow) had **no check that the invoice belongs to
+  the paying Parent's own child** — any authenticated payer could initiate an online payment against any
+  invoice by id. 72/72 finance integration tests pass after the fix (10 files).
+- **Group 5 (Complaints + Leaves) — campus-scoped and verified**: `Complaint` has a direct `campusId`
+  (simpler than Group 4's join-based approach) — list, get, create, and **every write action**
+  (assign/start-progress/add-note/resolve/close/reopen) are now scope-checked; previously only `create` was
+  touched, all 6 write actions had zero check. `Leaves`: a specific `teacherId` query and the
+  decide/cancel actions are now scope-checked (previously **zero** scope check existed on deciding or
+  cancelling a leave at all). **Deliberately did not newly restrict INCHARGE/TEACHER** on either module —
+  they hold the same permissions via a different, not-yet-wired scope mechanism (InchargeScope), and
+  `profile.campusIds` is empty for them; the new checks explicitly no-op for a non-campus-assigned actor
+  rather than incorrectly blocking them with an empty array (caught this exact regression before shipping,
+  not after). 28/28 tests pass (complaints + leaves + leave-attendance-integration).
+- `tsc --noEmit` clean throughout, checked after every file group, not just once at the end.
+- **Still not done** (per the plan's own remaining items): Group 6 (Reports' 5 categories, Approvals'
+  `campusId` population/gating — `decidePaymentReversalHandler` explicitly flagged as still unscoped,
+  waiting on this), `parents` module's update/link/unlink, and everything beyond Phase 11 Phase A
+  (Delegation, Staff QR attendance, Leave/Complaint auto-routing, Admission Inquiry, CNIC login,
+  Homework/Syllabus flexibility, Phase 12's Dynamic Institution Architecture).
+
+### 2026-09-12 (an) — Group 6 (Reports + Approvals) campus-scoping — Phase 11A campus-scoping now essentially complete
+
+- Continuing the same session's backend-only push: Reports' 5 categories and the generic Approvals engine,
+  the last two items on `PHASE_11A_CAMPUS_SCOPING_IMPLEMENTATION_PLAN.md`. Also fixed the parents module gap
+  from the prior "what's left" list (update/link/unlink now scope-checked — 6/6 tests pass).
+- **Reports**: all 5 handlers (`academic`, `attendance`, `financial`, `admissions`, `staff`) previously took
+  an optional `campusId` with **zero enforcement** — a Campus Head/Office could request any campus's report,
+  or omit it entirely to see the whole institute's aggregate. New shared `resolveReportCampusId()` in
+  `reports/controller.ts`: a requested campusId is verified in-scope, an omitted one defaults to the actor's
+  own campus. Academic report gained a `campusIdIn` filter for when no `sectionId` is given. **Known,
+  documented limitation**: a user with more than one campus (Phase 11's own "one person, two campuses" edge
+  case) defaults to their first rather than comparing across both — no cross-campus report view exists for
+  anyone but Super Admin's Institute Overview.
+- **Approvals**: `ApprovalRequest.campusId` (schema column added earlier this session, unpopulated until
+  now) is populated at creation by all 5 real callers — payment reversal, attendance/assessment/result
+  correction, and class-jump promotion — each deriving it from the section/enrollment/payment already in
+  hand. `listApprovalRequests` and the generic decide route are now scope-checked; so are all **4 bespoke
+  decide functions** that bypass the generic engine (`decidePaymentReversal`, `decideAttendanceCorrection`,
+  `decideMarksCorrection`, `decideResultCorrection`, `decidePromotionClassJump`) — previously **none** of
+  these five had any campus check at all.
+- **Real, pre-existing write-path gaps found and fixed while wiring this** (same pattern as Group 4's
+  invoice/payment findings — the correction/decision flow's own actions, not just the approval-engine
+  plumbing, had never been scope-checked at all): `markAttendanceHandler` (any campus-assigned actor could
+  mark attendance for any section institute-wide), and the **entire Assessments write surface**
+  (create/get/enter-marks/submit/archive/request-correction — only the list endpoint had ever been scoped).
+  Fixed all of them using `assertSectionInScope`, which — unlike the campus-only checks used for
+  Complaints/Leaves — already has correct built-in handling for INCHARGE/TEACHER's own scope mechanism, so
+  no separate "skip for non-campus-assigned roles" workaround was needed here.
+- 62/62 tests pass across `approvals`/`attendance`/`assessments`/`results`/`promotions`/`reports`/
+  `report-cards` test files; 6/6 for `parents`. `tsc --noEmit` clean on `product/api`; `npm test` (unit)
+  still 25/25.
+- **Phase 11A's own plan is now essentially done** — every group (foundation, 1 through 6) has real,
+  tested code. What's left is outside that specific plan: the role rename (`PRINCIPAL` → `CAMPUS_HEAD`,
+  Dynamic Institution Architecture Gap 2), and everything in Phase 11's Phases B-E (Delegation, Staff QR
+  attendance, Leave/Complaint auto-routing, Admission Inquiry + CNIC login, Homework/Syllabus flexibility)
+  plus Phase 12 (Dynamic Institution Architecture itself) — none of that backend work has started yet.
+
+### 2026-09-12 (ao) — Role rename: `PRINCIPAL` → `CAMPUS_HEAD`, code and data
+
+- User: continue with the remaining work list. Started with the smallest item — the literal role rename
+  (not the deeper `Role.systemKey` architecture from `DYNAMIC_INSTITUTION_ARCHITECTURE.md` Gap 2, which
+  stays a separate, bigger follow-up so role names can be freely edited later without code changes; this
+  was just making the code's vocabulary match what every doc has called it since (ag)).
+- Renamed every `"PRINCIPAL"` string literal to `"CAMPUS_HEAD"` across `product/api` (15 files: `seed.ts`,
+  `scope.ts`, and 13 module controllers/services) and `product/web` (12 files: sidebar, layouts, report
+  pages, user dialogs, login redirect logic) — code, comments, and user-facing display text (e.g. "A
+  Principal must approve this change" → "A Campus Head must approve this change") all updated together so
+  nothing reads stale.
+- **Data migration, not just a seed-script change**: `seed.ts` upserts by `name`, so simply changing the
+  constant would have created a brand-new `CAMPUS_HEAD` role and left the old `PRINCIPAL` row orphaned.
+  Checked first — 0 users were actually assigned the `PRINCIPAL` role in the live dev DB (safe to rename
+  outright) — then renamed the existing `Role` row directly (`UPDATE`, not create), confirmed exactly 7
+  roles exist afterward (no orphan), and re-ran the seed to reattach permissions to the renamed row (92
+  granted to `CAMPUS_HEAD`, matching the pre-rename count exactly).
+- Verified: `tsc --noEmit` clean on both apps; `npm test` (unit) 25/25; no integration test referenced
+  `"PRINCIPAL"` directly (checked before assuming safety); re-ran an 8-file cross-section spanning every
+  category the rename touches (scope-enforcement, students, admissions, teachers, complaints, leaves,
+  approvals, users) — 72/72 pass.
+
+### 2026-09-12 (ap) — Phase 11 Phase B built: Leave & Complaint auto-routing + forwarding
+
+- First genuinely new feature this session (everything before this was scoping/hardening existing
+  features) — implemented per `PHASE_11_MULTI_CAMPUS_AND_WORKFLOWS.md`'s Phase B design.
+- **New reusable primitive**: `findInchargeUserIdsForSection()` in `incharge-scopes/service.ts` — the
+  reverse of the existing `checkInchargeScope()` (which asks "does this one user cover this section?"); this
+  asks "which Incharge(s) cover this section right now?", reusing the exact same class/section-overlap
+  matching logic so the two never drift apart.
+- **Leave**: added `assignedToId` to the schema (migration `20260912121822_phase11b_leave_assigned_to`) — it
+  had no assignment concept at all before, unlike Complaint. `createLeave` now auto-resolves a STUDENT-
+  subject leave's current Enrollment → Section → Incharge(s), assigns to the first match, and notifies all
+  matches (overlapping Incharge scopes are allowed by design, so more than one can legitimately cover a
+  section). New `forwardLeave`/`POST /leaves/:id/forward` moves it to that section's Class Teacher
+  (`Section.classTeacherId`) — refuses if already decided or if the section has no Class Teacher set.
+- **Complaint**: `createComplaint` now does the same resolution and, when a match is found, creates the
+  complaint **directly in ASSIGNED** (not OPEN) with `assignedToId` set — no more sitting unowned. New
+  `forwardComplaint`/`POST /complaints/:id/forward` mirrors Leave's (stays ASSIGNED, just reassigned — this
+  isn't a state transition). Both send a real in-app notification via the existing Notifications module.
+- **No active enrollment / no match** (Leave, Complaint, or a TEACHER-subject Leave): falls back to exactly
+  today's behavior (`assignedToId` null, OPEN for Complaint) — Office/Campus Head decide it directly, per the
+  design's explicit fallback rule.
+- Verified with a new dedicated fixture-heavy test file, `leave-complaint-routing.test.ts` (Campus/Year/
+  Class/Section-with-Class-Teacher/InchargeScope/Enrollment set up once, exercising both modules against the
+  same real Incharge/Class Teacher) — auto-assign, the resulting notification, forward, the forward
+  notification, and refusing to forward an already-decided leave. 36/36 across that file plus the existing
+  `leaves`/`complaints` suites (no regressions). `tsc --noEmit` clean.
+- **Explicitly not implemented** (documented, not silently dropped): the conflict-of-interest escalation
+  ("a complaint about the very Incharge it would route to") — there's no structured "who this complaint is
+  about" field to detect that against, only free-text category/description, so this can't be automated
+  today; and the auto-escalation reminder for a stale, several-days-untouched request — this project has no
+  background scheduler infrastructure beyond the license-heartbeat's own setInterval, and bolting one on
+  just for this felt like the wrong tradeoff for the time available. Both remain manual (existing
+  `assign`/reassign already lets anyone with permission escalate by hand).
+- **Not done**: Phase C (Admission Inquiry + CNIC login), Phase D (Homework/Syllabus flexibility), Phase E
+  (list-page UX), and Phase 12 (Dynamic Institution Architecture) — next in the already-confirmed A→B→C→D→E
+  order.
+
+### 2026-09-12 (aq) — Phase 11 Phase C built: Admission Inquiry + login-by-identifier (CNIC/studentCode)
+
+- Implemented per `PHASE_11_MULTI_CAMPUS_AND_WORKFLOWS.md`'s Phase C design — the pre-enrollment stage a
+  real front-office actually needs: capturing a walk-in/phone inquiry is lighter-weight than a full
+  Admission (no Student row, no Enrollment) until someone deliberately converts it.
+- Added `nationalId String? @unique` to both `Student` and `Parent` — a CNIC/B-Form number, optional
+  because not every family has one on file day one, unique because it's the whole point of using it as a
+  login identifier.
+- New `AdmissionInquiry` model + full CRUD module (`admission-inquiries/`): create/list/update(CONTACTED/
+  CLOSED)/convert. `convertAdmissionInquiry()` resolves-or-creates the Student (refusing with
+  `STUDENT_EXISTS_WITH_THIS_ID` if the given nationalId already belongs to someone else and no
+  `existingStudentId` was given to disambiguate) and Parent, links them, creates the real `Admission`, and
+  marks the inquiry `CONVERTED` with `convertedStudentId` — reuses `createStudent`/`createParent`/
+  `linkChild`/`createAdmission` rather than duplicating that logic.
+  Campus-scoped the same way as complaints/leaves/approvals: skips the check entirely for INCHARGE (shares
+  `admission_inquiry.*` per spec but has no UserRole-based campusId, only a class/section-level
+  InchargeScope that doesn't map onto "which campus's inquiries" — a documented limitation, not a silent
+  gap) rather than the earlier mistake of blocking it outright.
+- **Login stops being email-only**: `auth/service.ts` gained `resolveUserByIdentifier()` (tries email →
+  Student.studentCode/nationalId → Parent.nationalId in that order); the login endpoint now accepts either
+  `identifier` or the old `email` field (kept for backward compat) — a no-email family logs in with the
+  parent's CNIC, a student logs in with their own studentCode or CNIC.
+- Verified with two new real-DB integration test files. `login-identifier.test.ts` passed outright (5/5:
+  email unchanged, studentCode, student CNIC, parent CNIC, unknown-identifier gets the same generic
+  `INVALID_CREDENTIALS` as a wrong password — no user-enumeration leak).
+- **Real process gap caught and fixed**: `admission-inquiries.test.ts` initially failed all 6/6 with 403 —
+  even `asSuperAdmin()` calls to brand-new routes were rejected. Root cause: the three new
+  `admission_inquiry.view/create/convert` permission catalog entries were added to `seed.ts` but the seed
+  script was never re-run against the live Neon DB afterward (unlike every earlier permission change this
+  session, where re-seeding was done immediately) — permissions that exist only in source, not in the
+  database, grant nothing. Fixed by running `npm run prisma:seed`; all 6/6 passed on re-run. Lesson
+  reinforced: a `seed.ts` permission-catalog edit is not "done" until the seed script has actually been
+  executed against the target database and the grant counts checked.
+- `tsc --noEmit` clean, unit suite still 25/25, no regressions in any existing integration file.
+- **Not done**: Phase D (Homework/Syllabus flexibility), Phase E (list-page UX), Phase 12 (Dynamic
+  Institution Architecture) — next in the confirmed order.
+
+### 2026-09-12 (ar) — Phase 11 Phase D built: Homework one-to-many attachments + new Class Diary module
+
+- Implemented per `PHASE_11_MULTI_CAMPUS_AND_WORKFLOWS.md`'s Phase D design. Confirmed Campus Head already
+  held `curriculum.create`/`curriculum.edit` from an earlier seed change this session — nothing left to do
+  there.
+- **Homework attachments**: replaced `Homework.documentId` (a single nullable unique FK) with a proper
+  `HomeworkAttachment` join model, so one post can carry multiple files. `createHomework` now loops
+  `createDocumentRecord()` per uploaded file (`multipart` field `files`, up to 10); a new
+  `POST /homework/:id/attachments` lets a Teacher add one more file later without re-creating the whole
+  post. Migration checked the live DB for any existing `documentId` rows before dropping the column (0
+  found) but still carries a real `INSERT ... SELECT` data-migration step ahead of the `DROP COLUMN`, so
+  it stays correct/replayable regardless of when it's applied.
+- **New `ClassDiaryEntry` model + module**: the "daily class diary" the user described — a fast,
+  lightweight per-section/per-day note ("today we covered X"), deliberately with no attachments and no
+  draft/publish lifecycle (one `class_diary.create` permission covers create/edit/archive, matching the
+  feature's own lightweight intent, unlike Homework's four separate permissions). Same visibility list as
+  Homework (Campus Head/Incharge/Teacher/Parent/Student).
+- **Real pre-existing gap closed while touching this surface** (same class of bug as the Assessments/
+  Payments/Attendance gaps found earlier this session, not something newly introduced): `createHomework`/
+  `updateHomework`/`publishHomework`/`archiveHomework`/the new add-attachment handler had **zero** scope
+  checks — only `listHomework` verified section scope. Any actor holding `homework.create` could
+  previously post/edit/publish/archive homework for any section campus-wide, not just their own. Fixed by
+  adding `assertSectionInScope()` to every write handler in both Homework and the new Class Diary module,
+  plus a self-attribution guard (`assertOwnTeacherId`) so a Teacher can't post under a different teacher's
+  `teacherId` — same pattern already used in leaves/teacher-assignments/teacher-attendance controllers.
+- Verified: `tsc --noEmit` clean, unit suite still 25/25. Rewrote `homework.test.ts` for the new
+  multi-attachment shape (2 files at creation + a 3rd added after) — needed a per-test timeout bump (40s)
+  since looping `createDocumentRecord()` genuinely does more sequential Neon round trips than this suite's
+  other tests; the file's global 20s `testTimeout` wasn't enough and the first attempt timed out — not a
+  logic bug, the same documented class of Neon-latency flakiness `vitest.integration.config.ts` already
+  calls out for `hookTimeout`. All 7/7 passed after the bump. New `class-diary.test.ts` (5/5) and two new
+  write-scope tests added to the existing `scope-enforcement.test.ts` fixture (Teacher refused posting
+  homework/a diary entry outside their assigned section, allowed inside it) — 21/21 across that file.
+- Ran the full 49-file integration suite to catch any wider regression from the schema change (dropping a
+  column, adding two tables): 354 passed / 7 skipped / 1 failed on the first pass, after ~41 minutes of
+  sustained real-DB load. The 2 files involved (`refunds.test.ts` — a `beforeAll` hook timeout, then a
+  cascading FK-constraint error in its own cleanup; `admission-inquiries.test.ts` — one test timeout) touch
+  neither Homework/Document/Class-Diary nor anything else changed this entry — both are pre-existing
+  modules, untouched today. Re-ran just those 2 files in isolation once the sustained load had ended: 13/13
+  passed cleanly. Confirms this was the same documented Neon-latency-under-sustained-load flakiness this
+  project has hit before (see the Phase 9 entry and `vitest.integration.config.ts`'s own `hookTimeout`
+  comment) — not a regression from this session's schema/code changes. **Phase D is done.**
+
+### 2026-09-12 (as) — Phase 11 Phase A2 built: general-purpose temporary role Delegation
+
+- Implemented per `PHASE_11_MULTI_CAMPUS_AND_WORKFLOWS.md` Phase A2 — "condition based dynamically, hardcoded
+  nahi" per the user's explicit correction: one general `Delegation` entity (grantedBy, delegateTo, roleId,
+  campusId, validFrom/validUntil, reason, revokedAt), not a Receptionist-specific special case. Only
+  SUPER_ADMIN or a CAMPUS_HEAD (their own campus only, `assertCampusInScope`) can create/revoke one.
+  Delegating the `SUPER_ADMIN` role itself is refused outright (`CANNOT_DELEGATE_SUPER_ADMIN`) — it's
+  institute-wide and unscoped by design, so this would both be meaningless and a privilege-escalation path
+  for whoever holds `delegation.create`.
+- **The real design problem this phase had to solve**: permission/scope checks happen in `authorize.ts`
+  (`getUserPermissionKeys`, keyed only off `UserRole` rows) and `scope.ts` (`getActorProfile`, same), while
+  the audit-tagging requirement ("every action taken while a delegation is active gets tagged... non-
+  negotiable for accountability") needed to reach `writeAuditLog()` — a single function called from **137
+  places** across the codebase, none of which have access to `req` (they're service functions several
+  layers below the controller, passed only a userId). Threading delegation state through 137 call sites
+  wasn't realistic, and adding a fresh DB lookup inside `writeAuditLog` itself would tax the app's hottest
+  write-side function forever for a rarely-used feature.
+- **Solution**: `lib/requestContext.ts`, a small `AsyncLocalStorage` wrapper — new to this codebase, but the
+  standard Node.js tool for exactly this cross-cutting "make request-scoped state available to deeply-
+  nested functions without changing their signatures" problem (the same pattern tracing/logging libraries
+  use). `authenticate.ts` computes this actor's currently-active delegations **once** per request (right
+  after `req.user` is set — the same place two other DB checks, session validity and user-active, already
+  happen) and stores them via `runWithDelegationContext`. `authorize.ts`, `scope.ts`, and `audit.ts` each
+  read from that context for free — zero new queries in the hot path, and zero changes to any of the 137
+  `writeAuditLog` call sites. `getActorProfile` widens `roles`/`campusIds` exactly as if the delegate held
+  an extra `UserRole` row for the delegation's duration; `authorize`'s permission set becomes a live union;
+  `writeAuditLog` stamps the new `AuditLog.viaDelegationId` automatically. Revocation is immediate — no
+  cache to invalidate, since nothing is cached past one request.
+- New module (`modules/delegations/`): `POST /` (create), `GET /` (own-campus for Campus Head, all for
+  Super Admin), `POST /:id/revoke`, and `GET /mine` — reachable by **any** authenticated user regardless of
+  role, deliberately unpermissioned beyond being logged in, since a delegate must always be able to see
+  their own temporary access (this is what the design's persistent portal banner will read from once the
+  frontend catches up — not built this session, per the standing backend-first instruction).
+- New permissions: `delegation.view/create/revoke`, granted to CAMPUS_HEAD only (SUPER_ADMIN via the
+  blanket grant) — seed re-run and verified (165 total permissions, CAMPUS_HEAD now 96).
+- Verified with a new `delegations.test.ts` (11/11): a Campus Head refused delegating another campus
+  (`OUT_OF_SCOPE`) or the SUPER_ADMIN role, a successful OFFICE-role delegation to a Teacher, the Teacher
+  provably gaining an OFFICE-only permission (`admission_inquiry.create`) they don't otherwise hold, the
+  resulting `AuditLog` row carrying the correct `viaDelegationId`, the grant staying campus-scoped (refused
+  outside the delegated campus), and immediate loss of access on revoke (plus a `409 ALREADY_REVOKED` on a
+  second revoke attempt). `tsc --noEmit` clean, unit suite still 25/25. Given this change touches
+  `authenticate.ts`/`authorize.ts`/`scope.ts`/`audit.ts` — the chokepoints every single protected route runs
+  through — ran a full 50-file integration re-run: 353 passed / 19 skipped / 1 failed, plus 2 files
+  (`results.test.ts`, `notifications.test.ts`) that failed outright with "Can't reach database server" — a
+  genuine Neon connection drop after ~44 minutes of sustained sequential load, not a query timeout. Neither
+  file touches anything changed this session. Re-ran all 3 failed files in isolation once the load ended:
+  31/31 passed cleanly, confirming this was infrastructure flakiness, not a regression.
+
+### 2026-09-12 (at) — Phase 11 Phase A3 built: Staff attendance with anti-spoofing QR check-in
+
+- Implemented per `PHASE_11_MULTI_CAMPUS_AND_WORKFLOWS.md` A3. A genuinely different fact than the existing
+  `TeacherAttendance` model's present/absent/leave STATUS: this is WHEN a staff member physically checked
+  in and HOW that was verified. Kept as a new, separate, **User**-keyed `StaffAttendance` model rather than
+  migrating `TeacherAttendance` (Teacher-keyed) to cover Campus Head/Incharge/Office too — that would mean
+  restructuring an existing, working, tested model's primary key for a loosely-related concept. Auto-
+  deriving one from the other is a reasonable future integration, explicitly not done this pass.
+- **QR anti-spoofing without new hardware or a cron job**: `lib/staffAttendanceQr.ts` derives a per-campus
+  daily token as `HMAC(secret, campusId + today'sDate)` — no stored "current token" to regenerate, no
+  scheduled job; it just rotates on its own at midnight the same way a JWT's validity is checked live
+  rather than tracked in a table. A stale screenshot of yesterday's QR stops verifying on its own. New
+  `QR_ATTENDANCE_SECRET` env var, optional (falls back to `JWT_ACCESS_SECRET`) so no existing `.env` breaks
+  at boot — production should still set its own for proper key separation between unrelated secrets.
+- Fetching *today's actual token* (`GET /staff-attendance/qr-token`, what gets printed/displayed) is its
+  own permission (`staff_attendance.qr_manage`), deliberately separate from `.view` — if any staff member
+  could pull the valid token over the API, the entire point of "prove you were physically at the printed
+  code" collapses. Restricted to Campus Head/Office (who administer the reception display); a Teacher gets
+  a plain 403 on that endpoint even though they hold `.checkin`.
+- Manual fallback (`POST /mark`, Campus Head/Incharge only) always records `MANUAL_OVERRIDE` — "not
+  silently treated as self-verified", per the design's own edge case. `REMOTE_APPROVED`
+  (`POST /remote-approve`, Campus Head only) is a deliberate, on-the-record daily grant for legitimate
+  remote work, treated as `VERIFIED` for gating purposes.
+- **Financial-action gate**: `assertCheckedInTodayForFinancialAction()` wired into `recordPaymentHandler`
+  (the one action literally named in the design text, "record a payment") — an Office actor who hasn't
+  checked in today gets a clear `403 NOT_CHECKED_IN_TODAY` instead of being able to record cash. Explicitly
+  **not** applied blanket-wide to every other Office fee-action (invoice creation, discounts, waivers, ...)
+  this pass — extending it further is a reasonable follow-up, but locking down several existing, working
+  write paths behind a brand-new daily requirement without the user confirming that's wanted risked
+  breaking real usage instead of improving it. Confirmed via grep that every existing test calling
+  `POST /payments` uses the (exempt, unrestricted) `asSuperAdmin()` client — zero risk of silently breaking
+  the existing payments test suite by adding this gate.
+- **Deliberately not implemented** (documented, not silently dropped): the "declared holiday/weekend →
+  flagged as anomaly" edge case. This codebase has no `Holiday` model and no per-institute "working days"
+  concept anywhere — hardcoding a Sat/Sun (or any other) weekend pattern would itself violate the project's
+  own founding "no institution-specific hardcoding" principle (this platform serves institutes on
+  different weekend conventions). Real support for this belongs with a proper working-days config, which
+  is Phase 12 (Dynamic Institution Architecture) territory, not something to improvise here.
+- New permissions: `staff_attendance.view/checkin/mark/remote_approve/qr_manage`, distributed per-role
+  (Campus Head: all 5; Incharge: view/checkin/mark; Office: view/checkin/qr_manage; Teacher: checkin only)
+  — seed re-run and verified (170 total permissions, CAMPUS_HEAD now 101).
+- Verified with a new `staff-attendance.test.ts` (11/11): Teacher refused the QR-token-fetch endpoint,
+  Campus Head/Office allowed it, an invalid token refused (`INVALID_QR_TOKEN`), a real QR check-in
+  succeeding, a same-day repeat refused (`ALREADY_CHECKED_IN`), the financial gate blocking Office's
+  payment before check-in and allowing it after, manual marking producing `MANUAL_OVERRIDE`, remote-approve
+  producing `VERIFIED`, and the campus-wide list showing all 4 check-in rows. Also re-ran `payments.test.ts`
+  directly (unaffected by the new gate, all real calls go through the exempt `asSuperAdmin()` — 23/23) and
+  the full unit suite (25/25). `tsc --noEmit` clean throughout.
+- **Not done**: Phase E (list-page UX, deferred to frontend work), Phase 12 (Dynamic Institution
+  Architecture). **Every item from the original Phase 11 feature list the user set in motion this session
+  (role rename, Leave/Complaint routing, Admission Inquiry + CNIC login, Homework/Class Diary, Delegation,
+  Staff QR attendance) is now backend-complete and tested.**
+
+### 2026-09-12 (au) — Local Postgres for integration tests: 45 minutes → 4 minutes
+
+- User asked directly why the integration suite takes so long and whether there's an alternative — a fair
+  question after two full 45-minute runs this session. The honest answer: it's not the code, it's the
+  network. Every one of the 51 test files' many sequential DB round trips (fixture setup, the test itself,
+  fixture teardown) crosses the internet to Neon; local Postgres removes that round-trip cost entirely.
+- Docker Desktop was already installed on this machine (at a non-standard path — `%LOCALAPPDATA%\Programs\
+  DockerDesktop`, not `Program Files`, which is why an initial check for it came back negative until the
+  user started it and it showed up as a running process). Started a `postgres:16` container
+  (`product-test-db`, port 5433, db `product_test`) and bootstrapped it: schema (all 16 migrations applied
+  directly via `docker exec ... psql` — `prisma migrate deploy`/`db push` were **not** usable for this,
+  see below), `npm run prisma:seed`, `create-institute`, and a `test-integration@myproduct.local` admin —
+  mirroring the real Neon DB's bootstrap sequence exactly.
+- **A real Prisma CLI quirk discovered while doing this**: the Prisma CLI (`prisma migrate deploy`, `prisma
+  db push`, etc.) loads `.env` itself and its value wins even when `DATABASE_URL` is already exported in
+  the shell — confirmed empirically (`DATABASE_URL=<local> npx prisma migrate deploy` still connected to
+  Neon, logging "Datasource ... neondb"). The generated **runtime** `PrismaClient` (what `prisma/seed.ts`,
+  `scripts/create-*.ts`, and the app itself actually use) does **not** have this problem — an exported
+  `DATABASE_URL` correctly overrides `.env` there, confirmed by querying the local DB directly afterward
+  and seeing the seeded rows. This is why the migration SQL files were applied by hand via `psql` (a
+  one-time step) while seeding/bootstrapping/testing all use the normal env-override pattern.
+- New `product/api/.env.test.local` (gitignored via the root `.gitignore`'s existing `*.local` rule) holds
+  just the local `DATABASE_URL`. New `scripts/test-integration-local.ts` + `npm run test:integration:local`
+  reads it and spawns `vitest` with that one variable overridden — the real `.env` (and therefore the real
+  Neon DB backing the dev server) is never touched by any of this.
+- **A second real thing this surfaced, not just infrastructure**: the first local-DB run hit 7 failures,
+  all HTTP 429. Root-caused to `readRateLimiter`/`writeRateLimiter`/`loginRateLimiter` — real, intentional
+  anti-abuse middleware (`src/middleware/rateLimiter.ts`) — being module-level singletons shared by every
+  `createApp()` call for the lifetime of the test process (a `fresh app per request` does **not** mean a
+  fresh rate-limit store; only real wall-clock time passing does). Neon's own latency had, by accident,
+  always kept the whole suite's request rate under these limits; local Postgres runs fast enough to
+  legitimately trip them — an unrelated test's writes could 429 a different test's request. Fixed by
+  raising all three limits when `NODE_ENV === "test"` (Vitest sets this automatically) while leaving
+  development/production fully unchanged — confirmed no existing test asserts a 429 from any of these
+  three limiters before making this change, so it alters no test's meaning.
+- Result: the full 51-file/384-test suite now passes **100% clean in ~4.3 minutes** (`259.31s`), down from
+  ~41-45 minutes against Neon. `npm run test:integration:local -- <file>` runs a single file in ~15s
+  (mostly fixed Vitest/transform startup cost, not DB time) — makes the "run the tests" step of ordinary
+  feature work fast enough to do far more often, not just as an end-of-phase ritual.
+- Note for future sessions: the container is local-machine state, not committed anywhere — after a reboot
+  it just needs `docker start product-test-db` (data persists on the container until it's removed); a
+  fresh machine needs the one-time bootstrap sequence documented in `scripts/test-integration-local.ts`'s
+  header comment.
+
+### 2026-09-12 (av) — Phase 12 Gap 2 built: Role.systemKey — role identity decoupled from its display name
+
+- User asked to start Phase 12 (`docs/DYNAMIC_INSTITUTION_ARCHITECTURE.md`), then — correctly — pushed back
+  on jumping straight to coding: "isko aur behtar approach se kar sakte hain? research kar ke batao"
+  (research whether a better production approach exists first). Researched and confirmed all three of the
+  doc's proposed designs match established, battle-tested patterns rather than being ad-hoc inventions:
+  Gap 1's label-only override mirrors Salesforce's "Rename Tabs and Labels" + Translation Workbench
+  (canonical API name never changes, only the displayed label); Gap 2's stable-key-not-display-name
+  approach is Microsoft's own documented Azure RBAC best practice ("use the role ID, not the name, since a
+  role can be renamed"); Gap 3's Mandatory/Default/Campus-Controlled hierarchy is structurally identical to
+  Google Cloud's Organization Policy model (enforced / inherited-with-override / independently-managed).
+  Proceeded with the doc's designs as originally proposed, now with real precedent behind each one.
+- **Real blast-radius correction before writing any code**: the design doc (written before this session's
+  own Phase 11 work) estimated "8 files" hardcode a role's name for authorization identity. A fresh grep
+  found the real number had grown to include this session's own additions (Delegation, Class Diary,
+  Homework, Staff Attendance, ...) — but nearly all of them read `ActorProfile.roles` (populated in exactly
+  one place, `scope.ts`'s `getActorProfile`), not `Role.name` directly. Fixing the **one** population site
+  (plus `lib/delegation.ts`'s equivalent for delegated roles) automatically fixed every one of those
+  downstream `.includes("TEACHER")`-style checks with zero changes to them — only 4 files actually query
+  `Role.name` directly for identity (`incharge-scopes/service.ts`, `teachers/service.ts`, `users/service.ts`,
+  `delegations/service.ts`), all switched to `systemKey ?? name`.
+- Added `Role.systemKey` (nullable, unique) — backfilled to equal `name` for the 7 seeded system roles in
+  the same migration (the last moment the two were guaranteed identical, since renaming didn't exist as a
+  capability before this). Null for a custom, institute-defined role by design.
+- **A real correctness gap this would have introduced if missed**: `prisma/seed.ts`'s role upsert/lookup
+  (3 call sites) matched by `name` — after an admin renames "CAMPUS_HEAD" to "Director", re-running the
+  seed script would no longer find that row, and would instead **create a duplicate, unpermissioned
+  "CAMPUS_HEAD" role**. Switched all 3 to match by `systemKey` instead, with `update: {}` deliberately never
+  touching `name` (a rename must never be silently reverted by a routine seed run).
+- `roles` module: `name` is no longer forced into `UPPER_SNAKE_CASE` (that was a leftover from when it
+  doubled as both the identifier and the label — a real human label like "Front Desk" couldn't have been
+  typed under the old validation). `updateRole` (renamed from `updateRoleDescription`) now accepts renaming
+  `name` for any role, system roles included — the entire practical payoff of this migration, since nothing
+  exposed a rename capability before. `systemKey` is never part of any request schema, so it can't be set
+  or changed via any API regardless of caller.
+- Verified with a new `role-system-key.test.ts` directly proving the design doc's own required check:
+  rename CAMPUS_HEAD's `name` mid-test, confirm its campus-scoped authorization behavior (and the
+  seed-script's re-run-safety) is completely unaffected — then unconditionally revert via `try/finally`
+  plus an `afterAll` safety net, since CAMPUS_HEAD is a real shared singleton row several other test files
+  (`delegations.test.ts`, `staff-attendance.test.ts`) look up by name. 2/2 passed. Full 52-file suite
+  re-run clean (386/386) both before writing this test (proving zero regression from the refactor itself)
+  and after (52 files, 386 tests). `tsc --noEmit` clean throughout.
+
+### 2026-09-12 (aw) — Phase 12 Gaps 1, 3, 4 built: Terminology, generic Feature-Config, default campus
+
+- **Gap 1 real finding**: the design doc's own research (checking `Institute.type`, confirming nothing
+  reads it) missed that `InstituteSettings` already had `studentLabel`/`teacherLabel`/`classLabel`/
+  `sectionLabel` columns from Phase 1 — the exact same "stored but functionally inert" pattern the doc
+  diagnosed for `Institute.type`, just narrower (4 fixed keys, only ever read by the settings form that
+  writes them, confirmed by grep). Rather than build `TerminologyOverride` as a second, competing mechanism
+  alongside these, unified them: the 4 legacy columns are gone from the schema; `institute/service.ts` now
+  has a byte-for-byte-compatible shim so the existing settings form (and `institute.test.ts`) keep working
+  unchanged, backed by the new generic table underneath. The migration is data-preserving — it found and
+  carried forward a real customization (`studentLabel: "Learner"`, set by this session's own earlier test
+  run) into a genuine `TerminologyOverride` row before dropping the old column, not silently discarding it.
+- New generic `GET /terminology` (authenticate-only — every role's UI needs these labels, not just roles
+  holding `institute.view`) / `PUT /terminology/:canonicalKey` (`institute.configure`, same authority the
+  old 4-field settings already required). Type-based presets (School implicit default; Academy/Coaching
+  Center → Program/Batch/Course; Training Institute → Program/Group/Module) seed once at institute-creation
+  time, editable freely afterward — never a second source of truth.
+- **Gap 3**: new generic `FeatureConfig` table + `resolveFeatureConfig()`, structurally the GCP Org Policy
+  model confirmed above. The known nullable-compound-unique-index gotcha this codebase already hit once
+  before (Postgres treats NULL as distinct, so `@@unique([instituteId, campusId, featureKey])` does not
+  actually stop two `campusId: null` rows for the same key) is guarded at the application layer
+  (find-before-write), documented explicitly in the code rather than left as a latent trap.
+- Picked **one real, concrete feature** to prove the generic system end-to-end rather than shipping unused
+  scaffolding: `ATTENDANCE_CHECKIN_METHODS` (which of Phase 11 A3's QR/MANUAL/REMOTE_APPROVED check-in
+  methods are allowed), seeded `INSTITUTE_DEFAULT` with every method allowed at institute-creation time —
+  a no-op for every institute that never touches it — and wired into all 3 of `staff-attendance/service.ts`'s
+  check-in-creating functions. A campus can now narrow this (verified: narrowing a test campus to
+  `MANUAL`-only correctly refuses a `QR` check-in with `CHECKIN_METHOD_NOT_ALLOWED`).
+  Considered `PAYMENT_GATEWAY_POLICY` (the doc's other named example) instead but rejected it for this
+  proof-of-concept: `PaymentGateway` has no `campusId` column at all today (confirmed earlier this session
+  when Campus Head's `payment_gateway.manage` grant was reverted for exactly this reason) — actually
+  enforcing that policy would mean restructuring an unrelated module, not just adding a config row.
+- **Operational lesson from verifying all this**: briefly ran `npm run test:integration:local`'s full suite
+  and a Neon-targeted `vitest run` at the same time, expecting them to be independent since they target
+  different databases. They aren't — both read/write the exact same `tests/integration/.session.json` file
+  regardless of which `DATABASE_URL` is active (`globalSetup.ts` writes it once per process; every test
+  file's client reads it). Running two at once corrupted the local run's session mid-flight (48/53 files
+  failed) and left one test's terminology-preset cleanup unreverted. Diagnosed correctly (not a code bug —
+  a self-inflicted process collision), cleaned up the stray override row, and re-ran both suites
+  sequentially: 53/53 files clean locally, the Neon-targeted files clean too. Never run two integration
+  suites against this codebase concurrently, regardless of target database.
+- **A real regression caught and fixed before it shipped**: `assertCheckInMethodAllowed` requires an
+  institute-level `FeatureConfig` row to exist — but the *already-existing* institute (both on Neon and the
+  local test DB, created earlier this session before this feature existed) had no such row, since seeding
+  it only happens inside `createInstitute()`, which doesn't re-run for an institute that already exists.
+  Left unfixed, every staff check-in — including every one of Phase 11 A3's own passing tests — would have
+  started failing with `FEATURE_CONFIG_NOT_SEEDED`. Caught by reasoning through the change before running
+  the suite, not by the suite failing; backfilled both databases with a one-off script before any test ran
+  against the new code.
+- **Gap 4**: `createInstitute()` (both the real API and the `create-institute.ts` bootstrap script) now
+  creates a default "Main Campus" as a nested write in the same `institute.create()` call — a single-campus
+  institution never sees a "create your first campus" step. Verified without disturbing the real singleton
+  Institute row: inserted a second, fully-isolated Institute directly via Prisma (the "only one institute"
+  rule is a service-layer check, not a DB constraint, so this is safe — same "bypass the admin API to set
+  up a fixture" pattern already used everywhere else in this test suite), confirmed the nested campus came
+  back, then fully cleaned it up.
+- Verified with a new `phase12-dynamic-institution.test.ts` (9/9: terminology defaults/override/presets,
+  all 3 FeatureConfig policy modes plus the real check-in-method enforcement, and the default-campus nested
+  create) — run against both local Postgres and directly against the real Neon DB. Full local suite re-run
+  clean (52 files, 386 tests). `tsc --noEmit` clean throughout.
+- **Every gap in `DYNAMIC_INSTITUTION_ARCHITECTURE.md` is now built and tested. Phase 12 is backend-complete.**
+
+### 2026-09-12 (ax) — Frontend work begins: Super Admin dashboard rebuilt as the shared-foundation proof case
+
+- With backend (Phase 0-12) fully done, user pivoted explicitly to frontend: wanted production-grade quality
+  "jo product ki identity ho" (that reads as the product's own identity), not a generic AI-generated feel —
+  and asked for research before any code: current shadcn/ui ecosystem, Next.js's own newer features, React
+  19's newer patterns, and a toast-library recommendation. Researched via WebSearch and read this app's
+  actual installed Next.js docs (`node_modules/next/dist/docs` — pinned at 16.3.4, confirmed via
+  `AGENTS.md`'s own warning that this version differs from training-data assumptions) rather than assuming:
+  shadcn's official Chart component (Recharts-based) is the right choice and matches what Report Center
+  already uses; Sonner is shadcn's own default toast library (confirmed already a dependency, just never
+  mounted); React 19's `useOptimistic`/`useActionState` are the right tool for the "one thing changes,
+  everything referencing it updates" reactivity the user asked about — not used yet this pass (Institute
+  Overview is read-only), but the pattern to reach for once a mutation-heavy page comes up.
+- User also supplied 6 reference PDFs (shadcnuikit.com's premium dashboard templates: Classic/Sales/
+  Finance/Project/CRM/E-Commerce) as the target "identity" — read all 6, confirmed one consistent language
+  throughout: monochrome-first (color used only for status signaling — green/blue/orange/red pills — never
+  decoration), KPI cards with a real delta badge, hover-tooltip charts, data tables with avatar+status-
+  pill+search+pagination. Cross-checked against this project's own already-established `PRODUCT.md`/
+  `DESIGN.md` (built earlier this session) — the deep-green/gold brand, Restrained color strategy, and
+  "product, not brand" register all already matched this reference identity; nothing about the existing
+  system needed to change, only the actual page-level execution.
+- Used the `impeccable` skill's `craft` flow properly: setup (context.mjs — found the existing PRODUCT.md/
+  DESIGN.md, so no `init` needed), the `product.md` register reference, a compact shape brief (direction was
+  already fully established by the PDFs + existing brand — the full 10-section brief would have been
+  padding), confirmed with the user, then built.
+- **Chose Super Admin's "Institute Overview" as the one page to prove the foundation on** (per the user's own
+  pick from a menu of options), building 3 genuinely reusable pieces alongside it, not page-specific code:
+  - `src/components/data-table.tsx` — the Phase 11 Phase E `<DataTable>` primitive finally exists: sortable
+    columns, search, pagination. Client-side sort/filter/paginate, explicitly scoped to small/medium
+    datasets (documented in DESIGN.md) — a truly huge table (Students institute-wide) still needs the
+    server-side `/search` pattern already proven elsewhere, not this component as-is.
+  - `src/components/delta-badge.tsx` — the "+X%"/"-X%" KPI pill, rendering "New" instead of a fabricated
+    number when there's no honest baseline (see the backend change below).
+  - `src/app/dashboard/reports/charts.tsx` rebuilt on shadcn's actual official `Chart` component
+    (`ChartContainer`/`ChartTooltip`/`ChartConfig`, installed via `npx shadcn add chart`) instead of raw
+    Recharts with a plain `<Tooltip />` — the exact complaint from earlier in the session ("shadcn components
+    theek se use nahi ho rahe") for this specific piece. Kept the same `{title, data}` prop shape so the 4
+    existing Report Center pages using it needed zero changes.
+- **A real, small backend addition, not scope creep**: the reference PDFs' KPI cards all show a "vs last
+  month" delta — inventing that number would have violated both this session's own "never fake data" rule
+  and impeccable's production bar ("no fake metrics"). Instead extended `reports/service.ts`'s
+  `getInstituteOverview()` to compute **real** deltas from existing `createdAt` timestamps (count now vs.
+  count of records that already existed 30 days ago — valid specifically because of this app's no-hard-
+  delete policy), returning `null` (rendered as a neutral "New" pill, never a fake "+∞%") when there's no
+  honest 30-day-old baseline yet. Found and fixed a real Phase-12 regression in the same function while
+  touching it: campus teacher-counts were still matched by `role: { name: "TEACHER" }` instead of the new
+  `systemKey` — the exact anti-pattern Gap 2 exists to close, just missed in that pass since this reports
+  query doesn't go through `scope.ts`. Verified via `reports.test.ts` (11/11).
+- **Two real framework gotchas hit and fixed, now documented in DESIGN.md so they aren't rediscovered**:
+  (1) a Server Component cannot pass functions as props to a Client Component (React's RSC serialization
+  boundary) — `DataTable`'s column definitions (real closures for `render`/`sortValue`) couldn't be built
+  in the server-rendered `InstituteOverview` and handed to the client-rendered table; fixed by extracting a
+  small dedicated Client Component (`campuses-table.tsx`) that receives only plain data and builds the
+  column config itself. (2) this app's shadcn install sits on **Base UI**, not Radix — composition uses a
+  `render` prop taking a `ReactElement` (not Radix's `asChild` + children), and `Button` needs an explicit
+  `nativeButton={false}` when composed with a non-`<button>` target like `next/link`'s `Link`, or Base UI
+  logs a console error about lost semantics.
+- Verified for real, not just "tsc is clean": `npm run build` (all 58 routes compiled), then live in the
+  Browser pane — sort (header click correctly toggled the arrow), search (filtered to an honest empty state
+  for a non-matching query), dark mode (toggled `.dark` directly, every new component held contrast and
+  legibility), and confirmed Sonner's `<Toaster>` actually mounts in the DOM. Caught two console errors
+  that were genuinely stale (leftover in the tab's cumulative console log from before the two fixes above,
+  not live) by cross-checking against a **freshly opened tab** — zero errors there, confirming the page is
+  actually clean rather than trusting a possibly-stale log.
+- **Known, deliberately-not-fixed limitation, written down rather than silently left**: `AdminSidebar`
+  doesn't collapse below ~640px, found while checking mobile responsiveness. Not in scope for this page —
+  it's a shell-wide concern (every desktop-admin page, not just this one), and per `PRODUCT.md`'s own
+  density principle these roles are desktop-first by design anyway. A collapsible-shell pass is real future
+  work, not a defect in what shipped here.
+- **Not done**: every other page (this was explicitly "prove the foundation on one page first"). Next:
+  reuse `DataTable`/`DeltaBadge`/the chart components across the other desktop-admin roles' list/dashboard
+  pages, per the user's own stated sequencing (Super Admin → Teacher/Office/Incharge → Parent/Student).
+
+### 2026-09-13 (ay) — Frontend audit: sidebar/pages made permission-driven, real crashes and fake buttons found and fixed
+
+- **Trigger**: after (ax)'s Super Admin dashboard rebuild, user reacted strongly negatively ("bilkul bakewas
+  kaam h" — this is garbage, stop) and pasted an extensive production-frontend-standards spec: no fake
+  buttons/loading/success states, every visible feature must be wired to real backend logic where it exists
+  and clearly flagged where it doesn't, UI must reflect real app state, "USER GOAL → WORKFLOW → DATA →
+  ACTIONS → STATE → UI PATTERN" not UI-first. Asked whether to scope this to one page or audit the whole
+  app; chose "audit the whole app." A first pass (reading FormDialog, ConfirmActionButton, search,
+  CSV export, portal pages) found the **existing pre-session architecture is genuinely real** — no fake
+  interactions anywhere in it. The user's follow-up (garbled, decoded) narrowed the actual complaint to two
+  concrete things: (1) verify each of the 7 roles' frontend behavior actually matches what that role can
+  really do per the real backend permission model, and (2) Super Admin's dashboard lacked real
+  comparison/filter depth given how much cross-campus data exists.
+- **Fixed (2): `CampusComparisonChart`** — the static "Students per campus" bar chart on Institute Overview
+  replaced with a real, interactive metric-switcher (`src/app/dashboard/campus-comparison-chart.tsx`): a
+  shadcn `Tabs` control re-renders the same shadcn `Chart` against Students/Teachers/Sections/Pending
+  admissions, all from the one already-fetched `perCampus` payload — no new request per tab, no relabeled-
+  only illusion of interactivity. Verified live: clicking each tab actually changes the title, axis, and
+  bars.
+- **Fixed (1), and this is the real finding**: the dashboard sidebar (`src/components/dashboard-sidebar.tsx`)
+  was a hand-maintained `roles: StaffRole[]` array per nav item, checked against `user.roles` — and it had
+  drifted for real across this session's many backend permission changes. Confirmed via direct cross-
+  reference against `prisma/seed.ts`'s actual `ROLE_PERMISSIONS` and every module's `routes.ts`
+  `requirePermission(...)` key: **Leaves was hidden from INCHARGE** despite Incharge holding
+  `leave.approve`/`leave.reject` — the entire point of Phase 11 Phase B's auto-routing feature, meaning
+  Incharge could never navigate to approve a leave auto-assigned to them. **Users was hidden from
+  CAMPUS_HEAD** despite holding `user.view`. Point-patched both plus two more (Teachers, Substitutions)
+  before recognizing the deeper fix: the sidebar needed to derive visibility from the actor's real
+  **permissions**, not a role-name allowlist that has no way to detect drift when permissions change.
+  - Backend: `PublicUser` (`auth/service.ts`) and `ApiUser` (`web/src/lib/api.ts`) both gained a `permissions:
+    string[]` field — the same permission set `authorize.ts` enforces server-side (role grants + active
+    Delegations), now also returned by `/auth/login` and `/auth/me`. Verified: `tsc` clean, unit suite
+    25/25, and `login-identifier`/`scope-enforcement`/`delegations` integration suites 32/32 against local
+    Postgres.
+  - Frontend: `dashboard-sidebar.tsx` rewritten — every nav item now declares `anyOf: string[]` (the exact
+    permission key(s) its backing route requires, grepped from the real `routes.ts` files, not guessed;
+    "Report Center" correctly needs *any* of the 5 `report.view_*` keys), filtered against
+    `user.permissions`. `dashboard/layout.tsx` now passes `permissions={user.permissions}` instead of
+    `roles={user.roles}`.
+- **Verification method**: rather than eyeballing it, created disposable `verify-{campushead,incharge,
+  office}@myproduct.local` accounts (mirroring the existing `test-integration@` convention) and drove each
+  through the live app in the Browser pane. This surfaced a second, more serious class of bug the sidebar
+  fix alone didn't touch: **several dashboard pages crash outright (500)** for INCHARGE specifically,
+  because they unconditionally fetch auxiliary data a role's real permission set doesn't cover — mostly
+  data fetched only to feed a create-dialog's dropdown for an action that role can't perform anyway.
+  Confirmed and fixed one by one, each cross-checked against the actual `requirePermission(...)` key in that
+  module's `routes.ts`:
+  - **Leaves** — 500'd for Incharge because `/api/v1/students` (fetched unconditionally for "Create leave"'s
+    student picker) requires the caller to be unrestricted, campus-scoped, or name a `sectionId`; Incharge
+    is none of those (section-scoped via `IncargeScope`, zero `campusIds`). Nobody in the dashboard shell but
+    Super Admin holds `leave.create` anyway — gated the fetch and the dialog behind it, and gated
+    Approve/Reject/Cancel individually behind `leave.approve`/`leave.reject`/`leave.cancel` (only Super Admin
+    holds `leave.cancel` there; Cancel was rendering as a button that would always 403).
+  - **Complaints** — same crash, same fix: `/api/v1/students` gated behind `complaint.create` (Incharge/
+    Campus Head lack it; only Office/Super Admin hold it in the dashboard shell).
+  - **Substitutions** — 500'd on `/api/v1/academic-years` (`academic_year.view` missing for Incharge) even
+    though Incharge genuinely holds `substitution.create` and needs this dialog. Fixed by degrading the
+    campus/year fetches gracefully (label falls back to "—") instead of 403ing the whole page, since they're
+    used only to label the section dropdown, not to gate the action itself.
+  - **Homework, Assessments** — both 500'd the same way (`campus.view`/`academic_year.view`/`subject.view`
+    fetched unconditionally to feed Create dialogs). Neither Incharge nor Campus Head holds
+    `homework.create`/`assessment.create` — gated the whole aux-fetch block plus Create/Publish/Archive
+    behind their real permissions (`homework.publish`/`homework.edit`, `assessment.edit`).
+  - **Timetable, Attendance** — 500'd on `campus.view`/`academic_year.view` (Attendance also on
+    `approval.view` for its "pending corrections" panel — that's Campus Head's job, not Incharge's). Fixed
+    with the same graceful-degradation-for-labels approach; the actual Timetable/Mark-attendance features
+    Incharge does hold stayed intact. Also gated Timetable's Publish button behind `timetable.publish`
+    (Incharge has create/edit but not publish — was rendering as a button that would always 403).
+  - **Curriculum** — `CreateTopicDialog` doesn't need `curriculum.edit` (which Incharge has), it needs the
+    separate `curriculum.create` (which Incharge doesn't) — was rendering as a fake create button.
+  - **Exams, Results** — same pattern: `CreateExamDialog`/`PublishExamButton` gated behind
+    `exam.create`/`exam.publish`; on Results, the entire per-row Actions column (enter marks, advance status,
+    request/decide a correction) gated behind `result.edit`/`review`/`finalize`/`publish`/`correct` — in the
+    dashboard shell today, only Super Admin holds any of these, so Results is correctly read-only for
+    Campus Head/Incharge/Office.
+  - **Sections, Teachers** — both had unconditional Create dialogs (`/api/v1/campuses` and `/api/v1/users`
+    respectively) that crash for Incharge (who has neither `section.create` nor `teacher.create` — Campus
+    Head/Office do hold `section.create`, and gained `teacher.create` in (az) below); gated Create/Edit/
+    Archive behind their real permissions on both pages.
+  - **Users** — a related but different bug, found on the exact page the user's spec calls out: the page
+    unconditionally fetched `/api/v1/roles` (`role.view`) to feed "Assign role"'s dropdown, crashing for
+    Campus Head (`user.view` only, no `role.view`) — meaning Campus Head couldn't even see the read-only
+    Users list they're entitled to. Gated the roles/campuses fetches and Create/Assign-role/Remove-role/
+    Toggle-active controls behind `user.create`/`user.edit`/`role.view`/`campus.view` respectively — the
+    exact "buttons rendered without checking the viewer's real permission" pattern the user's spec warns
+    about by name.
+  - **Backend permission-grant gaps found and fixed alongside** (in `prisma/seed.ts`, not just frontend
+    workarounds): Incharge holds `timetable.create`/`edit` but had no `subject.view` to populate the subject
+    picker when actually building a timetable entry, and holds `curriculum.edit` but had no
+    `academic_year.view` to use Curriculum's class/year filter — both added (`subject.view`,
+    `academic_year.view`) as shared, non-campus-scoped reference-list permissions; `campus.view` stays
+    deliberately withheld since Incharge's oversight is section-scoped, not institute-wide. Re-seeded and
+    re-verified live.
+- **Flagged, not fixed this pass** (spawned as tracked follow-up tasks rather than expanding this session
+  further): (1) `/dashboard/homework` and `/dashboard/assessments` still 500 for Incharge on their *main*
+  list fetch (not just the create-dialog aux data) — `GET /api/v1/homework`/`/assessments` require a
+  `sectionId` for any zero-`campusIds` actor, and neither page has a section-picker the way Timetable/
+  Attendance/Results already do; needs that same UI pattern added, not a permission gate. (2) `GET
+  /api/v1/sections` and `GET /api/v1/teachers` return **every** section/teacher institute-wide, completely
+  unfiltered, for any actor with zero `campusIds` — confirmed live, Incharge can list sections/teachers
+  outside their own scope. `seed.ts` already has a comment saying this should be narrowed by
+  `checkInchargeScope()` "at the route level" but that doesn't appear to be wired into these two
+  controllers — a real, separate authorization gap, not a UI issue.
+- **Verified, not just described**: `tsc --noEmit` clean and `npm run build` (all routes compile) after
+  every batch of edits; backend `npm test` 25/25 after the seed.ts permission additions; every fix above
+  re-checked live in the Browser pane logged in as the disposable Incharge/Campus-Head verification accounts
+  — before-screenshot showing the crash or fake button, after-screenshot showing the real, permission-
+  correct behavior.
+
+### 2026-09-13 (az) — Sidebar nav icons added; `teacher.create/edit/archive` gap found and closed for Campus Head + Office
+
+- User's immediate follow-up on (ay): the rewritten sidebar had no icons (every reference dashboard PDF from
+  (ax) shows one per nav item), and a pointed question about whether Campus Head's permission set was fully
+  right. Two separate fixes:
+- **Icons**: `dashboard-sidebar.tsx`'s `NavItem` gained an `icon: LucideIcon` field, one per nav item (all
+  from the already-installed `lucide-react`, no new dependency), rendered at `size-4` before the label.
+  Verified live and via `npm run build`.
+- **Real permission gap, found by checking the backend rather than guessing**: `CAMPUS_HEAD` and `OFFICE`
+  both had only `teacher.view` — no `teacher.create`/`teacher.edit`/`teacher.archive` — despite
+  `teachers/controller.ts` already containing campus-scoping enforcement written specifically for "Campus
+  Head/Office" to create/edit/archive a Teacher profile (`createTeacherHandler`/`assertTeacherInCampusScope`,
+  lines 27-55: a target user's TEACHER role must be at the actor's own campus). Cross-checked against
+  `docs/ROLE_PERMISSION_MATRIX.md`'s (Resolved 2026-09-12) section: `student.create/edit`, `parent.create/
+  edit`, `class.create/edit` etc. were all granted to Campus Head in that pass, but `teacher.*` create/edit
+  was simply left out — unlike `user.create` (deliberately withheld, stated reason: Users module has no
+  campus-scoping guard yet), there was no reason given for withholding `teacher.create/edit/archive`, and the
+  guard already exists. Confirmed with the user before touching `seed.ts` (their own standing rule: never
+  grant a permission without checking the backend enforcement first) — approved granting to both roles.
+  Added `teacher.create`/`teacher.edit`/`teacher.archive` to both `CAMPUS_HEAD` and `OFFICE` in `seed.ts`,
+  re-seeded, re-verified: `tsc --noEmit` clean, `npm test` 25/25, and the Teachers page (already
+  permission-gated from (ay)) now correctly shows Create/Edit/Archive for both roles with no code change
+  needed there — exactly the point of driving the frontend off real permissions instead of role names.
+
+### 2026-09-12 (ai) — Phase 11 Phase A (campus-scoping) implementation plan written; docs/archive deleted
+
+- User asked "what's next" after (ah)'s seed change. Sized up Phase A (removing `PRINCIPAL`/`OFFICE` from
+  `scope.ts`'s `UNRESTRICTED_ROLES`) by actually reading the schema — it's much bigger than a `scope.ts`
+  edit: only 5 models (`UserRole`, `Section`, `InchargeScope`, `Admission`, `CashClosing`) have a direct
+  `campusId`; everything else (Student, Teacher, Invoice, Timetable, Leave, ...) derives campus through one
+  of 3 different relation chains, across ~20 modules. Flagged this honestly rather than starting a rushed,
+  partially-correct refactor of security-critical authorization code.
+- User chose: write the full plan now, code later. Produced
+  `docs/PHASE_11A_CAMPUS_SCOPING_IMPLEMENTATION_PLAN.md` — foundation changes, all ~20 modules grouped by
+  derivation pattern (direct column / via Section / via UserRole / finance-specific), safe build+test
+  sequencing (never flip `UNRESTRICTED_ROLES` before every module's filter exists, or the role locks itself
+  out), and 4 open decisions needed before coding starts.
+- **Two real gaps found while writing the plan, not previously known**: (1) `FeeStructure` has no
+  `campusId` at all (institute-wide, scoped only to Class) — (ah)'s `seed.ts` change granted Campus Head
+  `fee_structure.create`/`.edit` on the wrong assumption that it's per-campus data; as written today that
+  grant would let a Campus Head edit fee structures used by every campus. Needs a decision (add `campusId`
+  to `FeeStructure`, or walk back that grant) before Phase A ships. (2) `Complaint.studentId` is optional
+  with no other campus anchor — a campus-less complaint has no derivable campus today. Both flagged in the
+  new plan doc, not silently worked around.
+- `docs/archive/` (the discarded `D:\sm` planning docs, flagged in (ag)) — user gave explicit confirmation
+  this turn ("hn krdo"), `git rm -r docs/archive` succeeded this time. `docs/README.md` updated to remove
+  the now-stale reference.
+
+### 2026-09-12 (ah) — Campus Head permission expansion written into `seed.ts` (not yet run)
+
+- Following up on (ag): the user gave an explicit decision — Campus Head (role still named `PRINCIPAL` in
+  the DB) = Incharge's + Office's campus-level authority + Campus Head's own exclusive controls, deliberately
+  not a blind raw copy. Implemented in `product/api/prisma/seed.ts`'s `ROLE_PERMISSIONS.PRINCIPAL`: added
+  class/section/subject create-edit, timetable create/edit/publish, substitution create/cancel, attendance
+  correct, curriculum create/edit, assessment correct, exam create/publish, admission/enrollment create-edit
+  authority, student/parent create-edit, fee_structure/fee_assignment/invoice create-edit, `payment.reverse`,
+  `payment_gateway.manage`, `document.upload`/`document.manage`.
+- **Deliberately withheld**, flagged as a real security consideration rather than silently granted:
+  `user.create`/`user.edit`/`user.disable` — the Users module has zero campus-scoping today (only
+  `SUPER_ADMIN` has ever held these permissions), so granting them to Campus Head now would let one create a
+  `SUPER_ADMIN` account or manage another campus's staff with no backend check. Needs Phase 11 Phase A's
+  scoping built first. Also withheld `payment.record` (day-to-day cash entry stays Office-exclusive —
+  segregation of duties between who records cash and who approves refunds/waivers/reversals).
+- Adjacent fix applied in the same pass: `INCHARGE` was missing `substitution.create`/`substitution.cancel`
+  entirely despite already owning full timetable authority — added. Also applied Phase 11 Phase B's
+  already-designed `leave.approve`/`leave.reject` grant to `INCHARGE` and `TEACHER` (neither could approve
+  leave before this).
+- Verified every permission key used actually exists in `ALL_PERMISSIONS` (a throwaway script cross-checked
+  all keys referenced in `ROLE_PERMISSIONS` against the catalog — zero unknown keys) and `npx tsc --noEmit`
+  passes clean on `product/api`.
+- **Not run yet**: `npm run prisma:seed` has not been executed against the real database — this is a source
+  change only. Full detail in `docs/ROLE_PERMISSION_MATRIX.md`'s "Resolved" section.
+
 ### 2026-09-12 (af) — Real crash: /dashboard/teacher-assignments 500'd on `academicYear` undefined
 
 - User hit this directly: `Cannot read properties of undefined (reading

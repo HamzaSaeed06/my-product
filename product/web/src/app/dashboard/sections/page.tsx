@@ -1,4 +1,5 @@
 import { apiRequest } from "@/lib/apiClient";
+import { getCurrentUser } from "@/lib/session";
 import { PageHeader } from "@/components/page-header";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -21,10 +22,22 @@ interface NamedOption {
 }
 
 export default async function SectionsPage() {
+  // Mirrors section.create/edit/archive from routes.ts — Incharge holds
+  // only section.view (they oversee an existing section, not create ones)
+  // — and campus.view, which Incharge also lacks and which the "Campus"
+  // column and Create dialog both need; skip the fetch and show "—" per
+  // row instead of 403ing (same graceful-degradation as Timetable/
+  // Substitutions), same as before the earlier academic_year.view grant.
+  const permissions = (await getCurrentUser())?.permissions ?? [];
+  const canCreate = permissions.includes("section.create");
+  const canEdit = permissions.includes("section.edit");
+  const canArchive = permissions.includes("section.archive");
+  const canViewCampuses = permissions.includes("campus.view");
+
   const [sections, classes, campuses, academicYears] = await Promise.all([
     apiRequest<Section[]>("/api/v1/sections"),
     apiRequest<NamedOption[]>("/api/v1/classes"),
-    apiRequest<NamedOption[]>("/api/v1/campuses"),
+    canViewCampuses ? apiRequest<NamedOption[]>("/api/v1/campuses") : Promise.resolve<NamedOption[]>([]),
     apiRequest<NamedOption[]>("/api/v1/academic-years"),
   ]);
 
@@ -37,7 +50,7 @@ export default async function SectionsPage() {
       <PageHeader
         title="Sections"
         description="The actual campus + academic-year instance of a class — this is what students will enroll into."
-        action={<CreateSectionDialog classes={classes} campuses={campuses} academicYears={academicYears} />}
+        action={canCreate ? <CreateSectionDialog classes={classes} campuses={campuses} academicYears={academicYears} /> : undefined}
       />
 
       {sections.length === 0 ? (
@@ -53,7 +66,7 @@ export default async function SectionsPage() {
                 <TableHead>Academic year</TableHead>
                 <TableHead>Capacity</TableHead>
                 <TableHead>Status</TableHead>
-                <TableHead className="text-right">Actions</TableHead>
+                {canEdit || canArchive ? <TableHead className="text-right">Actions</TableHead> : null}
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -73,14 +86,16 @@ export default async function SectionsPage() {
                   <TableCell>
                     {section.archivedAt ? <Badge variant="secondary">Archived</Badge> : <Badge>Active</Badge>}
                   </TableCell>
-                  <TableCell className="flex justify-end gap-2">
-                    {!section.archivedAt && (
-                      <>
-                        <EditSectionDialog section={section} />
-                        <ArchiveSectionButton id={section.id} name={section.name} />
-                      </>
-                    )}
-                  </TableCell>
+                  {canEdit || canArchive ? (
+                    <TableCell className="flex justify-end gap-2">
+                      {!section.archivedAt && (
+                        <>
+                          {canEdit ? <EditSectionDialog section={section} /> : null}
+                          {canArchive ? <ArchiveSectionButton id={section.id} name={section.name} /> : null}
+                        </>
+                      )}
+                    </TableCell>
+                  ) : null}
                 </TableRow>
               ))}
             </TableBody>

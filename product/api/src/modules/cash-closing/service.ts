@@ -3,12 +3,20 @@ import { prisma } from "../../lib/prisma.js";
 import { writeAuditLog } from "../../lib/audit.js";
 import { HttpError } from "../../middleware/errorHandler.js";
 
-export async function listCashClosings(filter: { campusId?: string }) {
+export async function listCashClosings(filter: { campusId?: string; campusIdIn?: string[] }) {
   return prisma.cashClosing.findMany({
-    where: filter,
+    where: { campusId: filter.campusIdIn ? { in: filter.campusIdIn } : filter.campusId },
     include: { closedBy: { select: { id: true, fullName: true } }, approvedBy: { select: { id: true, fullName: true } } },
     orderBy: { date: "desc" },
   });
+}
+
+// Thin getter for controllers that need to scope-check a cash closing by
+// id before approving it.
+export async function getCashClosingCampusId(id: string): Promise<string> {
+  const closing = await prisma.cashClosing.findUnique({ where: { id }, select: { campusId: true } });
+  if (!closing) throw new HttpError(404, "CASH_CLOSING_NOT_FOUND", "Cash closing not found");
+  return closing.campusId;
 }
 
 // collections/refundsPaidOut are the cashier's own physical tally for the

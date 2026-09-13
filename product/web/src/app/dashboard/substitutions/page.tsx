@@ -1,4 +1,5 @@
 import { apiRequest } from "@/lib/apiClient";
+import { getCurrentUser } from "@/lib/session";
 import { PageHeader } from "@/components/page-header";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
@@ -35,12 +36,21 @@ interface Substitution {
 }
 
 export default async function SubstitutionsPage() {
+  // Incharge holds substitution.create (this dialog is genuinely theirs to
+  // use) but not campus.view/academic_year.view — those two fetches exist
+  // only to label a section option ("Grade 5 A · Main Campus · 2026"), so
+  // skip them rather than 403 the whole page; the label just drops that
+  // detail (campusNameById/yearNameById already fall back to "—" below).
+  const permissions = (await getCurrentUser())?.permissions ?? [];
+  const canViewCampuses = permissions.includes("campus.view");
+  const canViewAcademicYears = permissions.includes("academic_year.view");
+
   const [substitutions, rawSections, classes, campuses, academicYears, teachers] = await Promise.all([
     apiRequest<Substitution[]>("/api/v1/substitutions"),
     apiRequest<RawSection[]>("/api/v1/sections"),
     apiRequest<NamedOption[]>("/api/v1/classes"),
-    apiRequest<NamedOption[]>("/api/v1/campuses"),
-    apiRequest<NamedOption[]>("/api/v1/academic-years"),
+    canViewCampuses ? apiRequest<NamedOption[]>("/api/v1/campuses") : Promise.resolve<NamedOption[]>([]),
+    canViewAcademicYears ? apiRequest<NamedOption[]>("/api/v1/academic-years") : Promise.resolve<NamedOption[]>([]),
     apiRequest<Teacher[]>("/api/v1/teachers"),
   ]);
 

@@ -12,7 +12,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { PortalNav } from "@/components/portal-nav";
 
-const STAFF_ROLES = ["SUPER_ADMIN", "PRINCIPAL", "INCHARGE", "OFFICE"];
+const STAFF_ROLES = ["SUPER_ADMIN", "CAMPUS_HEAD", "INCHARGE", "OFFICE"];
 
 function initials(fullName: string): string {
   const parts = fullName.trim().split(/\s+/);
@@ -88,7 +88,7 @@ export default async function PortalLayout({ children }: { children: React.React
         <main className="min-w-0 flex-1 p-4 sm:p-6">
           <p className="text-sm text-muted-foreground">
             Your {role === "TEACHER" ? "Teacher" : "Student"} profile hasn&apos;t been set up yet. Ask your Super
-            Admin or Principal to add you on the {role === "TEACHER" ? "Teachers" : "Admissions"} page.
+            Admin or Campus Head to add you on the {role === "TEACHER" ? "Teachers" : "Admissions"} page.
           </p>
         </main>
       ) : (

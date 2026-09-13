@@ -1,4 +1,5 @@
 import { apiRequest } from "@/lib/apiClient";
+import { getCurrentUser } from "@/lib/session";
 import { PageHeader } from "@/components/page-header";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -29,7 +30,8 @@ interface Scope {
 }
 
 export default async function InchargeScopesPage() {
-  const [scopes, users, campuses, academicYears, classes, sections] = await Promise.all([
+  const [user, scopes, users, campuses, academicYears, classes, sections] = await Promise.all([
+    getCurrentUser(),
     apiRequest<Scope[]>("/api/v1/incharge-scopes"),
     apiRequest<UserWithRoles[]>("/api/v1/users"),
     apiRequest<NamedOption[]>("/api/v1/campuses"),
@@ -37,6 +39,14 @@ export default async function InchargeScopesPage() {
     apiRequest<NamedOption[]>("/api/v1/classes"),
     apiRequest<NamedOption[]>("/api/v1/sections"),
   ]);
+
+  // Campus Head can see this page (their own campus's Incharge scopes) but
+  // only Super Admin can create/edit/revoke one — matches the seed.ts
+  // grant (CAMPUS_HEAD has incharge_scope.view only). A hidden button isn't
+  // the real security boundary (the backend already refuses these actions
+  // for CAMPUS_HEAD), but showing controls that would just 403 on click is
+  // bad UX, so hide them here too.
+  const canManage = !!user?.roles.includes("SUPER_ADMIN");
 
   const inchargeUsers = users
     .filter((u) => u.roles.some((r) => r.roleName === "INCHARGE"))
@@ -53,18 +63,22 @@ export default async function InchargeScopesPage() {
         title="Incharge Scopes"
         description="Which classes/sections each Incharge can manage — dynamic, overlap allowed by design."
         action={
-          <CreateInchargeScopeDialog
-            inchargeUsers={inchargeUsers}
-            campuses={campuses}
-            academicYears={academicYears}
-            classes={classes}
-          />
+          canManage ? (
+            <CreateInchargeScopeDialog
+              inchargeUsers={inchargeUsers}
+              campuses={campuses}
+              academicYears={academicYears}
+              classes={classes}
+            />
+          ) : undefined
         }
       />
 
       {scopes.length === 0 ? (
         <p className="text-sm text-muted-foreground">
-          No scopes assigned yet. Click "Assign scope" to give an Incharge access to classes/sections.
+          {canManage
+            ? 'No scopes assigned yet. Click "Assign scope" to give an Incharge access to classes/sections.'
+            : "No Incharge scopes at your campus yet."}
         </p>
       ) : (
         <div className="overflow-x-auto rounded-lg border border-border">
@@ -102,8 +116,14 @@ export default async function InchargeScopesPage() {
                     {scope.sections.length === 0 ? "All sections" : scope.sections.length}
                   </TableCell>
                   <TableCell className="flex justify-end gap-2">
-                    <EditInchargeScopeDialog scope={scope} classes={classes} sections={sections} />
-                    <RevokeScopeButton id={scope.id} userName={userNameById.get(scope.userId) ?? "this user"} />
+                    {canManage ? (
+                      <>
+                        <EditInchargeScopeDialog scope={scope} classes={classes} sections={sections} />
+                        <RevokeScopeButton id={scope.id} userName={userNameById.get(scope.userId) ?? "this user"} />
+                      </>
+                    ) : (
+                      <span className="text-xs text-muted-foreground">View only</span>
+                    )}
                   </TableCell>
                 </TableRow>
               ))}

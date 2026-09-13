@@ -3,6 +3,7 @@ import { prisma } from "../../lib/prisma.js";
 import { writeAuditLog } from "../../lib/audit.js";
 import { HttpError } from "../../middleware/errorHandler.js";
 import { generateInvoiceNumber } from "../../lib/financeCodes.js";
+import { studentScopeWhereDirect, type StudentScopeFilter } from "../../lib/scope.js";
 
 function include() {
   return {
@@ -35,12 +36,9 @@ export async function recalculateInvoiceStatus(tx: Prisma.TransactionClient, inv
   return tx.invoice.update({ where: { id: invoiceId }, data: { status } });
 }
 
-export async function listInvoices(filter: { studentId?: string; studentIdIn?: string[]; status?: string }) {
+export async function listInvoices(filter: StudentScopeFilter & { status?: string }) {
   return prisma.invoice.findMany({
-    where: {
-      studentId: filter.studentIdIn ? { in: filter.studentIdIn } : filter.studentId,
-      status: filter.status as never,
-    },
+    where: { ...studentScopeWhereDirect(filter), status: filter.status as never },
     include: include(),
     orderBy: { createdAt: "desc" },
   });
@@ -64,6 +62,17 @@ export async function createInvoice(
   if (!student || student.status === "ARCHIVED") throw new HttpError(400, "STUDENT_NOT_FOUND", "Student not found or archived");
   if (input.items.length === 0) throw new HttpError(400, "NO_ITEMS", "An invoice needs at least one item");
 
+  // Snapshot the student's campus (via active enrollment) at invoicing
+  // time — deliberately not re-derived later, so this invoice stays
+  // attributed to the campus that issued it even if the student
+  // transfers campuses afterward. Null only if the student has no active
+  // enrollment when invoiced directly (rare, not disallowed).
+  const activeEnrollment = await prisma.enrollment.findFirst({
+    where: { studentId: input.studentId, status: "ACTIVE" },
+    include: { section: true },
+  });
+  const campusId = activeEnrollment?.section.campusId;
+
   const categoryIds = [...new Set(input.items.map((i) => i.feeCategoryId))];
   const categories = await prisma.feeCategory.findMany({ where: { id: { in: categoryIds } } });
   if (categories.length !== categoryIds.length) throw new HttpError(400, "FEE_CATEGORY_NOT_FOUND", "One or more feeCategoryIds do not exist");
@@ -77,6 +86,7 @@ export async function createInvoice(
       data: {
         invoiceNumber,
         studentId: input.studentId,
+        campusId,
         dueDate: input.dueDate,
         totalAmount,
         items: { create: input.items },

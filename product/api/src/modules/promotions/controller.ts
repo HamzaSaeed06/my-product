@@ -1,6 +1,9 @@
 import type { Request, Response } from "express";
 import { z } from "zod";
 import * as service from "./service.js";
+import { getActorProfile, resolveStudentScopeFilter, assertStudentInScope, assertCampusInScope } from "../../lib/scope.js";
+import { getApprovalRequestCampusId } from "../approvals/service.js";
+import { HttpError } from "../../middleware/errorHandler.js";
 
 const DECISIONS = ["PROMOTE", "REPEAT", "PENDING", "CLASS_JUMP"] as const;
 
@@ -26,16 +29,26 @@ const decideSchema = z.object({
 
 export async function listPromotionsHandler(req: Request, res: Response): Promise<void> {
   const query = listQuerySchema.parse(req.query);
-  res.status(200).json(await service.listPromotions(query));
+  const profile = await getActorProfile(req.user!.id);
+  const studentScope = await resolveStudentScopeFilter(profile, query.studentId);
+  res.status(200).json(await service.listPromotions({ academicYearId: query.academicYearId, ...studentScope }));
 }
 
 export async function createPromotionHandler(req: Request, res: Response): Promise<void> {
   const body = createSchema.parse(req.body);
+  const profile = await getActorProfile(req.user!.id);
+  await assertStudentInScope(profile, body.studentId);
   res.status(201).json(await service.createPromotion(body, req.user!.id));
 }
 
 export async function decidePromotionClassJumpHandler(req: Request, res: Response): Promise<void> {
   const body = decideSchema.parse(req.body);
+  const profile = await getActorProfile(req.user!.id);
+  if (profile.campusIds.length > 0) {
+    const campusId = await getApprovalRequestCampusId(req.params.approvalId!);
+    if (!campusId) throw new HttpError(403, "OUT_OF_SCOPE", "Cannot verify this request's campus");
+    assertCampusInScope(profile, campusId);
+  }
   const result = await service.decidePromotionClassJump(req.params.approvalId!, body.decision, body.decisionNote, req.user!.id);
   res.status(200).json(result);
 }

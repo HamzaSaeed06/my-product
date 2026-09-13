@@ -8,6 +8,8 @@
 
 import "dotenv/config";
 import { PrismaClient } from "@prisma/client";
+import { seedTerminologyPresetForType } from "../src/lib/terminology.js";
+import { setInstituteFeatureConfig } from "../src/lib/featureConfig.js";
 
 const prisma = new PrismaClient();
 
@@ -40,11 +42,24 @@ async function main(): Promise<void> {
     return;
   }
 
+  // Phase 12 Gap 4: never force a single-campus institution through a
+  // "create your first campus" step — same as the API's createInstitute().
   const institute = await prisma.institute.create({
-    data: { name, type: type as (typeof VALID_TYPES)[number], settings: { create: {} } },
+    data: {
+      name,
+      type: type as (typeof VALID_TYPES)[number],
+      settings: { create: {} },
+      campuses: { create: [{ name: "Main Campus" }] },
+    },
+  });
+
+  await seedTerminologyPresetForType(institute.id, institute.type);
+  await setInstituteFeatureConfig(institute.id, "ATTENDANCE_CHECKIN_METHODS", "INSTITUTE_DEFAULT", {
+    allowedMethods: ["QR", "MANUAL", "REMOTE_APPROVED"],
   });
 
   console.log(`Institute created: ${institute.name} (${institute.id})`);
+  console.log(`Default campus "Main Campus" created — rename it any time via PATCH /api/v1/campuses/:id.`);
 }
 
 main()

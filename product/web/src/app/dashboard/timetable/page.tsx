@@ -1,4 +1,5 @@
 import { apiRequest } from "@/lib/apiClient";
+import { getCurrentUser } from "@/lib/session";
 import { PageHeader } from "@/components/page-header";
 import { TimetableSectionSelect } from "./section-select";
 import { AddEntryDialog } from "./entry-dialog";
@@ -49,11 +50,21 @@ export default async function TimetablePage({
 }) {
   const { sectionId: requestedSectionId } = await searchParams;
 
+  // Incharge holds class.view/section.view/subject.view/teacher.view (all
+  // needed to actually view and build a timetable) but not campus.view or
+  // academic_year.view — those two are fetched only to label the section
+  // picker ("Grade 5 A · Main Campus · 2026"), so skip them rather than
+  // 403 the whole page; the label falls back to "—" for the missing part
+  // (same fix as the Substitutions page).
+  const permissions = (await getCurrentUser())?.permissions ?? [];
+  const canViewCampuses = permissions.includes("campus.view");
+  const canViewAcademicYears = permissions.includes("academic_year.view");
+
   const [rawSections, classes, campuses, academicYears, subjects, teachers] = await Promise.all([
     apiRequest<RawSection[]>("/api/v1/sections"),
     apiRequest<NamedOption[]>("/api/v1/classes"),
-    apiRequest<NamedOption[]>("/api/v1/campuses"),
-    apiRequest<NamedOption[]>("/api/v1/academic-years"),
+    canViewCampuses ? apiRequest<NamedOption[]>("/api/v1/campuses") : Promise.resolve<NamedOption[]>([]),
+    canViewAcademicYears ? apiRequest<NamedOption[]>("/api/v1/academic-years") : Promise.resolve<NamedOption[]>([]),
     apiRequest<NamedOption[]>("/api/v1/subjects"),
     apiRequest<Teacher[]>("/api/v1/teachers"),
   ]);
@@ -83,6 +94,7 @@ export default async function TimetablePage({
           requestedSectionId={requestedSectionId}
           subjects={subjects}
           teachers={activeTeachers}
+          canPublish={permissions.includes("timetable.publish")}
         />
       )}
     </div>
@@ -95,12 +107,14 @@ async function TimetableBody({
   requestedSectionId,
   subjects,
   teachers,
+  canPublish,
 }: {
   sectionChoices: { id: string; label: string }[];
   activeSections: RawSection[];
   requestedSectionId: string | undefined;
   subjects: NamedOption[];
   teachers: NamedOption[];
+  canPublish: boolean;
 }) {
   const selectedSection =
     activeSections.find((s) => s.id === requestedSectionId) ?? activeSections[0]!;
@@ -118,8 +132,10 @@ async function TimetableBody({
         <div className="flex items-center gap-3">
           {timetable.status === "PUBLISHED" ? (
             <span className="text-sm font-medium text-foreground">Published</span>
-          ) : (
+          ) : canPublish ? (
             <PublishTimetableButton timetableId={timetable.id} />
+          ) : (
+            <span className="text-sm text-muted-foreground">Draft — awaiting publish</span>
           )}
         </div>
       </div>

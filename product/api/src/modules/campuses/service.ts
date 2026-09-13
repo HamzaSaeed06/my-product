@@ -11,8 +11,11 @@ async function requireInstitute() {
   return institute;
 }
 
-export async function listCampuses() {
-  return prisma.campus.findMany({ orderBy: { name: "asc" } });
+export async function listCampuses(campusIdIn?: string[]) {
+  return prisma.campus.findMany({
+    where: campusIdIn ? { id: { in: campusIdIn } } : undefined,
+    orderBy: { name: "asc" },
+  });
 }
 
 export async function createCampus(input: { name: string; address?: string; phone?: string }, actorId: string) {

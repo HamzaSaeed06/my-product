@@ -23,7 +23,7 @@ export async function listTeacherAssignmentsHandler(req: Request, res: Response)
   const profile = await getActorProfile(req.user!.id);
 
   let teacherId = query.teacherId;
-  if (profile.roles.includes("TEACHER") && !profile.roles.some((r) => ["SUPER_ADMIN", "PRINCIPAL", "OFFICE"].includes(r))) {
+  if (profile.roles.includes("TEACHER") && !profile.roles.some((r) => ["SUPER_ADMIN", "CAMPUS_HEAD", "OFFICE"].includes(r))) {
     if (teacherId && teacherId !== profile.teacherId) {
       throw new HttpError(403, "OUT_OF_SCOPE", "You do not have access to this teacher's assignments");
     }
@@ -38,7 +38,12 @@ export async function listTeacherAssignmentsHandler(req: Request, res: Response)
     teacherId = profile.teacherId;
   }
 
-  res.status(200).json(await assignmentsService.listTeacherAssignments({ ...query, teacherId }));
+  // CAMPUS_HEAD/OFFICE: narrow to their own campus(es) instead of every
+  // campus's assignments — added 2026-09-12, this branch previously fell
+  // all the way through unfiltered for these two roles.
+  const campusIdIn = profile.campusIds.length > 0 ? profile.campusIds : undefined;
+
+  res.status(200).json(await assignmentsService.listTeacherAssignments({ ...query, teacherId, campusIdIn }));
 }
 
 export async function createTeacherAssignmentHandler(req: Request, res: Response): Promise<void> {

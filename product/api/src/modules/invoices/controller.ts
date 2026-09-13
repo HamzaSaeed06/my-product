@@ -37,10 +37,15 @@ export async function getInvoiceHandler(req: Request, res: Response): Promise<vo
 
 export async function createInvoiceHandler(req: Request, res: Response): Promise<void> {
   const body = createSchema.parse(req.body);
+  const profile = await getActorProfile(req.user!.id);
+  await assertStudentInScope(profile, body.studentId);
   res.status(201).json(await service.createInvoice(body, req.user!.id));
 }
 
 export async function voidInvoiceHandler(req: Request, res: Response): Promise<void> {
   const body = voidSchema.parse(req.body);
+  const profile = await getActorProfile(req.user!.id);
+  const invoice = await service.getInvoice(req.params.invoiceId!);
+  await assertStudentInScope(profile, invoice.studentId);
   res.status(200).json(await service.voidInvoice(req.params.invoiceId!, body.reason, req.user!.id));
 }

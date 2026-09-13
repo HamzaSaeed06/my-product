@@ -3,11 +3,36 @@ import { writeAuditLog } from "../../lib/audit.js";
 import { HttpError } from "../../middleware/errorHandler.js";
 import { assertStaffLimit } from "../../lib/licenseLimits.js";
 
-export async function listTeachers() {
+export async function listTeachers(campusIdIn?: string[]) {
   return prisma.teacher.findMany({
+    where: campusIdIn
+      ? { user: { userRoles: { some: { role: { name: "TEACHER" }, campusId: { in: campusIdIn } } } } }
+      : undefined,
     include: { user: { select: { id: true, fullName: true, email: true } } },
     orderBy: { createdAt: "desc" },
   });
+}
+
+// Thin getter for controllers that need to scope-check a teacher by id
+// before editing/archiving it — a Teacher's campus is their own TEACHER
+// UserRole.campusId, not a direct column.
+export async function getTeacherCampusIds(id: string): Promise<string[]> {
+  const teacher = await prisma.teacher.findUnique({
+    where: { id },
+    include: { user: { include: { userRoles: { where: { role: { name: "TEACHER" } } } } } },
+  });
+  if (!teacher) throw new HttpError(404, "TEACHER_NOT_FOUND", "Teacher not found");
+  return teacher.user.userRoles.map((ur) => ur.campusId).filter((id): id is string => !!id);
+}
+
+// Same idea, but keyed by userId — used before a Teacher profile exists
+// yet (createTeacherHandler's scope check).
+export async function getUserCampusIdsForRole(userId: string, roleName: string): Promise<string[]> {
+  const userRoles = await prisma.userRole.findMany({
+    where: { userId, role: { name: roleName } },
+    select: { campusId: true },
+  });
+  return userRoles.map((ur) => ur.campusId).filter((id): id is string => !!id);
 }
 
 // A Teacher profile always sits on top of an existing User with the
@@ -22,7 +47,7 @@ export async function createTeacher(
     include: { userRoles: { include: { role: true } } },
   });
   if (!user || !user.isActive) throw new HttpError(400, "USER_NOT_FOUND", "User not found or inactive");
-  if (!user.userRoles.some((ur) => ur.role.name === "TEACHER")) {
+  if (!user.userRoles.some((ur) => (ur.role.systemKey ?? ur.role.name) === "TEACHER")) {
     throw new HttpError(400, "USER_NOT_TEACHER", "User does not have the TEACHER role");
   }
 

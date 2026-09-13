@@ -8,6 +8,13 @@ const envSchema = z.object({
   JWT_ACCESS_SECRET: z.string().min(32, "JWT_ACCESS_SECRET must be at least 32 characters"),
   JWT_REFRESH_SECRET: z.string().min(32, "JWT_REFRESH_SECRET must be at least 32 characters"),
   COOKIE_SECRET: z.string().min(32, "COOKIE_SECRET must be at least 32 characters"),
+  // Phase 11 Phase A3 — HMACs the per-campus daily QR check-in token (see
+  // lib/staffAttendanceQr.ts). Optional, falling back to JWT_ACCESS_SECRET,
+  // for the same reason LICENSE_JWT is optional above: adding a new
+  // *required* env var would break every existing deployment's .env at
+  // boot. Production should set its own distinct value for proper key
+  // separation between unrelated concerns (auth tokens vs. QR tokens).
+  QR_ATTENDANCE_SECRET: z.string().min(32, "QR_ATTENDANCE_SECRET must be at least 32 characters").optional(),
   ACCESS_TOKEN_TTL_MINUTES: z.coerce.number().int().positive().default(20),
   REFRESH_TOKEN_TTL_DAYS: z.coerce.number().int().positive().default(7),
   WEB_APP_ORIGIN: z.string().url().default("http://localhost:3000"),

@@ -9,9 +9,13 @@ function include() {
   } as const;
 }
 
-export async function listInchargeScopes(filter: { userId?: string; campusId?: string }) {
+export async function listInchargeScopes(filter: { userId?: string; campusId?: string; campusIdIn?: string[] }) {
   return prisma.inchargeScope.findMany({
-    where: { userId: filter.userId, campusId: filter.campusId, revokedAt: null },
+    where: {
+      userId: filter.userId,
+      campusId: filter.campusIdIn ? { in: filter.campusIdIn } : filter.campusId,
+      revokedAt: null,
+    },
     include: include(),
     orderBy: { createdAt: "desc" },
   });
@@ -39,7 +43,7 @@ export async function createInchargeScope(
   ]);
 
   if (!user || !user.isActive) throw new HttpError(400, "USER_NOT_FOUND", "User not found or inactive");
-  if (!user.userRoles.some((ur) => ur.role.name === "INCHARGE")) {
+  if (!user.userRoles.some((ur) => (ur.role.systemKey ?? ur.role.name) === "INCHARGE")) {
     throw new HttpError(400, "USER_NOT_INCHARGE", "User does not have the INCHARGE role");
   }
   if (!campus || campus.archivedAt) throw new HttpError(400, "CAMPUS_NOT_FOUND", "Campus not found or archived");
@@ -223,6 +227,37 @@ export async function revokeInchargeScope(id: string, actorId: string) {
 // besides the scope assignment itself — but implemented and tested now per
 // spec's explicit acceptance criteria ("scope check within/outside assigned
 // classes").
+// Reverse of checkInchargeScope: given a section, which Incharge(s) cover
+// it right now? Used by Phase 11 Phase B's Leave/Complaint auto-routing
+// (docs/PHASE_11_MULTI_CAMPUS_AND_WORKFLOWS.md) — deliberately returns
+// every matching Incharge (overlap is allowed by design, per this
+// module's own header comment), not just one, so a caller can notify all
+// of them even while only auto-assigning to one.
+export async function findInchargeUserIdsForSection(sectionId: string): Promise<string[]> {
+  const section = await prisma.section.findUnique({ where: { id: sectionId } });
+  if (!section) return [];
+
+  const now = new Date();
+  const scopes = await prisma.inchargeScope.findMany({
+    where: {
+      campusId: section.campusId,
+      academicYearId: section.academicYearId,
+      revokedAt: null,
+      effectiveFrom: { lte: now },
+      OR: [{ effectiveTo: null }, { effectiveTo: { gte: now } }],
+    },
+    include: include(),
+  });
+
+  return scopes
+    .filter((scope) => {
+      const classMatch = scope.classes.some((c) => c.classId === section.classId);
+      const sectionMatch = scope.sections.length > 0 ? scope.sections.some((s) => s.sectionId === sectionId) : true;
+      return classMatch && sectionMatch;
+    })
+    .map((scope) => scope.userId);
+}
+
 export async function checkInchargeScope(params: {
   userId: string;
   campusId: string;

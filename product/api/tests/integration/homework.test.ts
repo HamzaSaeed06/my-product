@@ -12,7 +12,7 @@ let subjectId: string;
 let teacherUserId: string;
 let teacherId: string;
 let homeworkId: string;
-let documentStoragePath: string | undefined;
+let documentStoragePaths: string[] = [];
 
 describe("Homework API (real database)", () => {
   beforeAll(async () => {
@@ -43,12 +43,13 @@ describe("Homework API (real database)", () => {
   });
 
   afterAll(async () => {
-    const homework = await prisma.homework.findUnique({ where: { id: homeworkId } });
+    const attachments = await prisma.homeworkAttachment.findMany({ where: { homeworkId } });
+    await prisma.homeworkAttachment.deleteMany({ where: { homeworkId } });
     await prisma.homework.deleteMany({ where: { id: homeworkId } });
-    if (homework?.documentId) {
-      await prisma.document.delete({ where: { id: homework.documentId } }).catch(() => {});
+    for (const attachment of attachments) {
+      await prisma.document.delete({ where: { id: attachment.documentId } }).catch(() => {});
     }
-    if (documentStoragePath) fs.rmSync(documentStoragePath, { force: true });
+    for (const path of documentStoragePaths) fs.rmSync(path, { force: true });
     await prisma.section.delete({ where: { id: sectionId } }).catch(() => {});
     await prisma.teacher.delete({ where: { id: teacherId } }).catch(() => {});
     await prisma.user.delete({ where: { id: teacherUserId } }).catch(() => {});
@@ -58,22 +59,48 @@ describe("Homework API (real database)", () => {
     await prisma.campus.delete({ where: { id: campusId } }).catch(() => {});
   });
 
-  it("creates homework with an attached file", async () => {
-    const res = await asSuperAdmin()
-      .post("/api/v1/homework")
-      .field("subjectId", subjectId)
-      .field("sectionId", sectionId)
-      .field("classId", classId)
-      .field("teacherId", teacherId)
-      .field("title", "Algebra worksheet")
-      .field("dueDate", "2026-09-20")
-      .attach("file", Buffer.from("worksheet contents"), { filename: "worksheet.pdf", contentType: "application/pdf" });
-    expect(res.status).toBe(201);
-    expect(res.body.status).toBe("DRAFT");
-    expect(res.body.document).not.toBeNull();
-    homeworkId = res.body.id;
-    documentStoragePath = res.body.document.storagePath;
-  });
+  // Each attached file is its own sequential createDocumentRecord() round
+  // trip (a storage-limit aggregate + an insert) against the real Neon DB,
+  // on top of the homework insert itself — genuinely more DB round trips
+  // than this suite's other tests, so it needs more than the file's global
+  // 20s testTimeout (see vitest.integration.config.ts's own comment on
+  // this exact class of Neon-latency flakiness).
+  it(
+    "creates homework with two attached files",
+    async () => {
+      const res = await asSuperAdmin()
+        .post("/api/v1/homework")
+        .field("subjectId", subjectId)
+        .field("sectionId", sectionId)
+        .field("classId", classId)
+        .field("teacherId", teacherId)
+        .field("title", "Algebra worksheet")
+        .field("dueDate", "2026-09-20")
+        .attach("files", Buffer.from("worksheet contents"), { filename: "worksheet.pdf", contentType: "application/pdf" })
+        .attach("files", Buffer.from("answer key contents"), { filename: "answers.pdf", contentType: "application/pdf" });
+      expect(res.status).toBe(201);
+      expect(res.body.status).toBe("DRAFT");
+      expect(res.body.attachments).toHaveLength(2);
+      homeworkId = res.body.id;
+      documentStoragePaths = res.body.attachments.map((a: { document: { storagePath: string } }) => a.document.storagePath);
+    },
+    40000
+  );
+
+  it(
+    "adds a third attachment after creation",
+    async () => {
+      const res = await asSuperAdmin()
+        .post(`/api/v1/homework/${homeworkId}/attachments`)
+        .attach("file", Buffer.from("rubric contents"), { filename: "rubric.pdf", contentType: "application/pdf" });
+      expect(res.status).toBe(201);
+      documentStoragePaths.push(res.body.document.storagePath);
+
+      const listRes = await asSuperAdmin().get(`/api/v1/homework?sectionId=${sectionId}`);
+      expect(listRes.body[0].attachments).toHaveLength(3);
+    },
+    40000
+  );
 
   it("lists homework filtered by section", async () => {
     const res = await asSuperAdmin().get(`/api/v1/homework?sectionId=${sectionId}`);

@@ -23,12 +23,22 @@ function toPercentage(obtained: number, max: number): number {
 // Academic Reports
 // ─────────────────────────────────────────────────────────────────────────
 
-export async function getAcademicReport(filter: { examId: string; sectionId?: string }) {
+export async function getAcademicReport(filter: { examId: string; sectionId?: string; campusIdIn?: string[] }) {
   const exam = await prisma.exam.findUnique({ where: { id: filter.examId } });
   if (!exam) throw new HttpError(400, "EXAM_NOT_FOUND", "Exam not found");
 
   const results = await prisma.result.findMany({
-    where: { examId: filter.examId, sectionId: filter.sectionId, status: { in: ["FINALIZED", "PUBLISHED"] } },
+    where: {
+      examId: filter.examId,
+      sectionId: filter.sectionId,
+      // Campus Head/Office with no specific sectionId — narrow to their
+      // own campus(es) instead of every section across the whole exam.
+      // A specific sectionId is already verified in-scope at the
+      // controller (assertSectionInScope), so this only applies when one
+      // wasn't given.
+      section: !filter.sectionId && filter.campusIdIn ? { campusId: { in: filter.campusIdIn } } : undefined,
+      status: { in: ["FINALIZED", "PUBLISHED"] },
+    },
     include: {
       student: { select: { id: true, fullName: true, studentCode: true } },
       section: { include: { class: true } },
@@ -445,6 +455,68 @@ export async function getStaffReport(filter: { dateFrom: Date; dateTo: Date; cam
   }));
 
   return { teacherWorkload, attendance, leaveStatistics };
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// Institute Overview — Super Admin's cross-campus monitoring view (Phase 11
+// Phase A design). All counts, never findMany+.length — this is meant to
+// stay fast as the institute grows to real production data volumes, not
+// just the handful of rows in dev. Per-campus counts run in parallel, one
+// query per metric per campus, since the number of campuses is small
+// (tens at most) even at scale; a single groupBy across three different
+// join paths (Enrollment/UserRole/Admission) would be less readable for no
+// real performance win at that cardinality.
+// ─────────────────────────────────────────────────────────────────────────
+
+// One decimal place, null when there's no honest baseline to compare
+// against (zero 30 days ago would be a meaningless "+infinity%") — the
+// dashboard renders "New" instead of a fake percentage in that case.
+// Never invented: derived from real createdAt history, relying on this
+// app's no-hard-delete policy (a record that existed 30 days ago is still
+// in the table today).
+function deltaPct(current: number, previousCount: number): number | null {
+  if (previousCount === 0) return null;
+  return Math.round(((current - previousCount) / previousCount) * 1000) / 10;
+}
+
+export async function getInstituteOverview() {
+  const campuses = await prisma.campus.findMany({ where: { archivedAt: null }, orderBy: { name: "asc" } });
+  const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+
+  const [totalCampuses, totalStudents, studentsBefore, totalTeachers, teachersBefore, totalPendingAdmissions, perCampus] = await Promise.all([
+    prisma.campus.count({ where: { archivedAt: null } }),
+    prisma.student.count({ where: { status: "ACTIVE" } }),
+    prisma.student.count({ where: { status: "ACTIVE", createdAt: { lte: thirtyDaysAgo } } }),
+    prisma.teacher.count({ where: { status: "ACTIVE" } }),
+    prisma.teacher.count({ where: { status: "ACTIVE", createdAt: { lte: thirtyDaysAgo } } }),
+    prisma.admission.count({ where: { status: "PENDING" } }),
+    Promise.all(
+      campuses.map(async (campus) => {
+        const [students, teachers, sections, pendingAdmissions] = await Promise.all([
+          prisma.enrollment.count({ where: { status: "ACTIVE", section: { campusId: campus.id } } }),
+          // Phase 12 Gap 2: keyed off Role.systemKey, not the now-freely-
+          // editable Role.name — an institute renaming "Teacher" must not
+          // make campus teacher counts silently go to zero.
+          prisma.userRole.count({ where: { campusId: campus.id, role: { systemKey: "TEACHER" } } }),
+          prisma.section.count({ where: { campusId: campus.id, archivedAt: null } }),
+          prisma.admission.count({ where: { campusId: campus.id, status: "PENDING" } }),
+        ]);
+        return { id: campus.id, name: campus.name, students, teachers, sections, pendingAdmissions };
+      })
+    ),
+  ]);
+
+  return {
+    totals: {
+      campuses: totalCampuses,
+      students: totalStudents,
+      studentsDeltaPct: deltaPct(totalStudents, studentsBefore),
+      teachers: totalTeachers,
+      teachersDeltaPct: deltaPct(totalTeachers, teachersBefore),
+      pendingAdmissions: totalPendingAdmissions,
+    },
+    perCampus,
+  };
 }
 
 // ─────────────────────────────────────────────────────────────────────────
