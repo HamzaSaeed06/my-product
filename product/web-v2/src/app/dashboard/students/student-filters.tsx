@@ -126,7 +126,11 @@ export function StudentFilters({ students }: { students: Student[] }) {
           />
           <Select value={feeFilter} onValueChange={(v) => setFeeFilter(v as FeeStatus | "ALL")}>
             <SelectTrigger className="w-36">
-              <SelectValue placeholder="Fee status" />
+              <SelectValue>
+                {(value: FeeStatus | "ALL") =>
+                  value === "ALL" ? "All fee statuses" : FEE_STATUS_OPTIONS.find((o) => o.value === value)?.label
+                }
+              </SelectValue>
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="ALL">All fee statuses</SelectItem>
@@ -139,7 +143,7 @@ export function StudentFilters({ students }: { students: Student[] }) {
           </Select>
           <Select value={statusFilter} onValueChange={(v) => setStatusFilter(v as StatusFilter)}>
             <SelectTrigger className="w-40">
-              <SelectValue placeholder="Status" />
+              <SelectValue>{(value: StatusFilter) => STATUS_OPTIONS.find((o) => o.value === value)?.label}</SelectValue>
             </SelectTrigger>
             <SelectContent>
               {STATUS_OPTIONS.map((opt) => (
