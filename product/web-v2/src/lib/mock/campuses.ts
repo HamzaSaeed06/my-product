@@ -41,21 +41,25 @@ function seededRandom(seed: number) {
   };
 }
 
-// 90 days of genuinely noisy daily data (new admissions land unevenly day
-// to day — Mondays and month-starts run heavier, weekends lighter), ending
-// at each campus's current headcount from mockCampuses above. A smooth
-// month-over-month average would plot as a near-straight line no matter
-// the chart type; the day-to-day variance is what makes a trend line worth
-// looking at, and it's what the shadcn reference chart's own data has.
+// 90 days of genuinely noisy daily data, ending at each campus's current
+// headcount from mockCampuses above. The first version of this generator
+// added noise sized off the tiny daily growth increment (~1 student) —
+// invisible against a stacked total in the thousands, so the chart still
+// plotted as a near-straight line no matter the curve type. Noise here is
+// sized as a real fraction of the headcount itself (~3.5%, day to day —
+// same-day attendance-office corrections, batch admission processing on
+// some days and not others) so it's actually visible at chart scale, the
+// way the shadcn reference chart's own (highly variable, independent-per-
+// day) data is.
 function generateDailySeries(endValue: number, days: number, seed: number): number[] {
   const rand = seededRandom(seed);
-  const monthlyGrowth = endValue * 0.018;
-  const dailyGrowth = monthlyGrowth / 30;
+  const startValue = endValue * 0.93;
+  const amplitude = endValue * 0.035;
   const values: number[] = [];
-  let value = endValue - dailyGrowth * days;
   for (let i = 0; i < days; i++) {
-    value += dailyGrowth + (rand() - 0.5) * dailyGrowth * 6;
-    values.push(Math.round(value));
+    const trend = startValue + ((endValue - startValue) * i) / (days - 1);
+    const noise = (rand() - 0.5) * 2 * amplitude;
+    values.push(Math.round(trend + noise));
   }
   // Anchor the last point exactly to the campus's known current headcount.
   values[values.length - 1] = endValue;
