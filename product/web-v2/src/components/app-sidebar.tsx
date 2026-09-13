@@ -78,7 +78,7 @@ export function AppSidebar({ viewer }: { viewer: Viewer }) {
       <SidebarContent>
         {visibleGroups.map((group) => (
           <SidebarGroup key={group.label || "root"}>
-            {group.label ? <SidebarGroupLabel>{group.label}</SidebarGroupLabel> : null}
+            {group.label ? <SidebarGroupLabel className="label-eyebrow text-sidebar-foreground/60">{group.label}</SidebarGroupLabel> : null}
             <SidebarGroupContent>
               <SidebarMenu>
                 {group.items.map((item) => {
@@ -88,6 +88,7 @@ export function AppSidebar({ viewer }: { viewer: Viewer }) {
                       <SidebarMenuButton
                         isActive={isActive}
                         tooltip={item.label}
+                        className="rounded-sm"
                         render={<Link href={item.href} />}
                       >
                         <item.icon />

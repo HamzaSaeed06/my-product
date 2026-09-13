@@ -14,7 +14,7 @@ export interface StatEntry {
 // label, plain number, no icon competing with the figure for attention.
 export function StatStrip({ entries }: { entries: StatEntry[] }) {
   return (
-    <div className="grid grid-cols-2 divide-y divide-border rounded-lg border border-border bg-card sm:grid-cols-4 sm:divide-x sm:divide-y-0">
+    <div className="surface-ring grid grid-cols-2 divide-y divide-border rounded-lg bg-card sm:grid-cols-4 sm:divide-x sm:divide-y-0">
       {entries.map((entry) => (
         <div key={entry.label} className="flex flex-col gap-1.5 p-4">
           <span className={cn("text-xs font-medium", entry.tone === "signal" ? "text-signal-foreground" : "text-muted-foreground")}>

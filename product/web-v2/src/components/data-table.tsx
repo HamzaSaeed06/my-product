@@ -93,7 +93,7 @@ export function DataTable<TData, TValue>({
         </DropdownMenu>
       </div>
 
-      <div className="overflow-x-auto rounded-lg border border-border">
+      <div className="surface-ring overflow-x-auto rounded-lg">
         <Table>
           <TableHeader>
             {table.getHeaderGroups().map((headerGroup) => (

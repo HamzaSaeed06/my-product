@@ -1,5 +1,48 @@
 # web-v2 Progress
 
+## 2026-09-13 — Exact Vercel tokens + per-page architecture (still Phase A)
+
+Third round of feedback the same day: the color-token pivot alone still read as "the same
+architecture and positioning, just one color changed." Two things landed in response:
+
+**1. Exact tokens, not an approximation.** The user supplied Vercel's own extracted design
+tokens (literal hex values, in `@theme`/`:root`/DTCG-JSON form, from a scrape of
+vercel.com). `src/app/globals.css` now defines `--raw-paper-white: #fafafa`,
+`--raw-obsidian: #171717`, `--raw-hairline: #ebebeb`, `--raw-stone: #666666`,
+`--raw-terminal-green: #297a3a` etc. verbatim and maps them into the shadcn semantic slots.
+Also adopted from the source spec exactly: role-based radius (`2px` nav items via
+`rounded-sm` on `SidebarMenuButton`, `6px` cards/buttons, full pill for status), the
+"hairline card" two-ring `box-shadow` technique (`.surface-ring` utility in globals.css,
+applied to Card/StatStrip/DataTable container instead of a plain border), heading weight
+450 instead of 600 (`PageHeader`'s `<h1>`), and the source's own "Eyebrow Label" component
+(Geist Mono, uppercase, 11px, 0.071em tracking) — scoped deliberately to sidebar group
+labels only via a new `.label-eyebrow` utility, not stamped above page content (that would
+be exactly the generic-AI eyebrow tell this project's own docs warn against).
+
+**2. Per-page architecture, not one shell reused everywhere.** This was the substantive
+half of the feedback: every page had the same generic "stack of cards" content shape
+regardless of what the page actually needed. Three pages now have three different
+structures:
+- **Dashboard** (`src/app/dashboard/page.tsx`): tiered layout — `StatStrip`, then a 2:1
+  split of the trend chart beside a new `NeedsAttentionPanel`
+  (`src/app/dashboard/needs-attention-panel.tsx`, ranks campuses by fee shortfall +
+  pending admissions — "who needs me right now," separate from "how does everyone
+  compare"), then the full comparison table.
+- **Student detail** (`src/app/dashboard/students/[studentId]/page.tsx`): rewritten from
+  header-then-stacked-tabs into a sticky 280px identity rail (avatar, status, admission/
+  campus/class facts, guardian contact) beside tabbed content (Overview/Attendance/Fees).
+  The old separate "Guardians" tab folded into the rail — guardian contact is an always-
+  relevant fact, not tab-worthy content that should disappear when another tab is open.
+- **Students list**: unchanged in shape (full-width table + toolbar was already the right
+  answer for "show me the rows").
+
+`DESIGN_SYSTEM.md` and `DESIGN.md` both rewritten again to document the exact sourced
+tokens (with an honest accounting of what's literal vs. what's an added extension — Focus
+Blue, Signal, Danger aren't in Vercel's marketing-page palette, which has no form/status
+concepts to extract) and the "one shape per job" layout principle, so future pages get
+built by asking which of the three existing shapes fits (or a genuinely new fourth one),
+not by copying whichever page is closest.
+
 ## 2026-09-13 — Vercel/Geist system pivot (still Phase A)
 
 User feedback on the first design-rigor pass: it still "tasted the same" — a color/font swap

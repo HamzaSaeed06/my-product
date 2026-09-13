@@ -69,6 +69,12 @@ own house rules — the cream/sand/beige "AI default" body background family.
 5. **Filters must answer the real operational question in one motion.** "This class, this
    section, unpaid fees" is a single compound filter action for staff, not three separate
    trial-and-error steps.
+6. **A page's layout is built for what that page is answering, not reused from whichever
+   other page is closest.** A list, a monitoring dashboard, and an entity-detail page ask
+   different structural questions and get different shapes (full-width table + toolbar;
+   tiered numbers→trend+attention→comparison; sticky identity rail beside tabbed content) —
+   this was a direct correction after review flagged every page sharing the same generic
+   stack-of-cards shell as "the same architecture as the old app, just recolored."
 
 ## Accessibility & Inclusion
 

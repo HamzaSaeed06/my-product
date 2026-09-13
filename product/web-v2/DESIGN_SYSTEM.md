@@ -27,34 +27,35 @@ It is not a marketing site and not a consumer app. Design priorities in order:
 
 ## Color
 
-**Revised 2026-09-13, on explicit direction: follow Vercel's own Geist design system, not
-an invented "brand palette."** The first pass here used a tinted blue-slate "ink" plus an
-amber accent; the user's read was that it still felt like a generic reskin and asked for
-Vercel's actual system specifically — true monochrome, not a colored primary. This is the
-system now. Named tokens (light mode base values, oklch, all zero-chroma unless noted):
+**Revised 2026-09-13, twice, on explicit direction — second revision uses Vercel's own
+extracted tokens verbatim, not an approximation of them.** First pass: a tinted blue-slate
+"ink" plus an amber accent — read as a generic reskin. Second pass: switched to an
+oklch-approximated monochrome palette — still not specific enough. Third and current pass:
+the user supplied the literal extracted design tokens from vercel.com (exact hex values,
+`@theme`/`:root`/DTCG JSON forms) and asked for those exact values, not a re-derivation.
+`--raw-*` tokens in `src/app/globals.css` are those literal values; the table below is where
+they land in the shadcn semantic slots this codebase's components actually consume:
 
-| Token | Value | Role |
+| Raw token (source name, hex) | Semantic slot | Role |
 |---|---|---|
-| `--foreground` / `--primary` | `oklch(0.145 0 0)` | Near-black. Primary buttons, active nav-item text, headings. Zero chroma — not blue-slate, not warm-tinted. |
-| `--background` | `oklch(0.985 0 0)` | Near-white page background, one step darker than `--card`. |
-| `--card` / `--sidebar` (surface) | `oklch(1 0 0)` | Pure white panels — the lightness step from `--background` is the only "lift" cue, no shadow. |
-| `--border` | `oklch(0.9 0 0)` | Hairline borders, zero chroma. This system uses borders, not drop shadows, to separate in-flow content — shadows are reserved for true overlays (Sheet, Popover, Dialog, Dropdown). |
-| `--muted-foreground` | `oklch(0.46 0 0)` | Secondary text, table meta rows, timestamps. |
-| `--ring` | `oklch(0.6 0.19 255)` | **The one saturated color in the whole system** — Vercel's own signature: a vivid blue focus ring against an otherwise grayscale interface. Focus states only, never a background or text color. |
-| `--signal` / `--warning` | `oklch(0.72 0.16 70)` | Amber. Small dot-indicator only (see Components) — "due," "pending," "needs attention." Never a fill or a large surface. |
-| `--success` | `oklch(0.55 0.14 150)` | Dot indicator — paid / present / approved. |
-| `--destructive` | `oklch(0.55 0.21 25)` | Dot indicator, plus destructive-action buttons/confirmations. |
-| `--chart-1..5` | near-black, geist blue, success green, mid-gray, signal amber | Comparison charts (Super Admin cross-campus views) — never rainbow-random. |
+| Obsidian `#171717` | `--foreground`, `--primary` | Primary buttons, active nav-item text, headings. Near-black, not pure `#000` — the source spec is explicit that pure black is reserved for icon/glyph fills only, never text or fills at UI scale. |
+| Paper White `#fafafa` | `--background` | Page canvas, one step darker than `--card`. |
+| Pure White `#ffffff` | `--card`, `--sidebar` | Panels, cards, table containers, sidebar surface. |
+| Hairline `#ebebeb` | `--border` | 1px borders — see the `.surface-ring` utility below for the exact stacked-box-shadow technique the source uses instead of a plain border. |
+| Stone `#666666` | `--muted-foreground` | Secondary text, table meta rows, timestamps, helper copy. |
+| Terminal Green `#297a3a` | `--success` | The source palette's only accent color, explicitly documented there as "not a status color" for their marketing site — adapted here as exactly that (a status color) since this product genuinely needs one, and its logic (a supporting accent, used sparingly) transfers even though its literal marketing role doesn't. |
+| geist blue `oklch(0.6 0.19 255)` | `--ring` | **Not in the extracted marketing tokens** (that scrape only covers the public site, which has no form/focus states to extract) — carried over from Vercel's actual known app/dashboard behavior: a vivid blue focus ring is their real interaction signature. The one saturated color in the whole system; focus states only. |
+| — | `--signal`/`--warning`, `--destructive` | Not in the source palette either (its "0% colorfulness" rule applies to a marketing site with no fee-status/attendance concept). A muted amber and a red were added as the minimum semantic set this product needs (paid/due/overdue, active/inactive) — documented here as an honest extension, not something copied from the source. |
 
-Dark mode inverts to a near-black background/near-white foreground, same zero-chroma
-neutrals throughout, and the geist blue ring brightens slightly for contrast. Full token
-list lives in `src/app/globals.css`; this table is the source of intent, that file is the
-implementation.
+Dark mode has no source extraction (the scrape was light-theme only) — inverted by hand,
+same zero-chroma logic, near-black canvas/near-white ink. Full token list and the exact
+`.surface-ring` shadow value live in `src/app/globals.css`; this table explains intent.
 
-**Explicitly rejected:** a colored/tinted primary of any kind (the previous "ink" blue-slate
-included) — Vercel's own primary is neutral black/white, and that's the point being copied,
-not worked around; gradient washes anywhere; a saturated accent used as a background fill
-instead of a small dot indicator; identical drop-shadow cards as the only surface language.
+**Explicitly rejected:** any tinted/derived approximation of Vercel's palette instead of the
+literal extracted values; a colored/tinted primary of any kind (both prior attempts here
+included); gradient washes anywhere in the product UI (the source's own gradient tokens are
+marked "marketing hero accents only" — correctly out of scope for a records tool); a
+saturated accent used as a background fill instead of a small dot indicator.
 
 ## Typography
 
@@ -80,19 +81,32 @@ Type scale (all sizes map to Tailwind's scale, line-heights tuned for density):
 | Secondary / meta | 12px / 16px | 400, `--muted-ink` |
 | Numeric/tabular (Geist Mono) | 13px / 20px, tabular-nums | 500 |
 
-No ALL-CAPS section eyebrows, no tracked-out micro-labels. Section labels in the sidebar
-use normal case at `--muted-ink`, weight 500.
+**One bounded exception**, sourced directly from the extracted spec's own "Eyebrow Label"
+component (Geist Mono, 11px, uppercase, 0.071em tracking): applied *only* to sidebar group
+labels (`.label-eyebrow` in `globals.css`), never above content sections on a page. The
+generic-AI tell impeccable's own house rules warn against is an eyebrow over every section
+of page content; a small nav-group label is the one place the source system's own convention
+is used as intended (Vercel's own settings sidebars do exactly this), not as a page-content
+decoration.
 
 ## Radius & elevation — varied by role, not uniform
 
-- Inputs, buttons, badges, small controls: `6px`.
-- Cards, table containers, Sheets: `10px`.
-- Popovers, Dropdowns, Dialogs, Alert Dialogs, tooltips (true floating overlays): `12px`
-  **and** the only elements allowed a real drop shadow. Everything docked in the page flow
-  (cards, tables, stat tiles) is separated by a 1px `--line` border instead of a shadow.
+Values are the source spec's own named radii, not a re-derived scale:
+
+- **Nav elements** (sidebar menu buttons): `2px` — the source spec's `--radius-nav`,
+  tighter than everything else because nav items are the most "attached to the page"
+  interactive element.
+- **Cards, buttons, inputs, table containers**: `6px` — `--radius-cards`/`--radius-buttons`.
+- **Status pills/badges**: full pill (`9999px`) — `--radius-pills`.
+- **Popovers, Dropdowns, Dialogs, Alert Dialogs, Sheets, tooltips** (floating overlays):
+  `8-12px` and the only elements allowed a real drop shadow.
+- Everything docked in the page flow (cards, tables, stat tiles) uses the source's own
+  "hairline card" technique instead of a plain CSS border or a shadow: two stacked
+  `box-shadow` rings (`.surface-ring` utility) that render a 1px border which survives any
+  background — this is a literal, sourced technique, not an approximation of one.
 - A row of KPI figures is **one bordered strip divided by hairlines** (like a ledger
   header), not four identical drop-shadow cards side by side, and never a colored
-  left-border stripe as the accent device — tone is carried by the number/icon color alone.
+  left-border stripe as the accent device — tone is carried by the number/figure color alone.
 
 ## Components
 
@@ -108,16 +122,37 @@ use normal case at `--muted-ink`, weight 500.
 - **Stat Strip** — see Radius & elevation below; no icons on stat entries (Vercel's own
   usage/summary numbers are plain label + figure, nothing competing with the number).
 
-## Layout
+## Layout — one shape per job, not one shell reused everywhere
 
+The shell (sidebar + header + `PageHeader`) is shared, deliberately, so pages read as one
+system. What is **not** shared is the shape of the content underneath it — a list, a
+dashboard, and a detail page ask fundamentally different questions of their layout, and
+each one now has an architecture built for its own question rather than a generic
+stack-of-cards applied uniformly (this was the concrete gap flagged in review: "same
+architecture and positioning as the old app, just recolored"):
+
+- **List/table pages** (Students): full-width, no max-width constraint — a compound
+  toolbar (search + filters + column visibility) above one `DataTable`. The layout question
+  here is "show me the rows," so nothing competes with the table for width.
+- **Dashboard/monitoring pages** (Institute overview): a *tiered* layout, not a flat stack.
+  Row 1 is the `StatStrip` (the numbers, at a glance). Row 2 splits 2:1 — a trend chart
+  ("how are we tracking over time") beside a `NeedsAttentionPanel` ("which campus needs me
+  right now," ranked, not alphabetical) — two different questions side by side, each in the
+  component built for it, not one table trying to answer both. Row 3 is the full
+  campus-comparison table, a third, separate question ("how does every campus stack up").
+- **Detail/drill-down pages** (Student detail): a **rail + main** split (`280px` sticky rail
+  + flex-1 content), not a header-then-stacked-tabs layout. Identity/context facts (name,
+  status, admission number, campus, guardian) live in the rail because they're not
+  "content" that a tab should hide — they're the frame the content sits inside, and they
+  stay visible no matter which tab is open. The old design's separate "Guardians" tab folded
+  into the rail once guardian contact was recognized as exactly this kind of always-relevant
+  fact, not tab-worthy content.
 - Sidebar: fixed 240px expanded / 56px icon-only on narrow viewports, grouped by
   role-relevant module (mirrors the permission-driven grouping already proven in
   `product/web`'s sidebar, rebuilt on shadcn's `Sidebar` primitive).
-- Content max-width is **not** constrained on list/table screens — dense grids use the
-  full viewport. Forms and detail panels do get a readable max-width (~720px) since prose
-  and form fields, unlike tables, get harder to scan when stretched full-width.
-- Consistent page header pattern: title + one-line context + primary action(s) aligned
-  right, same slot on every screen.
+
+Before adding any new page, ask which of these three questions (or a genuinely new fourth
+shape) the page is actually answering — don't default to whichever of the above is closest.
 
 ## Anti-patterns explicitly avoided in this system
 
