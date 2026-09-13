@@ -2974,6 +2974,23 @@ code/docs themselves.
 - **No source changes this entry** — verification only, logged so a different agent doesn't redo this
   check from the stale audit doc.
 
+### 2026-09-13 (be) — Compliance-audit Task 2 (Homework/Assessments 500 for Incharge) re-verified: already fixed, closed a real test gap
+
+- (ba)'s C2 fix already closed this — but as a **backend** change (`resolveSectionScopeFilter` in
+  `scope.ts` now resolves an Incharge's scope to `{ sectionId: { in } }` instead of throwing
+  `SECTION_REQUIRED`), not the frontend section-picker the audit assumed was needed. Confirmed by
+  reading both `homework/controller.ts` and `assessments/controller.ts`: both call
+  `resolveSectionScopeFilter(profile, query.sectionId)` identically, so the one shared fix covers both.
+  Confirmed `homework/page.tsx` and `assessments/page.tsx` both already fetch their list endpoint
+  unconditionally with no `sectionId` and no client-side picker gate — zero frontend changes needed.
+- **Real gap found:** `scope-enforcement.test.ts` had a regression test proving the no-`sectionId`
+  Incharge case for Homework, but none for Assessments, even though the audit named both pages
+  explicitly. Added `"lists assessments across their scope without a sectionId (no 500), scoped
+  correctly"` to the same `describe("Incharge — sees only scoped data", ...)` block, mirroring the
+  Homework case: creates an in-scope and an out-of-scope `Assessment`, asserts the Incharge's unscoped
+  list contains the former and not the latter.
+- Ran `scope-enforcement.test.ts`: **20/20 passing** (was 19/19 before this entry).
+
 ### 2026-09-12 (ai) — Phase 11 Phase A (campus-scoping) implementation plan written; docs/archive deleted
 
 - User asked "what's next" after (ah)'s seed change. Sized up Phase A (removing `PRINCIPAL`/`OFFICE` from

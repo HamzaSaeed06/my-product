@@ -330,5 +330,45 @@ describe("Phase 7 scope enforcement (real database)", () => {
 
       await prisma.homework.deleteMany({ where: { id: { in: [hwIn.id, hwOut.id] } } }).catch(() => {});
     });
+
+    // Regression: GET /assessments with no sectionId goes through the exact
+    // same resolveSectionScopeFilter path as Homework — proving the shared
+    // fix covers Assessments too, not just Homework (the audit named both).
+    it("lists assessments across their scope without a sectionId (no 500), scoped correctly", async () => {
+      const [asIn, asOut] = await Promise.all([
+        prisma.assessment.create({
+          data: {
+            subjectId,
+            sectionId: sectionInId,
+            classId: classInId,
+            academicYearId,
+            teacherId,
+            title: `AS In ${suffix}`,
+            totalMarks: 100,
+            assessmentDate: new Date("2026-09-20"),
+          },
+        }),
+        prisma.assessment.create({
+          data: {
+            subjectId,
+            sectionId: sectionOutId,
+            classId: classOutId,
+            academicYearId,
+            teacherId: teacherOutId,
+            title: `AS Out ${suffix}`,
+            totalMarks: 100,
+            assessmentDate: new Date("2026-09-20"),
+          },
+        }),
+      ]);
+
+      const res = await inchargeClient.get(`/api/v1/assessments`);
+      expect(res.status).toBe(200);
+      const ids = res.body.map((a: { id: string }) => a.id);
+      expect(ids).toContain(asIn.id);
+      expect(ids).not.toContain(asOut.id);
+
+      await prisma.assessment.deleteMany({ where: { id: { in: [asIn.id, asOut.id] } } }).catch(() => {});
+    });
   });
 });
