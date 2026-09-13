@@ -88,7 +88,7 @@ export function AppSidebar({ viewer }: { viewer: Viewer }) {
                       <SidebarMenuButton
                         isActive={isActive}
                         tooltip={item.label}
-                        className="rounded-sm"
+                        className="rounded-[var(--nav-radius)]"
                         render={<Link href={item.href} />}
                       >
                         <item.icon />

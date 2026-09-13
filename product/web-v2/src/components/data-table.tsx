@@ -101,7 +101,7 @@ export function DataTable<TData, TValue>({
         </DropdownMenu>
       </div>
 
-      <div className="surface-ring overflow-x-auto rounded-lg">
+      <div className="surface-ring overflow-x-auto rounded-[var(--card-radius)]">
         <Table>
           <TableHeader>
             {table.getHeaderGroups().map((headerGroup) => (

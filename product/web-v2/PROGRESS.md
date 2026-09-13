@@ -1,5 +1,34 @@
 # web-v2 Progress
 
+## 2026-09-13 — Second design system added: "Ventriloc"
+
+Second pasted design system (exact tokens from a scrape of ventriloc.ca) added as a second
+entry in the switcher — editorial/warm-paper register, distinctly different from
+vercel-geist: Ash-gray (`#efefef`) page canvas with white cards that float via color
+contrast alone (their own spec: no shadows, no borders — "surface color does the lifting"),
+sharp `0px` buttons, large `20px` card corners, a fully pill-shaped (`200px`) nav radius,
+Space Grotesk substituting for their PolySans (not a licensable web font) at headings, Inter
+for body, and exactly one true accent color (Ember Orange `#ff682c`) — their spec explicitly
+bans blue/green, so unlike vercel-geist's blue focus ring, this theme's interactive
+emphasis (focus ring included) runs through Ember Orange instead. Brass (`#816729`) and one
+small added muted red cover this product's "success"/"danger" dot-indicator needs, which a
+marketing-site source has no equivalent concept for (documented in `globals.css` as an
+honest extension, same pattern as vercel-geist's added Signal/Danger).
+
+**Structural change needed to support this**: card radius, button radius, nav radius, and
+the font stack were previously *not* theme-switchable — `--radius-sm/md/lg/xl/2xl` were
+hardcoded pixel literals in `@theme inline`, and fonts were hardcoded to the Geist
+variables. Introduced dedicated `--card-radius` / `--button-radius` / `--nav-radius` /
+`--theme-font-sans` / `--theme-font-mono` / `--theme-font-heading` custom properties,
+defined per `[data-theme]` block, and pointed `Card`, `Button`, the sidebar nav item,
+`StatStrip`, and the `DataTable` container at them (`rounded-[var(--card-radius)]` etc.)
+instead of the shared `rounded-lg`/`rounded-md` Tailwind scale — that shared scale stays
+untouched across themes deliberately, since `rounded-lg`/`rounded-md` are also used by many
+other components (Input, Popover, Select, Dropdown, Tabs, ...) where remapping them
+per-theme would have caused unrelated collateral sizing changes. **Any future design
+system's radius/font signature should hook into these same dedicated variables, not by
+touching the shared radius scale.**
+
 ## 2026-09-13 — Design-system switcher (top-right) for comparing multiple pasted designs
 
 The user is pasting in more than one design system to compare live before picking a

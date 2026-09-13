@@ -7,9 +7,9 @@
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-  --font-heading: var(--font-geist-sans);
+  --font-sans: var(--theme-font-sans);
+  --font-mono: var(--theme-font-mono);
+  --font-heading: var(--theme-font-heading);
   --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
@@ -81,6 +81,10 @@
   --raw-obsidian: #171717;
   --raw-terminal-green: #297a3a;
 
+  --theme-font-sans: var(--font-geist-sans);
+  --theme-font-mono: var(--font-geist-mono);
+  --theme-font-heading: var(--font-geist-sans);
+
   --background: var(--raw-paper-white);
   --foreground: var(--raw-obsidian);
   --card: var(--raw-pure-white);
@@ -111,6 +115,9 @@
   --chart-4: var(--raw-smoke);
   --chart-5: oklch(0.72 0.16 70);
   --radius: 6px;
+  --card-radius: 6px;
+  --button-radius: 6px;
+  --nav-radius: 2px;
   --shadow-hairline: 0 0 0 1px rgba(0, 0, 0, 0.08), 0 0 0 2px var(--background);
   --shadow-hairline-flat: 0 0 0 1px var(--raw-hairline);
   --sidebar: var(--raw-pure-white);
@@ -181,6 +188,110 @@
   --sidebar-ring: oklch(0.68 0.18 255);
 }
 
+/*
+ * "ventriloc" theme — second pasted design system (exact tokens from a
+ * scrape of ventriloc.ca), added as a second entry in the top-right design
+ * switcher (src/lib/themes.ts) rather than replacing vercel-geist above.
+ * Editorial/warm-paper register: Ash-gray page canvas with white cards
+ * floating via color contrast alone (their own spec: "no shadow — surface
+ * color does the lifting"), sharp 0px buttons, large 20px card corners, a
+ * fully pill-shaped nav radius, PolySans-at-weight-400 for headings
+ * (substituted with Space Grotesk — PolySans itself isn't a licensable web
+ * font) and Inter for body, and exactly one true accent (Ember Orange) —
+ * their own spec explicitly bans introducing blue/green, so unlike
+ * vercel-geist's blue focus ring, interactive emphasis here runs through
+ * Ember Orange instead. Brass and a minimal added muted red cover the
+ * "success"/"danger" dot-indicator roles this product needs that the
+ * source (a marketing site) has no equivalent concept for.
+ */
+[data-theme="ventriloc"] {
+  --raw-graphite: #202020;
+  --raw-canvas-white: #ffffff;
+  --raw-ash: #efefef;
+  --raw-fog: #f5f5f5;
+  --raw-ivory: #ebe6dd;
+  --raw-steel: #4d4d4d;
+  --raw-slate: #828282;
+  --raw-mist: #e8e8e8;
+  --raw-ember: #ff682c;
+  --raw-brass: #816729;
+
+  --theme-font-sans: var(--font-inter);
+  --theme-font-mono: var(--font-geist-mono);
+  --theme-font-heading: var(--font-space-grotesk);
+
+  --background: var(--raw-ash);
+  --foreground: var(--raw-graphite);
+  --card: var(--raw-canvas-white);
+  --card-foreground: var(--raw-graphite);
+  --popover: var(--raw-canvas-white);
+  --popover-foreground: var(--raw-graphite);
+  --primary: var(--raw-graphite);
+  --primary-foreground: var(--raw-canvas-white);
+  --secondary: var(--raw-fog);
+  --secondary-foreground: var(--raw-graphite);
+  --muted: var(--raw-fog);
+  --muted-foreground: var(--raw-slate);
+  --accent: var(--raw-ivory);
+  --accent-foreground: var(--raw-graphite);
+  --destructive: oklch(0.5 0.18 25);
+  --border: var(--raw-mist);
+  --input: var(--raw-mist);
+  --ring: var(--raw-ember);
+  --signal: var(--raw-ember);
+  --signal-foreground: #7a3010;
+  --success: var(--raw-brass);
+  --success-foreground: var(--raw-canvas-white);
+  --warning: var(--raw-ember);
+  --warning-foreground: #7a3010;
+  --chart-1: var(--raw-graphite);
+  --chart-2: var(--raw-ember);
+  --chart-3: var(--raw-brass);
+  --chart-4: var(--raw-slate);
+  --chart-5: var(--raw-steel);
+  --card-radius: 20px;
+  --button-radius: 0px;
+  --nav-radius: 200px;
+  /* The source spec is explicit: no shadows, no borders on cards — depth
+     comes from the Ash-vs-white surface contrast alone. */
+  --shadow-hairline: none;
+  --shadow-hairline-flat: 0 0 0 1px var(--raw-mist);
+  --sidebar: var(--raw-canvas-white);
+  --sidebar-foreground: var(--raw-graphite);
+  --sidebar-primary: var(--raw-graphite);
+  --sidebar-primary-foreground: var(--raw-canvas-white);
+  --sidebar-accent: var(--raw-ivory);
+  --sidebar-accent-foreground: var(--raw-graphite);
+  --sidebar-border: var(--raw-mist);
+  --sidebar-ring: var(--raw-ember);
+}
+
+[data-theme="ventriloc"].dark {
+  --background: #171717;
+  --foreground: var(--raw-ash);
+  --card: #202020;
+  --card-foreground: var(--raw-ash);
+  --popover: #202020;
+  --popover-foreground: var(--raw-ash);
+  --primary: var(--raw-ash);
+  --primary-foreground: #171717;
+  --secondary: #262626;
+  --secondary-foreground: var(--raw-ash);
+  --muted: #262626;
+  --muted-foreground: var(--raw-slate);
+  --accent: #2b2620;
+  --accent-foreground: var(--raw-ash);
+  --border: rgba(255, 255, 255, 0.12);
+  --input: rgba(255, 255, 255, 0.12);
+  --sidebar: #202020;
+  --sidebar-foreground: var(--raw-ash);
+  --sidebar-primary: var(--raw-ash);
+  --sidebar-primary-foreground: #171717;
+  --sidebar-accent: #2b2620;
+  --sidebar-accent-foreground: var(--raw-ash);
+  --sidebar-border: rgba(255, 255, 255, 0.12);
+}
+
 @layer base {
   * {
     @apply border-border outline-ring/50;
@@ -195,7 +306,7 @@
 
 @layer utilities {
   .tabular {
-    font-family: var(--font-geist-mono);
+    font-family: var(--theme-font-mono);
     font-variant-numeric: tabular-nums;
   }
 

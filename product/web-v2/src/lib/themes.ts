@@ -9,6 +9,9 @@ export interface ThemeOption {
   label: string;
 }
 
-export const THEMES: ThemeOption[] = [{ id: "vercel-geist", label: "Vercel Geist" }];
+export const THEMES: ThemeOption[] = [
+  { id: "vercel-geist", label: "Vercel Geist" },
+  { id: "ventriloc", label: "Ventriloc" },
+];
 
 export const DEFAULT_THEME = THEMES[0].id;
