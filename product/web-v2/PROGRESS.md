@@ -1,5 +1,29 @@
 # web-v2 Progress
 
+## 2026-09-13 — Data-correctness and filter fixes on the Students list (still Phase A)
+
+Fourth round of same-day feedback:
+
+- **Needs Attention panel reverted to the single-Card list** (the prior "gallery of mini
+  cards" redesign was a misread of the feedback) — the actual ask was just that its height
+  didn't match the enrollment chart card beside it. Added `h-full`; grid's default
+  `align-items: stretch` now equalizes both cards' height in their 2:1 row.
+- **Graduated students no longer appear in the Students list by default.** They're
+  operationally irrelevant to daily work (attendance, fees, homework don't apply to them)
+  and were just noise mixed into the roster. Added a Status filter
+  (`src/app/dashboard/students/student-filters.tsx`) — "Active & inactive" (default,
+  excludes graduated), "Active only," "Inactive only," "Graduated" — so graduated students
+  are one explicit choice away (an alumni report, a transcript request) instead of always
+  visible.
+- **Added a Campus filter** (Combobox) — the list spans 4 campuses and had no way to
+  scope by one, a real gap for a Super Admin viewing across campuses.
+- **Class and Section split into two separate table columns** — they were combined into
+  one `"Grade 3 - B"` string column, which also blocked sorting/filtering on either
+  independently.
+- **Numeric-column alignment made consistent**: Attendance (Students table) is now
+  right-aligned with Geist Mono figures, matching the convention `CampusesOverviewTable`
+  already used — previously only one of the two tables right-aligned its numbers.
+
 ## 2026-09-13 — Exact Vercel tokens + per-page architecture (still Phase A)
 
 Third round of feedback the same day: the color-token pivot alone still read as "the same

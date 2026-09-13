@@ -8,18 +8,20 @@ import type { Student } from "@/lib/mock/students";
 import { StudentRowActions } from "./student-row-actions";
 import { StudentStatusPopover } from "./student-status-popover";
 
-function sortableHeader(label: string) {
+function sortableHeader(label: string, align: "left" | "right" = "left") {
   return function Header({ column }: { column: { toggleSorting: (asc: boolean) => void; getIsSorted: () => false | "asc" | "desc" } }) {
     return (
-      <Button
-        variant="ghost"
-        size="sm"
-        className="-ml-3 h-8 gap-1.5"
-        onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
-      >
-        {label}
-        <ArrowUpDown className="size-3.5" />
-      </Button>
+      <div className={align === "right" ? "flex justify-end" : undefined}>
+        <Button
+          variant="ghost"
+          size="sm"
+          className={align === "right" ? "-mr-3 h-8 gap-1.5" : "-ml-3 h-8 gap-1.5"}
+          onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
+        >
+          {label}
+          <ArrowUpDown className="size-3.5" />
+        </Button>
+      </div>
     );
   };
 }
@@ -36,6 +38,9 @@ const FEE_STATUS_LABEL: Record<Student["feeStatus"], string> = {
   OVERDUE: "Overdue",
 };
 
+// Numeric/tabular columns align right and use Geist Mono, consistently
+// with every other table in this build (CampusesOverviewTable included) —
+// text columns (names, classes, statuses) stay left-aligned.
 export const studentColumns: ColumnDef<Student>[] = [
   {
     accessorKey: "fullName",
@@ -54,10 +59,14 @@ export const studentColumns: ColumnDef<Student>[] = [
     meta: { label: "Campus" },
   },
   {
-    id: "class_section",
+    accessorKey: "className",
     header: "Class",
     meta: { label: "Class" },
-    accessorFn: (row) => `${row.className} - ${row.section}`,
+  },
+  {
+    accessorKey: "section",
+    header: "Section",
+    meta: { label: "Section" },
   },
   {
     accessorKey: "guardianName",
@@ -72,9 +81,9 @@ export const studentColumns: ColumnDef<Student>[] = [
   },
   {
     accessorKey: "attendancePct",
-    header: sortableHeader("Attendance"),
+    header: sortableHeader("Attendance", "right"),
     meta: { label: "Attendance" },
-    cell: ({ row }) => <span className="font-mono tabular-nums">{row.original.attendancePct}%</span>,
+    cell: ({ row }) => <div className="text-right font-mono tabular-nums">{row.original.attendancePct}%</div>,
   },
   {
     accessorKey: "feeStatus",
