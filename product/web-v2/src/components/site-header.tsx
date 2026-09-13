@@ -11,6 +11,7 @@ import {
   DropdownMenuLabel,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { CampusScopePicker } from "@/components/campus-scope-picker";
 import type { Viewer } from "@/lib/mock/session";
 
 function initials(fullName: string): string {
@@ -29,7 +30,7 @@ export function SiteHeader({ viewer }: { viewer: Viewer }) {
         {viewer.scope ? (
           <span className="text-sm text-muted-foreground">{viewer.scope.campusName}</span>
         ) : (
-          <span className="text-sm text-muted-foreground">All campuses</span>
+          <CampusScopePicker />
         )}
       </div>
 

@@ -1,5 +1,36 @@
 # web-v2 Progress
 
+## 2026-09-13 — Design-rigor revision pass (still Phase A)
+
+Ran the `impeccable` skill against the Phase A demo per user feedback. Wrote
+`PRODUCT.md` and `DESIGN.md` (the skill's own project-context files — read these first;
+`DESIGN_SYSTEM.md` is this project's own prose reference, `DESIGN.md` is the
+impeccable-tooling-readable version of the same system, keep both in sync on future
+changes). Concrete changes from that pass:
+
+- **Typography swapped Geist Sans / Geist Mono** for IBM Plex Sans/Mono, per explicit user
+  request (also matches `docs/PRODUCT_SPEC.md` Section 9's named references — Stripe,
+  Linear, Vercel, shadcn/ui all converge on this pairing).
+- **Fixed an actual anti-pattern violation**: the original `StatTile` used a 3px colored
+  `border-left` as the accent device — this is an explicit banned pattern (side-stripe
+  borders). Replaced with `StatStrip` (`src/components/stat-tile.tsx`): one bordered panel
+  divided by hairlines, tone carried by the number/icon color only.
+- **`muted-foreground` darkened** (oklch L 0.5 → 0.46) for safer body-text contrast against
+  `--background`.
+- **Students list filters are now genuinely compound**: Class + Section (both Combobox) +
+  Fee status (Select) + search, all AND-composed in one toolbar row, with a "Clear filters"
+  action and a live "N of 214" count — answers "this class, this section, unpaid fees" in
+  one pass instead of three separate trial-and-error steps.
+- **Added a campus-scope picker** to the header (`src/components/campus-scope-picker.tsx`)
+  — a concrete instance of the Section 7 multi-campus-scoping requirement, defaults to "All
+  campuses" for the mocked Super Admin viewer.
+
+Not done in this pass: `.impeccable/design.json` sidecar (only matters for impeccable's
+live in-browser variant panel, which isn't in use this session — regenerate it if `live`
+mode gets used later). No new pages were added — this pass only revised the existing 4
+demo screens + shell, staying inside Phase A's scope.
+
+
 Self-documenting log so a different session/agent can resume without this conversation's
 context. Update this file as work continues — current phase, what's done, what's pending.
 

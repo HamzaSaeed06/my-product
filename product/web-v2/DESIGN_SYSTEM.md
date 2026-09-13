@@ -44,15 +44,16 @@ as the only surface language.
 
 ## Typography
 
-Two typefaces, both loaded once, both earning their place:
+Two typefaces, both loaded once, both earning their place — matching the named references
+in `docs/PRODUCT_SPEC.md` Section 9 (Stripe, Linear, Vercel, shadcn/ui all converge on this
+exact pairing, for the same reason: it disappears into the data instead of performing):
 
-- **IBM Plex Sans** — all UI text: labels, body, headings. Chosen over the default
-  Inter-everywhere look for a slightly more institutional, technical character that suits
-  a records-and-forms product, while staying highly legible at small sizes.
-- **IBM Plex Mono** — reserved for anything tabular/referential: money amounts, roll
-  numbers, invoice/reference numbers, dates in table cells, IDs shown for operational
-  reasons. This is a deliberate, functional split (numbers align and scan better in a
-  monospace column), not decoration.
+- **Geist Sans** — all UI text: labels, body, headings. Neutral, technical, highly legible
+  at small sizes, with none of the personality a records tool doesn't need.
+- **Geist Mono** — reserved for anything tabular/referential: money amounts, admission
+  numbers, dates in table cells, reference numbers. This is a deliberate, functional split
+  (numbers align and scan better in a monospace column, and a ledger reads as a ledger when
+  its numbers look like typed figures), not decoration.
 
 Type scale (all sizes map to Tailwind's scale, line-heights tuned for density):
 
@@ -63,7 +64,7 @@ Type scale (all sizes map to Tailwind's scale, line-heights tuned for density):
 | Card/table title | 13px / 18px | 600, `--muted-ink` |
 | Body / table cell | 13.5px / 20px | 400 |
 | Secondary / meta | 12px / 16px | 400, `--muted-ink` |
-| Numeric/tabular (Plex Mono) | 13px / 20px, tabular-nums | 500 |
+| Numeric/tabular (Geist Mono) | 13px / 20px, tabular-nums | 500 |
 
 No ALL-CAPS section eyebrows, no tracked-out micro-labels. Section labels in the sidebar
 use normal case at `--muted-ink`, weight 500.
@@ -75,8 +76,9 @@ use normal case at `--muted-ink`, weight 500.
 - Popovers, Dropdowns, Dialogs, Alert Dialogs, tooltips (true floating overlays): `12px`
   **and** the only elements allowed a real drop shadow. Everything docked in the page flow
   (cards, tables, stat tiles) is separated by a 1px `--line` border instead of a shadow.
-- Stat tiles use a 3px left border in a semantic color (ink/signal/success/danger)
-  rather than a colored icon chip on every tile — avoids "identical rounded card ×4."
+- A row of KPI figures is **one bordered strip divided by hairlines** (like a ledger
+  header), not four identical drop-shadow cards side by side, and never a colored
+  left-border stripe as the accent device — tone is carried by the number/icon color alone.
 
 ## Layout
 

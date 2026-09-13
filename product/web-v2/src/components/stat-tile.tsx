@@ -1,42 +1,43 @@
-import { cn } from "@/lib/utils";
 import { ArrowDownRight, ArrowUpRight, type LucideIcon } from "lucide-react";
+import { cn } from "@/lib/utils";
 
-interface StatTileProps {
+export interface StatEntry {
   label: string;
   value: string | number;
   icon: LucideIcon;
   deltaPercent?: number | null;
-  accent?: "ink" | "signal" | "success" | "danger";
+  tone?: "neutral" | "signal";
 }
 
-const ACCENT_BORDER: Record<NonNullable<StatTileProps["accent"]>, string> = {
-  ink: "border-l-primary",
-  signal: "border-l-signal",
-  success: "border-l-success",
-  danger: "border-l-destructive",
-};
-
-export function StatTile({ label, value, icon: Icon, deltaPercent, accent = "ink" }: StatTileProps) {
+// A single bordered strip divided by hairlines, not four identical
+// drop-shadow cards — reads as one ledger header ("here are today's
+// figures, side by side") rather than a repeated SaaS KPI-card template.
+// No colored border stripes: tone is carried by the number/icon color only.
+export function StatStrip({ entries }: { entries: StatEntry[] }) {
   return (
-    <div className={cn("flex flex-col gap-2 rounded-lg border border-border border-l-[3px] bg-card p-4", ACCENT_BORDER[accent])}>
-      <div className="flex items-center justify-between">
-        <span className="text-xs font-medium text-muted-foreground">{label}</span>
-        <Icon className="size-4 text-muted-foreground" />
-      </div>
-      <div className="flex items-baseline gap-2">
-        <span className="font-mono text-2xl font-semibold tabular-nums text-foreground">{value}</span>
-        {deltaPercent != null ? (
-          <span
-            className={cn(
-              "flex items-center gap-0.5 text-xs font-medium",
-              deltaPercent >= 0 ? "text-success" : "text-destructive"
-            )}
-          >
-            {deltaPercent >= 0 ? <ArrowUpRight className="size-3" /> : <ArrowDownRight className="size-3" />}
-            {Math.abs(deltaPercent)}%
-          </span>
-        ) : null}
-      </div>
+    <div className="grid grid-cols-2 divide-y divide-border rounded-lg border border-border bg-card sm:grid-cols-4 sm:divide-x sm:divide-y-0">
+      {entries.map((entry) => (
+        <div key={entry.label} className="flex flex-col gap-1.5 p-4">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-medium text-muted-foreground">{entry.label}</span>
+            <entry.icon className={cn("size-4", entry.tone === "signal" ? "text-signal" : "text-muted-foreground")} />
+          </div>
+          <div className="flex items-baseline gap-2">
+            <span className="font-mono text-2xl font-semibold tabular-nums text-foreground">{entry.value}</span>
+            {entry.deltaPercent != null ? (
+              <span
+                className={cn(
+                  "flex items-center gap-0.5 font-mono text-xs font-medium tabular-nums",
+                  entry.deltaPercent >= 0 ? "text-success" : "text-destructive"
+                )}
+              >
+                {entry.deltaPercent >= 0 ? <ArrowUpRight className="size-3" /> : <ArrowDownRight className="size-3" />}
+                {Math.abs(entry.deltaPercent)}%
+              </span>
+            ) : null}
+          </div>
+        </div>
+      ))}
     </div>
   );
 }

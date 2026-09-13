@@ -1,0 +1,73 @@
+# Product
+
+## Register
+
+product
+
+## Users
+
+Principals (Super Admin / Campus Head), office/admin staff, and teachers at a school,
+academy, coaching center, or training institute — see `docs/PRODUCT_SPEC.md`. They use this
+tool for hours at a stretch, most of the day on desktop, in short bursts on a phone or
+tablet between periods. The job to be done is almost always repetitive and record-keeping
+shaped: mark today's attendance, record a fee payment, look up one student's record, approve
+a leave request — the same handful of tasks, every single day, for months. Super Admin's own
+primary task is different: cross-campus oversight, not data entry (see `PROGRESS.md`).
+
+## Product Purpose
+
+A white-label, single-tenant education-institution management platform (see
+`docs/PRODUCT_SPEC.md`, `docs/ENGINEERING_PRINCIPLES.md`). `product/web-v2` is a from-scratch
+frontend rebuild of `product/web` against the same fixed backend contract (`product/api`),
+built beside the old frontend rather than in place of it. Success for this rebuild
+specifically: every interaction pattern actually matches what the task needs (a quick status
+flip is not a full-page form; a destructive action always confirms; a long list is a real
+data table, not a bare `.map()`), and the visual system reads as a purpose-built records tool,
+not a generic AI-generated admin panel.
+
+## Brand Personality
+
+Three words: **institutional, dense, unhurried-under-load** — it looks like a ledger a
+professional trusts, not a startup's marketing site wearing an admin skin. Named references
+already established for this codebase (`docs/PRODUCT_SPEC.md` Section 9): **Stripe, Linear,
+Vercel, shadcn/ui** — specifically their restraint (no decoration competing with data),
+their confident use of borders/hairlines over shadows, and their willingness to let dense
+information sit dense rather than padding it out for a "clean first impression." Emotional
+goal: staff should feel the tool is fast and won't lose their place, not that it's exciting.
+
+## Anti-references
+
+Explicitly rejected (see `product/web-v2/DESIGN_SYSTEM.md` for the full list, carried over
+from the original rebuild brief): the "generic AI admin panel" family — identical
+soft-shadow rounded cards everywhere as the only surface language; one accent color reused
+for both brand and success; ALL-CAPS tracked-out eyebrow labels above every section; a single
+border-radius applied regardless of element role; gradient washes as decoration; a plain
+`<Select>` used for lists that can run into the hundreds; a Dialog reached for by default
+regardless of whether the interaction is simple or complex (the single biggest thing the old
+`product/web` frontend got wrong, and the reason this rebuild exists). Also explicitly not:
+colorful/childish/over-designed templates (`docs/PRODUCT_SPEC.md` Section 9), and — per this
+skill's own house rules — the cream/sand/beige "AI default" body background family.
+
+## Design Principles
+
+1. **Match the interaction to the task, not the task to a reusable pattern.** A single-field
+   change is a Popover; a row's medium form is a Sheet; a destructive action is an Alert
+   Dialog; a genuinely multi-step flow is a real route with a step indicator. Never default
+   to the easiest-to-reach component.
+2. **Information density done well beats whitespace done safely.** This is a records tool
+   used for hours; a data-dense table with real hierarchy reads as competence here, not as
+   clutter — the failure mode to avoid is sparse "SaaS landing page" padding, not density.
+3. **Every reference to another entity shows its human label, never its raw ID.** A student
+   row shows a name and an admission number a human chose, never a database cuid.
+4. **Long-session legibility over first-impression wow.** Contrast, spacing, and type scale
+   are tuned for someone reading this screen for the fortieth time today, not the first.
+5. **Filters must answer the real operational question in one motion.** "This class, this
+   section, unpaid fees" is a single compound filter action for staff, not three separate
+   trial-and-error steps.
+
+## Accessibility & Inclusion
+
+WCAG AA at minimum (`docs/PRODUCT_SPEC.md`'s own non-negotiables plus the rebuild brief's
+Section 8): visible keyboard focus on every interactive element, color contrast passing AA
+for both body and placeholder text, no layout shift on data load (Skeletons reserve space),
+responsive down to mobile width since teachers and parents also use this on phones.

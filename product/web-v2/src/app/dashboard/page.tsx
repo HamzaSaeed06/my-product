@@ -1,6 +1,6 @@
 import { Building2, GraduationCap, Users, ClipboardList } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { StatTile } from "@/components/stat-tile";
+import { StatStrip, type StatEntry } from "@/components/stat-tile";
 import { CampusEnrollmentChart } from "./campus-enrollment-chart";
 import { CampusesOverviewTable } from "./campuses-overview-table";
 import { mockCampuses, mockTotals, mockEnrollmentTrend } from "@/lib/mock/campuses";
@@ -11,6 +11,13 @@ import { mockCampuses, mockTotals, mockEnrollmentTrend } from "@/lib/mock/campus
 // campus day-to-day, Super Admin's job here is oversight: compare campuses,
 // spot the one that's behind, drill in. It is not where fees get recorded
 // or students get created.
+const STAT_ENTRIES: StatEntry[] = [
+  { label: "Campuses", value: mockTotals.campuses, icon: Building2 },
+  { label: "Students", value: mockTotals.students.toLocaleString(), icon: GraduationCap, deltaPercent: mockTotals.studentsDeltaPct },
+  { label: "Teachers", value: mockTotals.teachers, icon: Users, deltaPercent: mockTotals.teachersDeltaPct },
+  { label: "Pending admissions", value: mockTotals.pendingAdmissions, icon: ClipboardList, tone: "signal" },
+];
+
 export default function DashboardOverviewPage() {
   return (
     <div className="flex flex-col gap-6">
@@ -19,12 +26,7 @@ export default function DashboardOverviewPage() {
         <p className="text-sm text-muted-foreground">Cross-campus monitoring — mock data, Phase A/B demo.</p>
       </div>
 
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <StatTile label="Campuses" value={mockTotals.campuses} icon={Building2} accent="ink" />
-        <StatTile label="Students" value={mockTotals.students.toLocaleString()} icon={GraduationCap} deltaPercent={mockTotals.studentsDeltaPct} accent="success" />
-        <StatTile label="Teachers" value={mockTotals.teachers} icon={Users} deltaPercent={mockTotals.teachersDeltaPct} accent="success" />
-        <StatTile label="Pending admissions" value={mockTotals.pendingAdmissions} icon={ClipboardList} accent="signal" />
-      </div>
+      <StatStrip entries={STAT_ENTRIES} />
 
       <CampusEnrollmentChart data={mockEnrollmentTrend} />
 
