@@ -23,11 +23,11 @@ export function CampusesOverviewTable({ campuses }: { campuses: CampusOverview[]
       <TableHeader>
         <TableRow>
           <TableHead>Campus</TableHead>
-          <TableHead className="text-right">Students</TableHead>
-          <TableHead className="text-right">Teachers</TableHead>
-          <TableHead className="text-right">Pending admissions</TableHead>
-          <TableHead className="text-right">Fee collected</TableHead>
-          <TableHead className="text-right">Attendance today</TableHead>
+          <TableHead>Students</TableHead>
+          <TableHead>Teachers</TableHead>
+          <TableHead>Pending admissions</TableHead>
+          <TableHead>Fee collected</TableHead>
+          <TableHead>Attendance today</TableHead>
           <TableHead className="w-8" />
         </TableRow>
       </TableHeader>
@@ -35,9 +35,9 @@ export function CampusesOverviewTable({ campuses }: { campuses: CampusOverview[]
         {campuses.map((c) => (
           <TableRow key={c.id} className="group">
             <TableCell className="font-medium text-foreground">{c.name}</TableCell>
-            <TableCell className="text-right font-mono tabular-nums">{c.students.toLocaleString()}</TableCell>
-            <TableCell className="text-right font-mono tabular-nums">{c.teachers}</TableCell>
-            <TableCell className="text-right">
+            <TableCell className="font-mono tabular-nums">{c.students.toLocaleString()}</TableCell>
+            <TableCell className="font-mono tabular-nums">{c.teachers}</TableCell>
+            <TableCell>
               <span
                 className={cn(
                   "font-mono tabular-nums",
@@ -47,14 +47,12 @@ export function CampusesOverviewTable({ campuses }: { campuses: CampusOverview[]
                 {c.pendingAdmissions}
               </span>
             </TableCell>
-            <TableCell className="text-right">
-              <span className="inline-flex justify-end">
-                <StatusDot tone={feeTone(c.feeCollectedPct)}>
-                  <span className="font-mono tabular-nums">{c.feeCollectedPct}%</span>
-                </StatusDot>
-              </span>
+            <TableCell>
+              <StatusDot tone={feeTone(c.feeCollectedPct)}>
+                <span className="font-mono tabular-nums">{c.feeCollectedPct}%</span>
+              </StatusDot>
             </TableCell>
-            <TableCell className="text-right font-mono tabular-nums">{c.attendanceTodayPct}%</TableCell>
+            <TableCell className="font-mono tabular-nums">{c.attendanceTodayPct}%</TableCell>
             <TableCell>
               {/* Campus drill-down page lands in Phase B (Institute & Structure batch) — affordance shown now, not wired yet. */}
               <ChevronRight className="ml-auto size-4 text-muted-foreground/40" />

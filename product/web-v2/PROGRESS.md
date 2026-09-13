@@ -1,5 +1,26 @@
 # web-v2 Progress
 
+## 2026-09-13 — Chart rebuilt as gradient area chart + filters; tables left-aligned
+
+Fifth round of same-day feedback, with a reference screenshot of shadcn's own "Area Chart -
+Interactive" example (gradient fill, smooth curve, a range-select control in the header).
+
+- **`CampusEnrollmentChart` rebuilt**: back to an `AreaChart` (not the plain `LineChart` from
+  an earlier round — that was based on a misreading of "seedhi lines," corrected once the
+  actual reference image showed a smooth gradient area chart), `type="natural"` for a smooth
+  curve instead of jagged linear segments between only 6 points, and per-series
+  `linearGradient` fills. Added two header filters (`CardAction` slot): a Campus select
+  (All campuses / one specific — toggles which Area series render) and a Range select (Last
+  3 / 6 months — slices the mock data). **Chart series deliberately skip `--chart-2` (the
+  geist focus-blue)** — this system's own rule is that saturated blue has exactly one job
+  (the focus ring), so the chart uses the other three chart tokens (obsidian/green/gray/
+  amber) instead, never blue.
+- **All tables reverted to left-aligned columns, including numeric ones.** A previous round
+  right-aligned numeric columns for cross-table consistency; explicit correction: consistency
+  should go the other way — every column, in every table, stays left-aligned. Reverted in
+  both `CampusesOverviewTable` (Students/Teachers/Pending admissions/Fee collected/
+  Attendance today) and the Students `DataTable` (Attendance).
+
 ## 2026-09-13 — Data-correctness and filter fixes on the Students list (still Phase A)
 
 Fourth round of same-day feedback:

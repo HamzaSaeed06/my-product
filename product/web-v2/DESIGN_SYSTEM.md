@@ -53,9 +53,12 @@ same zero-chroma logic, near-black canvas/near-white ink. Full token list and th
 
 **Explicitly rejected:** any tinted/derived approximation of Vercel's palette instead of the
 literal extracted values; a colored/tinted primary of any kind (both prior attempts here
-included); gradient washes anywhere in the product UI (the source's own gradient tokens are
-marked "marketing hero accents only" — correctly out of scope for a records tool); a
-saturated accent used as a background fill instead of a small dot indicator.
+included); decorative gradient washes on surfaces/backgrounds/buttons (the source's own
+gradient tokens are marked "marketing hero accents only" — correctly out of scope for a
+records tool); a saturated accent used as a background fill instead of a small dot
+indicator. **Not rejected:** a functional gradient fill under a chart series (see
+`campus-enrollment-chart.tsx`) — that's data encoding, not decoration, and only uses this
+system's own non-reserved chart tokens (never the focus-ring blue).
 
 ## Typography
 

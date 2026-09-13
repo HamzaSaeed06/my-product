@@ -8,20 +8,18 @@ import type { Student } from "@/lib/mock/students";
 import { StudentRowActions } from "./student-row-actions";
 import { StudentStatusPopover } from "./student-status-popover";
 
-function sortableHeader(label: string, align: "left" | "right" = "left") {
+function sortableHeader(label: string) {
   return function Header({ column }: { column: { toggleSorting: (asc: boolean) => void; getIsSorted: () => false | "asc" | "desc" } }) {
     return (
-      <div className={align === "right" ? "flex justify-end" : undefined}>
-        <Button
-          variant="ghost"
-          size="sm"
-          className={align === "right" ? "-mr-3 h-8 gap-1.5" : "-ml-3 h-8 gap-1.5"}
-          onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
-        >
-          {label}
-          <ArrowUpDown className="size-3.5" />
-        </Button>
-      </div>
+      <Button
+        variant="ghost"
+        size="sm"
+        className="-ml-3 h-8 gap-1.5"
+        onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
+      >
+        {label}
+        <ArrowUpDown className="size-3.5" />
+      </Button>
     );
   };
 }
@@ -38,9 +36,8 @@ const FEE_STATUS_LABEL: Record<Student["feeStatus"], string> = {
   OVERDUE: "Overdue",
 };
 
-// Numeric/tabular columns align right and use Geist Mono, consistently
-// with every other table in this build (CampusesOverviewTable included) —
-// text columns (names, classes, statuses) stay left-aligned.
+// Every column stays left-aligned, including numeric ones — the value
+// column, like every other column in this build, reads left to right.
 export const studentColumns: ColumnDef<Student>[] = [
   {
     accessorKey: "fullName",
@@ -81,9 +78,9 @@ export const studentColumns: ColumnDef<Student>[] = [
   },
   {
     accessorKey: "attendancePct",
-    header: sortableHeader("Attendance", "right"),
+    header: sortableHeader("Attendance"),
     meta: { label: "Attendance" },
-    cell: ({ row }) => <div className="text-right font-mono tabular-nums">{row.original.attendancePct}%</div>,
+    cell: ({ row }) => <span className="font-mono tabular-nums">{row.original.attendancePct}%</span>,
   },
   {
     accessorKey: "feeStatus",
