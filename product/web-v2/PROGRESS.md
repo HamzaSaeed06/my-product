@@ -1,5 +1,99 @@
 # web-v2 Progress
 
+## 2026-09-14 — base-ui → Radix UI migration complete (8 steps)
+
+After the mobile-click debugging saga below concluded the real bug was
+dev-server memory pressure (not base-ui), the user still asked for an
+incremental, verifiable base-ui → Radix UI migration — accepted the
+scope/risk after an honest estimate, on the condition it ship **one
+component at a time**, each verified (typecheck/lint/full production
+build/curl checks) and reported before the next, with instant revert
+if anything broke. All 8 steps landed same-day, each its own commit:
+
+1. `a1c6032` — small atoms (Button, Input, Checkbox, Avatar, Separator,
+   Badge, BreadcrumbLink)
+2. `c81576b` — Tooltip, Popover (+ hotfix `700c4ba`: SidebarMenuButton's
+   collapsed-icon tooltip broke because base-ui's own render-prop
+   cloning was nested inside the new Radix-backed TooltipTrigger's own
+   clone — two different polymorphism systems fighting over the same
+   props; fixed by having SidebarMenuButton build its element with this
+   project's own `cloneRender` first, then wrap that single finished
+   element as TooltipTrigger's target — one clone per layer, never two
+   nested)
+3. `f65c4bf` — Dialog, AlertDialog
+4. `96f66ee` — Sheet (+ follow-up feature, `297c967`/`f57a445`/`be6b3c4`:
+   full-width on mobile, drag-to-resize on desktop up to half the
+   viewport, several rounds of handle-visibility polish)
+5. `4fac744` — DropdownMenu
+6. `ad09f75` — Select (the component memory already flagged as fragile
+   — see the dedicated writeup a few sections down)
+7. `bf58c27` — Tabs
+8. `7a9c7d0` — Sidebar's own remaining render-prop components + full
+   base-ui removal from package.json
+
+**Shared infrastructure that made call sites never need to change**:
+`src/lib/render-slot.tsx`'s `cloneRender(render, className, children,
+extraProps)` replaces base-ui's `useRender`/`mergeProps` for this
+codebase's `render={<Element/>}` convention (~90+ call sites across the
+app), by cloning the given element and merging in className/children/
+extra props — used both standalone (Button, Badge, sidebar's
+polymorphic components) and to bridge into Radix's `asChild` pattern
+(`<Radix.Trigger asChild>{cloneRender(render, undefined, children)}
+</Radix.Trigger>`) for every Trigger/Close/Item across Dialog, Sheet,
+Tooltip, Popover, DropdownMenu. **This is why zero page-level files
+needed touching for 7 of the 8 steps** — only the primitives in
+`src/components/ui/*.tsx` changed.
+
+**Recurring conversion pattern, worth reusing for any future primitive
+swap**: base-ui's boolean presence attributes (`data-open`,
+`data-active`, `data-disabled`, `data-horizontal`) become Radix's
+valued ones (`data-[state=open]`, `data-[orientation=horizontal]`) or
+Radix's own bracketed presence form (`data-[disabled]`,
+`data-[inset]`) — never a 1:1 rename, always re-derive from what Radix
+actually emits (checked directly in each `node_modules/@radix-ui/*`
+package source rather than guessing) before touching classNames.
+
+**Real bugs the migration's own typecheck/build passes caught before
+shipping** (worth noting since this is the main evidence the
+step-by-step/verify-every-time discipline paid for itself):
+- `render-slot.tsx` wrongly marked `"use client"` crashed prerendering
+  of every server-rendered page using a render-prop Button (step 1).
+- `AlertDialogCancel` spread `{...props}` (still containing `children`,
+  e.g. "Cancel" text) onto the Radix primitive while ALSO passing an
+  explicit `<Button>` as JSX children — JSX children always win over a
+  `children` key in a spread object, which would have silently dropped
+  every Cancel button's label (step 3).
+- `DropdownMenuItem` used with `render={<Link/>}` in 9 row-actions
+  files wasn't supported by the first pass at all (step 5) —
+  typecheck caught all 9 before build.
+- `DropdownMenuSubContent`'s `side` prop doesn't exist on Radix's
+  SubContent type — submenu direction is automatic there, not
+  configurable (step 5).
+- Two dead-CSS leftovers found only by an explicit whole-app grep after
+  step 8, not by typecheck (invalid Tailwind arbitrary values/selectors
+  don't error, they just silently never match): `nav-user.tsx` still
+  referenced base-ui's `--anchor-width` CSS var (renamed to
+  `--radix-dropdown-menu-trigger-width` in step 5) and a bare
+  `data-open:` selector (Radix DropdownMenuTrigger sets
+  `data-state="open"`, not `data-open`) in both nav-user.tsx and
+  sidebar.tsx's own `sidebarMenuButtonVariants` — silently broke the
+  profile button's "highlighted while its own dropdown is open" visual
+  feedback. **Lesson: after finishing a primitive's `ui/*.tsx`
+  conversion, grep the whole app for that primitive's old CSS var/data-
+  attribute names before considering the step done — consumer-level
+  className overrides are exactly the place a rename doesn't get
+  typechecked.**
+
+**Select's typing needed two failed attempts before landing** (see
+step 6's own note above) — worth remembering as a general TypeScript
+lesson for this project: a callback prop's parameter type is
+*contravariant*, so a generic `<T,>` that still includes `| undefined`
+in the callback signature doesn't help if real call sites' own
+functions don't declare handling undefined — dropping `| undefined`
+from the declared signature (and casting internally, where the
+guarantee actually holds) was what actually fixed it, not making the
+type "more flexible" some other way.
+
 ## 2026-09-14 — Follow-up: SSR/client hydration mismatch in useIsMobile (root cause of "nothing opens on tap")
 
 The two touch-interaction fixes below did not resolve it — user reported the page loads
