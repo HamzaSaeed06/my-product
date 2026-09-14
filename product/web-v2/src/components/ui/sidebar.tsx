@@ -8,6 +8,10 @@ import { cn } from "cn"
 
 import { useIsMobile } from "@/hooks/use-mobile"
 import { cloneRender } from "@/lib/render-slot"
+import {
+  SIDEBAR_COOKIE_NAME,
+  SIDEBAR_COOKIE_MAX_AGE,
+} from "@/lib/sidebar-cookie"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Separator } from "@/components/ui/separator"
@@ -26,8 +30,6 @@ import {
 } from "@/components/ui/tooltip"
 import { PanelLeftIcon } from "lucide-react"
 
-const SIDEBAR_COOKIE_NAME = "sidebar_state"
-const SIDEBAR_COOKIE_MAX_AGE = 60 * 60 * 24 * 7
 const SIDEBAR_WIDTH = "15rem"
 const SIDEBAR_WIDTH_MOBILE = "18rem"
 const SIDEBAR_WIDTH_ICON = "3rem"
@@ -406,8 +408,14 @@ function SidebarGroupLabel({
     defaultTagName: "div",
     props: mergeProps<"div">(
       {
+        // `hidden` (not a fade/negative-margin trick) when collapsed: a
+        // zero-height-but-still-present flex item still gets its own share
+        // of SidebarGroup's `gap-1`, which made the gap between groups'
+        // icons bigger than the gap between icons inside one group. Fully
+        // removing it from flow is the only way to make every icon-to-icon
+        // gap equal in collapsed mode.
         className: cn(
-          "flex h-8 shrink-0 items-center rounded-md px-2 text-xs font-medium text-sidebar-foreground/70 ring-sidebar-ring outline-hidden transition-[margin,opacity] duration-200 ease-linear group-data-[collapsible=icon]:-mt-8 group-data-[collapsible=icon]:opacity-0 focus-visible:ring-2 [&>svg]:size-4 [&>svg]:shrink-0",
+          "flex h-8 shrink-0 items-center rounded-md px-2 text-xs font-medium text-sidebar-foreground/70 ring-sidebar-ring outline-hidden focus-visible:ring-2 group-data-[collapsible=icon]:hidden [&>svg]:size-4 [&>svg]:shrink-0",
           className
         ),
       },

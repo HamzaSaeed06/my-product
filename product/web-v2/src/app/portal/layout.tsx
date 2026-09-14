@@ -1,4 +1,6 @@
+import { cookies } from "next/headers";
 import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar";
+import { SIDEBAR_COOKIE_NAME } from "@/lib/sidebar-cookie";
 import { PortalProvider } from "./portal-context";
 import { PortalSidebar } from "./portal-sidebar";
 import { PortalHeader } from "./portal-header";
@@ -7,10 +9,14 @@ import { PortalHeader } from "./portal-header";
 // SiteHeader-equivalent/main), not a separate visual language — a
 // Teacher/Parent/Student is still the same product, just a different nav
 // keyed by role instead of permission. See PortalSidebar/PortalHeader.
-export default function PortalLayout({ children }: { children: React.ReactNode }) {
+export default async function PortalLayout({ children }: { children: React.ReactNode }) {
+  // Same cookie the dashboard reads back — one sidebar open/collapsed
+  // preference shared across both shells, so it survives a refresh.
+  const sidebarOpen = (await cookies()).get(SIDEBAR_COOKIE_NAME)?.value !== "false";
+
   return (
     <PortalProvider>
-      <SidebarProvider>
+      <SidebarProvider defaultOpen={sidebarOpen}>
         <PortalSidebar />
         <SidebarInset>
           <PortalHeader />
