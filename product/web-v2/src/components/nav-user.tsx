@@ -33,10 +33,7 @@ export function NavUser({ name, subtitle }: { name: string; subtitle?: string })
         <DropdownMenu>
           <DropdownMenuTrigger
             render={
-              <SidebarMenuButton
-                size="lg"
-                className="data-open:bg-sidebar-accent data-open:text-sidebar-accent-foreground"
-              />
+              <SidebarMenuButton className="h-10 data-open:bg-sidebar-accent data-open:text-sidebar-accent-foreground" />
             }
           >
             <Avatar className="size-8 rounded-md">

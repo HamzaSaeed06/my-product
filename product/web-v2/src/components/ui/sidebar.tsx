@@ -329,23 +329,29 @@ function SidebarInput({
   )
 }
 
+// h-14 matches SiteHeader/PortalHeader's own fixed height exactly, so the
+// header's border-b sits level with the main content header's border-b
+// across the whole screen width, instead of the two lines landing at
+// slightly different heights.
 function SidebarHeader({ className, ...props }: React.ComponentProps<"div">) {
   return (
     <div
       data-slot="sidebar-header"
       data-sidebar="header"
-      className={cn("flex flex-col gap-2 border-b border-sidebar-border p-2", className)}
+      className={cn("flex h-14 flex-col justify-center gap-2 border-b border-sidebar-border p-2", className)}
       {...props}
     />
   )
 }
 
+// Same h-14 as SidebarHeader — the top and bottom sidebar blocks read as a
+// matched pair instead of two arbitrarily-sized boxes.
 function SidebarFooter({ className, ...props }: React.ComponentProps<"div">) {
   return (
     <div
       data-slot="sidebar-footer"
       data-sidebar="footer"
-      className={cn("flex flex-col gap-2 border-t border-sidebar-border p-2", className)}
+      className={cn("flex h-14 flex-col justify-center gap-2 border-t border-sidebar-border p-2", className)}
       {...props}
     />
   )

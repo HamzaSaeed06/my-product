@@ -1,5 +1,35 @@
 # web-v2 Progress
 
+## 2026-09-14 — Sidebar header/footer height aligned to the main header; dev server LAN-accessible
+
+Two more items from the same feedback thread:
+
+- **Sidebar header/footer border lines didn't line up with the main content header's own
+  border-bottom** — confirmed a real cause: `SidebarHeader` (logo block) and `SidebarFooter`
+  (user profile) had no fixed height, sizing to their own content (~52-64px depending on
+  padding), while `SiteHeader`/`PortalHeader` are a fixed `h-14` (56px). The three
+  border-b/border-t lines landed at three different heights across the screen. Fixed by
+  giving both `SidebarHeader` and `SidebarFooter` an explicit `h-14 justify-center` (matching
+  the main header exactly) and trimming `AppSidebar`/`PortalSidebar`'s own
+  `px-3 py-3` override to just `px-3` (letting the fixed height + `justify-center` handle
+  vertical centering instead of padding). `NavUser`'s button size was reduced from `lg` (48px)
+  to an explicit `h-10` (40px) so it actually fits inside the now-fixed 56px footer without
+  overflowing. All three horizontal lines (sidebar header, sidebar footer, main header) now
+  share the exact same `h-14` reference and land level with each other.
+- **Dev server made LAN-reachable for mobile preview** — `package.json`'s `dev` script now
+  explicitly passes `--hostname 0.0.0.0` (confirmed the running instance was already bound
+  this way by default, but pinned it for future runs too). Machine's Wi-Fi adapter IP is
+  `192.168.100.5` — reachable from any phone on the same Wi-Fi at
+  `http://192.168.100.5:3200/dashboard` (or `/portal`). If a phone can't connect, the next
+  thing to check is Windows Defender Firewall possibly blocking inbound Node.js/port 3200
+  connections — not something fixable from inside this repo.
+
+Confirmed the nav-group-label capitalization from the previous round was NOT reverted —
+"section names capital rakho" was clarified as wanting normal Title Case (already how
+"People"/"Finance" etc. are written as literal strings), not re-adding the removed
+`text-transform: uppercase`. No code change needed for that part; verified the labels still
+render in their natural Title Case.
+
 ## 2026-09-14 — Sidebar polish round 2: width, missing separators, uppercase labels, spacing consistency
 
 Follow-up feedback right after the first sidebar bug-fix round — five more specific issues,

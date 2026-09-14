@@ -79,7 +79,7 @@ export function PortalSidebar() {
 
   return (
     <Sidebar collapsible="icon">
-      <SidebarHeader className="px-3 py-3">
+      <SidebarHeader className="px-3">
         <div className="flex items-center gap-2.5">
           <div className="flex size-7 shrink-0 items-center justify-center rounded-md bg-primary text-sm font-semibold text-primary-foreground">
             R
