@@ -1,5 +1,36 @@
 # web-v2 Progress
 
+## 2026-09-14 — Follow-up: SSR/client hydration mismatch in useIsMobile (root cause of "nothing opens on tap")
+
+The two touch-interaction fixes below did not resolve it — user reported the page loads
+but *nothing* responds to a tap anywhere ("page khula hua hai, jo click karu khulte hi
+nahi"), which is much broader than the sidebar alone. No browser automation available, so
+this was another code-level audit — this time for anything that could break interactivity
+app-wide rather than a specific component.
+
+Root cause found in `src/hooks/use-mobile.ts`: the hook's initial `useState` read
+`window.innerWidth` eagerly in a lazy initializer. On the server this always evaluates to
+`false` (no `window`), but on a real phone the very first **client** render (during
+hydration, before any effect runs) evaluated it as `true` immediately. `Sidebar` branches
+its entire output on this value — a full-screen `Sheet` dialog on mobile vs. a plain `div`
+on desktop — so server and client produced structurally different DOM for the very first
+paint. React's hydration can generally recover from small mismatches, but a structural
+mismatch this size, this high up (it wraps the whole sidebar *and* the main content area
+via `SidebarProvider`), is consistent with hydration failing hard enough to leave event
+handlers unattached across the affected tree — i.e. the page visually renders (server HTML
+is already there) but taps do nothing, everywhere, exactly as reported.
+
+Fixed by making the hook always start at `false` (matching what the server renders,
+regardless of actual device) and only correcting to the real value a tick later inside a
+`useEffect` — a normal client-side re-render at that point, not a hydration diff. This is
+the same pattern the unmodified upstream shadcn `use-mobile` hook uses; the eager
+window-reading initializer was a pre-existing deviation from that.
+
+Typecheck/lint clean, routes still serve. Root-caused from first principles (hydration
+mismatch is a well-known category for exactly this "loads fine, nothing clickable"
+symptom), but — as with the two fixes below — the actual fix could not be confirmed by
+tapping a real phone screen in this environment. This is the one to re-check first.
+
 ## 2026-09-14 — Two real mobile touch-interaction bugs found and fixed
 
 User reported "kuch click kaam nahi kar raha, interaction nahi ho pa raha" (some clicks
