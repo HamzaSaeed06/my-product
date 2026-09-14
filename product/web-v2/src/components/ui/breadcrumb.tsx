@@ -1,7 +1,6 @@
 import * as React from "react"
-import { mergeProps } from "@base-ui/react/merge-props"
-import { useRender } from "@base-ui/react/use-render"
 import { cn } from "cn"
+import { cloneRender } from "@/lib/render-slot"
 import { ChevronRightIcon, MoreHorizontalIcon } from "lucide-react"
 
 function Breadcrumb({ className, ...props }: React.ComponentProps<"nav">) {
@@ -41,21 +40,21 @@ function BreadcrumbItem({ className, ...props }: React.ComponentProps<"li">) {
 function BreadcrumbLink({
   className,
   render,
+  children,
   ...props
-}: useRender.ComponentProps<"a">) {
-  return useRender({
-    defaultTagName: "a",
-    props: mergeProps<"a">(
-      {
-        className: cn("transition-colors hover:text-foreground", className),
-      },
-      props
-    ),
-    render,
-    state: {
-      slot: "breadcrumb-link",
-    },
-  })
+}: React.ComponentProps<"a"> & { render?: React.ReactElement }) {
+  const classes = cn("transition-colors hover:text-foreground", className)
+  if (render) {
+    return cloneRender(render, classes, children, {
+      "data-slot": "breadcrumb-link",
+      ...props,
+    })
+  }
+  return (
+    <a data-slot="breadcrumb-link" className={classes} {...props}>
+      {children}
+    </a>
+  )
 }
 
 function BreadcrumbPage({ className, ...props }: React.ComponentProps<"span">) {
