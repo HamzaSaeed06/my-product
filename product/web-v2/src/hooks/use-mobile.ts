@@ -12,6 +12,12 @@ export function useIsMobile() {
     const onChange = () => {
       setIsMobile(window.innerWidth < MOBILE_BREAKPOINT)
     }
+    // Sync immediately on mount too, not just on future "change" events —
+    // a hydration race (or the lazy useState initializer reading a stale
+    // window size) can otherwise leave isMobile wrong until the viewport
+    // is resized, which made the sidebar toggle the wrong (desktop) open
+    // state on some phones instead of the mobile drawer state.
+    onChange()
     mql.addEventListener("change", onChange)
     return () => mql.removeEventListener("change", onChange)
   }, [])
