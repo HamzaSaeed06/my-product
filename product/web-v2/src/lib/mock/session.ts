@@ -171,12 +171,36 @@ export const ALL_PERMISSIONS = [
   "cash_closing.approve",
   "payment_gateway.manage",
   "leave.view",
+  "leave.create",
+  "leave.approve",
+  "leave.cancel",
+  // complaint.create is reused for reopen; complaint.assign is reused for
+  // forward and for adding a note — confirmed from routes.ts, not a
+  // separate permission per action the way a typical CRUD module has.
   "complaint.view",
+  "complaint.create",
+  "complaint.assign",
+  "complaint.resolve",
+  "complaint.close",
   "report.view_academic",
   "report.view_attendance",
   "report.view_financial",
   "report.view_admissions",
   "report.view_staff",
+  // Institute Overview is a separate Super-Admin cross-campus dashboard,
+  // explicitly NOT part of the Report Center — its own permission, not a
+  // report.view_* key.
+  "institute.monitor",
+  // Immutable by design in the real backend (no create/update/delete
+  // routes exist or ever should) — view-only.
+  "audit.view",
+  "role.create",
+  "role.edit",
+  "role.archive",
+  // The permission-matrix save action — deliberately separate from
+  // role.edit (which only renames/describes a role), confirmed from
+  // routes.ts.
+  "role.assign_permissions",
 ];
 
 // Demo viewer for the design-review phase: Super Admin, full permission set.

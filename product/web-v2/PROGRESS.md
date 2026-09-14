@@ -1,5 +1,65 @@
 # web-v2 Progress
 
+## 2026-09-14 — Operations & Governance complete (Phase B, batch 7) — a genuinely new interaction shape
+
+Leaves, Complaints, Reports (hub + 5 sub-reports), Audit Log, Roles & Permissions, License
+Status — the second-to-last Phase B batch. Only Portals remain after this.
+
+- **Leaves** (`/dashboard/leaves`) — student or teacher requests, maker-checker
+  (Approve/Reject/Cancel) plus a **Forward** action unique to this module (student leaves
+  only — Incharge hands the decision to the section's class teacher instead of deciding it).
+  A past-dated request is flagged "(retrospective)" automatically.
+- **Complaints** (`/dashboard/complaints` + `/dashboard/[complaintId]`) — confirmed NOT a
+  simple maker-checker like Discounts/Waivers/Refunds; it's a genuine 5-state ticket
+  workflow (Open → Assigned → In progress → Resolved → Closed) with reopen and forward
+  along the way, plus an append-only notes thread. Closest existing analog to a real
+  support-ticket system anywhere in this project.
+- **Reports** (`/dashboard/reports` hub + `academic`/`attendance`/`financial`/`admissions`/
+  `staff`) — confirmed a **fixed, pre-built report set, deliberately not a report builder**
+  (an explicit real-backend code comment says so). Every figure is computed live from
+  records already built in earlier batches (Results, Attendance, Invoices/Payments/Refunds,
+  Admissions, Teacher Attendance + Leaves for Staff) — no separate "reports data" mock file,
+  matching the real backend's own "no persistence" behavior. Each report shares the same
+  shape: `StatStrip` summary → breakdown list → CSV export. **New shared pieces**:
+  `src/lib/export-csv.ts` (a real client-side Blob-based CSV download, since the real
+  backend also only implements CSV, nothing else) and `src/components/export-button.tsx` —
+  reach for both on any future page that needs a data export.
+- **Audit Log** (`/dashboard/audit-log`) — confirmed genuinely immutable by design (a real
+  backend code comment: "no create/update/delete routes exist or ever should"), so this is a
+  pure read-only, filterable `DataTable` with zero row actions — the only list page in the
+  whole project with no actions column at all. Mock rows deliberately reference real ids
+  from across almost every earlier batch (admissions, payments, leaves, exams, roles,
+  substitutions) since `resource`/`recordId` are free strings covering any model in the
+  real schema.
+- **Roles & Permissions** (`/dashboard/roles` + `/dashboard/[roleId]/permissions`) —
+  confirmed **no old-frontend page existed for this at all**, genuinely new for web-v2. The
+  permission-edit page is this project's **first entirely new interaction shape**: a
+  permission checklist grouped by resource (Student, Payment, Leave, ...), one role at a
+  time, checkboxes toggled locally and a single "Save" that replaces the role's whole
+  permission set — matching the real backend's own `PUT /:roleId/permissions` (full
+  replace, never a diff/patch). Role archive is disabled in the UI both for system roles and
+  for any role currently assigned to a user, mirroring the real `ROLE_IN_USE` rule.
+- **License Status** (`/dashboard/license`) — confirmed **no DB model at all** on the
+  product side; it's a JWT issued by the provider and verified in-memory, so this page is
+  pure read-only display (plan, features, usage-vs-limit bars, expiry) with zero
+  interaction. Deliberately the only nav entry with no permission gate (`anyOf` omitted) —
+  the real endpoint is intentionally unauthenticated since the login screen needs it before
+  any session exists.
+
+**New mock data**: `leaves.ts`, `complaints.ts`, `audit-log.ts`, `license.ts`,
+`role-permissions.ts` (the `RolePermission` join, replacing wholesale per role — 6 roles
+seeded including one custom "Exam Coordinator" role with no `systemKey`, to exercise the
+custom-role path). Extended `roles.ts` with `archivedAt`. All permissions CONFIRMED against
+`product/api`'s routes.ts, including two cross-module namespace notes worth remembering:
+`role.assign_permissions` is a distinct permission from `role.edit` (which only
+renames/describes a role), and `institute.monitor` (Institute Overview) is explicitly NOT
+part of "the Report Center" despite living in the same nav group here for convenience.
+
+Hit a low-memory `tsc` OOM at 320MB heap mid-batch (system had only ~410MB free at that
+moment) — not a code issue, resolved by waiting for memory to free up and retrying at
+1000MB once ~1.3GB was available again, per the project's standing memory-check-before-tsc
+practice.
+
 ## 2026-09-14 — Finance batch 2: Payments & Reconciliation complete (Phase B, batch 6b) — Finance module done
 
 The money-in half of Finance: Payments, Refunds, Cash Closing, Payment Gateways,

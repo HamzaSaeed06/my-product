@@ -45,6 +45,12 @@ import {
   Vault,
   Plug,
   ShieldCheck,
+  CalendarOff,
+  MessageSquareWarning,
+  BarChart3,
+  ScrollText,
+  KeyRound,
+  BadgeCheck,
   type LucideIcon,
 } from "lucide-react";
 import {
@@ -137,6 +143,20 @@ const NAV_GROUPS: { label: string; items: NavItem[] }[] = [
       { href: "/dashboard/cash-closing", label: "Cash Closing", icon: Vault, anyOf: ["cash_closing.view"] },
       { href: "/dashboard/payment-gateways", label: "Payment Gateways", icon: Plug, anyOf: ["payment_gateway.manage"] },
       { href: "/dashboard/reconciliation", label: "Reconciliation", icon: ShieldCheck, anyOf: ["payment.view"] },
+    ],
+  },
+  {
+    label: "Operations & Governance",
+    items: [
+      { href: "/dashboard/leaves", label: "Leaves", icon: CalendarOff, anyOf: ["leave.view"] },
+      { href: "/dashboard/complaints", label: "Complaints", icon: MessageSquareWarning, anyOf: ["complaint.view"] },
+      { href: "/dashboard/reports", label: "Reports", icon: BarChart3, anyOf: ["report.view_academic", "report.view_attendance", "report.view_financial", "report.view_admissions", "report.view_staff", "institute.monitor"] },
+      { href: "/dashboard/audit-log", label: "Audit Log", icon: ScrollText, anyOf: ["audit.view"] },
+      { href: "/dashboard/roles", label: "Roles & Permissions", icon: KeyRound, anyOf: ["role.view"] },
+      // No permission required in the real backend at all (a deliberately
+      // public, unauthenticated route — the login screen needs it before
+      // any session exists) — the only nav item with no anyOf gate.
+      { href: "/dashboard/license", label: "License Status", icon: BadgeCheck },
     ],
   },
   {
