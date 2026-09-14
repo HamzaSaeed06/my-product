@@ -33,7 +33,7 @@ export function NavUser({ name, subtitle }: { name: string; subtitle?: string })
         <DropdownMenu>
           <DropdownMenuTrigger
             render={
-              <SidebarMenuButton className="h-10 data-open:bg-sidebar-accent data-open:text-sidebar-accent-foreground" />
+              <SidebarMenuButton className="h-10 data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground" />
             }
           >
             <Avatar className="size-8 rounded-md">
@@ -46,7 +46,7 @@ export function NavUser({ name, subtitle }: { name: string; subtitle?: string })
             <ChevronsUpDown className="ml-auto size-4 shrink-0 text-sidebar-foreground/60 group-data-[collapsible=icon]:hidden" />
           </DropdownMenuTrigger>
           <DropdownMenuContent
-            className="w-(--anchor-width) min-w-56 rounded-lg"
+            className="w-(--radix-dropdown-menu-trigger-width) min-w-56 rounded-lg"
             side={isMobile ? "bottom" : "right"}
             align="end"
             sideOffset={4}
