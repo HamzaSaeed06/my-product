@@ -7,6 +7,7 @@ import { cva, type VariantProps } from "class-variance-authority"
 import { cn } from "cn"
 
 import { useIsMobile } from "@/hooks/use-mobile"
+import { cloneRender } from "@/lib/render-slot"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Separator } from "@/components/ui/separator"
@@ -509,12 +510,13 @@ function SidebarMenuButton({
   size = "default",
   tooltip,
   className,
+  children,
   ...props
-}: useRender.ComponentProps<"button"> &
-  React.ComponentProps<"button"> & {
-    isActive?: boolean
-    tooltip?: string | React.ComponentProps<typeof TooltipContent>
-  } & VariantProps<typeof sidebarMenuButtonVariants>) {
+}: React.ComponentProps<"button"> & {
+  render?: React.ReactElement
+  isActive?: boolean
+  tooltip?: string | React.ComponentProps<typeof TooltipContent>
+} & VariantProps<typeof sidebarMenuButtonVariants>) {
   const { isMobile, state } = useSidebar()
   // Never wrap in a Tooltip.Trigger on touch/mobile at all — not just hide
   // the popup content. A tooltip trigger's own touch handling can eat the
@@ -522,26 +524,33 @@ function SidebarMenuButton({
   // real navigation taps on every sidebar link on mobile, since every nav
   // item passes a `tooltip` prop for the desktop collapsed-icon case only.
   const showTooltip = !!tooltip && !isMobile
-  const comp = useRender({
-    defaultTagName: "button",
-    props: mergeProps<"button">(
-      {
-        className: cn(sidebarMenuButtonVariants({ variant, size }), className),
-      },
-      props
-    ),
-    render: !showTooltip ? (
-      render
-    ) : (
-      <TooltipTrigger render={render as React.ReactElement | undefined} />
-    ),
-    state: {
-      slot: "sidebar-menu-button",
-      sidebar: "menu-button",
-      size,
-      active: isActive,
-    },
-  })
+  const classes = cn(sidebarMenuButtonVariants({ variant, size }), className)
+  const stateProps = {
+    "data-slot": "sidebar-menu-button",
+    "data-sidebar": "menu-button",
+    "data-size": size,
+    "data-active": isActive || undefined,
+  }
+
+  let comp: React.ReactElement
+  if (render) {
+    comp = cloneRender(render, classes, children, { ...stateProps, ...props })
+  } else {
+    comp = (
+      <button className={classes} {...stateProps} {...props}>
+        {children}
+      </button>
+    )
+  }
+
+  // Wraps the already-fully-built element (not the raw `render`/`children`
+  // pair) so this only ever clones once, instead of nesting this file's own
+  // render polymorphism inside TooltipTrigger's — two cloning layers fighting
+  // over the same className/data-* props is what broke the collapsed-icon
+  // tooltip and its click after Tooltip moved to Radix.
+  if (showTooltip) {
+    comp = <TooltipTrigger render={comp} />
+  }
 
   if (!showTooltip) {
     return comp
