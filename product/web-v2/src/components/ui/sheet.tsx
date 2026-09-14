@@ -51,7 +51,7 @@ function SheetResizeHandle({
         side === "right" ? "left-0 -translate-x-1/2" : "right-0 translate-x-1/2"
       )}
     >
-      <div className="h-8 w-1 rounded-full bg-border transition-colors group-hover/resize:bg-muted-foreground/40" />
+      <div className="h-9 w-1.5 rounded-full border border-border bg-background transition-colors group-hover/resize:border-muted-foreground/60 group-hover/resize:bg-muted-foreground/20" />
     </div>
   )
 }
