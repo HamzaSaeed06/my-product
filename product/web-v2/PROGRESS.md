@@ -1,5 +1,32 @@
 # web-v2 Progress
 
+## 2026-09-14 — Results: converted to list+detail, matching every other module (correction round)
+
+User feedback right after the Assessment & Results batch: Results was the one list in that
+batch that didn't follow the project's own list/detail convention — it rendered as a flat
+expandable list with inline marks-entry and an inline advance button on every row, instead
+of a plain `DataTable` (student, total, status) with a separate `/dashboard/results/[id]`
+detail page for the actual editing — exactly the shape Assessments and Exams already use.
+Rebuilt to match:
+
+- **`results/page.tsx`** is now a standard filtered `DataTable` (Exam + Section pickers,
+  same as before) — columns are Student (links to the detail page), Admission No., Total,
+  Status. "Generate results" is now a page-level header action shown only when the filtered
+  view is empty, not baked into a custom empty state.
+- **`results/[resultId]/page.tsx`** (new, async server component + `ResultDetail` client
+  component, same split as every other dynamic detail route in this project) is where
+  marks are actually entered and the status pipeline is advanced — per-subject number
+  inputs while DRAFT, a "Save marks" button, and the stage-appropriate advance button
+  (Submit/Mark reviewed/Finalize/Publish) behind a `ConfirmDialog`, identical in spirit to
+  Assessment's detail page.
+- Deleted `result-row.tsx` and `marks-dialog.tsx` (the old inline-row and dialog
+  components) — no longer needed now that the detail page owns marks entry directly.
+
+Verified all 5 pipeline stages render correctly on their own detail route (Draft shows
+editable inputs + Submit; Submitted/Reviewed/Finalized show read-only marks with their own
+next-stage action; Published shows no action, terminal) via live curl checks against the
+same 5 seeded students used in the original batch.
+
 ## 2026-09-14 — Assessment & Results batch complete (Phase B, batch 5) — the first real status pipeline
 
 All 6 concepts built on mock data, typecheck/lint clean, every route (including 6 dynamic
