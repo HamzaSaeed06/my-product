@@ -47,11 +47,11 @@ function SheetResizeHandle({
       aria-orientation="vertical"
       onPointerDown={onPointerDown}
       className={cn(
-        "group/resize absolute inset-y-0 z-10 hidden w-3 cursor-ew-resize touch-none items-center justify-center sm:flex",
+        "group/resize absolute inset-y-0 z-10 hidden w-4 cursor-ew-resize touch-none items-center justify-center sm:flex",
         side === "right" ? "left-0 -translate-x-1/2" : "right-0 translate-x-1/2"
       )}
     >
-      <div className="h-9 w-1.5 rounded-full border border-border bg-background transition-colors group-hover/resize:border-muted-foreground/60 group-hover/resize:bg-muted-foreground/20" />
+      <div className="h-10 w-1.5 rounded-full bg-muted-foreground/35 transition-colors group-hover/resize:bg-muted-foreground/70" />
     </div>
   )
 }
