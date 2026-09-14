@@ -1,5 +1,50 @@
 # web-v2 Progress
 
+## 2026-09-14 — Finance batch 2: Payments & Reconciliation complete (Phase B, batch 6b) — Finance module done
+
+The money-in half of Finance: Payments, Refunds, Cash Closing, Payment Gateways,
+Reconciliation. Together with batch 6a this closes out the entire Finance module (11 built
+concepts — Online Payment deliberately excluded, see 6a's note).
+
+- **Payments** (`/dashboard/payments`) — record Sheet (student search-button → their own
+  unpaid/partially-paid invoices via Combobox → amount → method), with a note that any
+  excess over the invoice total is **held as credit, not auto-refunded** (confirmed: real
+  backend creates a `CreditTransaction`, never an automatic refund). Reversal is
+  request-then-approve, same maker-checker shape as Discounts/Waivers — a "Pending reversal
+  requests" panel (built with real local-state mutation, like Attendance/Assessment
+  corrections before it) approves or rejects, flipping the payment to Reversed on approval.
+- **Refunds** (`/dashboard/refunds`) — confirmed genuinely 4-state, not the usual 3-state
+  maker-checker: Pending → Approved → **Completed** are three separate steps, since approval
+  alone doesn't mean money has actually moved yet. The row actions change shape per stage
+  (Approve/Reject while Pending, a single "Mark completed" once Approved).
+  Always targets a Payment, never an Invoice directly — different from Waiver.
+- **Cash Closing** (`/dashboard/cash-closing`) — confirmed NOT an editable list of
+  transactions, exactly the "record a day's summary, then confirm" shape predicted going
+  in. One closing per campus per day; the create dialog live-computes Expected
+  (opening + collections − refunds) and Variance (actual − expected) as the four inputs are
+  typed, so the numbers that get submitted are never a surprise.
+- **Payment Gateways** (`/dashboard/payment-gateways`) — simple provider config + an
+  active/inactive toggle, admin-setup style. Confirmed only `SIMULATED` is actually wired
+  server-side today — Easypaisa/JazzCash are honest placeholders, called out in the page's
+  own description text rather than pretending they're live.
+- **Reconciliation** (`/dashboard/reconciliation`) — deliberately **not** a list of editable
+  records, confirmed a pure read-only summary: a `StatStrip` (gateway vs. recorded
+  count/total) plus a Matched/Mismatch `StatusDot`, and a DataTable of
+  `ReconciliationException` rows below for whatever didn't auto-match. This is the first
+  page in the project that reuses `StatStrip` outside the main Overview dashboard — worth
+  reaching for again anywhere a page needs "here are today's figures, side by side" framing
+  before a detail table.
+
+**New mock data**: `payments.ts`, `refunds.ts`, `cash-closing.ts`, `payment-gateways.ts`,
+`reconciliation.ts`. All permissions CONFIRMED against `product/api`'s routes.ts, including
+the notable cross-module one: resolving/rejecting a Reconciliation Exception is gated by
+`payment.reverse` — the same permission that decides a payment reversal, not a
+`reconciliation.*` string of its own (no separate permission namespace exists for it).
+
+**Finance module now fully built across both sub-batches.** Remaining Phase B work per the
+Section 6 inventory: Operations & Governance (Leaves, Complaints, Reports, Audit Log, Roles
+& Permissions, License Status), then Portals (Teacher/Parent/Student simplified surfaces).
+
 ## 2026-09-14 — Finance batch 1: Billing & Setup complete (Phase B, batch 6a)
 
 Finance is the biggest remaining module (12 concepts) — split into two sub-batches on

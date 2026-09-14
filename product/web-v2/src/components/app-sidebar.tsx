@@ -40,6 +40,11 @@ import {
   FileStack,
   Percent,
   BadgePercent,
+  Banknote,
+  RotateCcw,
+  Vault,
+  Plug,
+  ShieldCheck,
   type LucideIcon,
 } from "lucide-react";
 import {
@@ -127,6 +132,11 @@ const NAV_GROUPS: { label: string; items: NavItem[] }[] = [
       { href: "/dashboard/invoices", label: "Invoices", icon: FileStack, anyOf: ["invoice.view"] },
       { href: "/dashboard/discounts", label: "Discounts", icon: Percent, anyOf: ["discount.view"] },
       { href: "/dashboard/waivers", label: "Waivers", icon: BadgePercent, anyOf: ["waiver.view"] },
+      { href: "/dashboard/payments", label: "Payments", icon: Banknote, anyOf: ["payment.view"] },
+      { href: "/dashboard/refunds", label: "Refunds", icon: RotateCcw, anyOf: ["refund.view"] },
+      { href: "/dashboard/cash-closing", label: "Cash Closing", icon: Vault, anyOf: ["cash_closing.view"] },
+      { href: "/dashboard/payment-gateways", label: "Payment Gateways", icon: Plug, anyOf: ["payment_gateway.manage"] },
+      { href: "/dashboard/reconciliation", label: "Reconciliation", icon: ShieldCheck, anyOf: ["payment.view"] },
     ],
   },
   {
