@@ -45,4 +45,22 @@ export const mockParents: Parent[] = [
     address: null,
     children: [],
   },
+  // The Portal batch's demo parent — deliberately linked to two of sec_2's
+  // real roster students so the Parent/Student portal pages show real
+  // attendance/results/invoices already seeded for that section, rather
+  // than an empty state. stu_0191 (PUBLISHED result, a report card) is
+  // the default active child, good for Results/Report Card; stu_0148
+  // (FINALIZED-but-not-published, an UNPAID invoice) is the second child
+  // — switch to them to see the Fees pay-online flow instead.
+  {
+    id: "par_4",
+    fullName: "Shahzad Iqbal",
+    phone: "0303-9988776",
+    email: "shahzad.iqbal@example.com",
+    address: "House 7, Johar Town, Lahore",
+    children: [
+      { linkId: "pc_4", studentId: "stu_0191", relationship: "Father", isPrimary: true },
+      { linkId: "pc_5", studentId: "stu_0148", relationship: "Father", isPrimary: true },
+    ],
+  },
 ];

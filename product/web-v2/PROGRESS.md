@@ -1,5 +1,58 @@
 # web-v2 Progress
 
+## 2026-09-14 — Portals complete (Phase B, batch 8) — Phase B is now fully built
+
+Teacher, Parent, and Student portals — the last Phase B batch. **All ~60+ pages from the
+Section 6 inventory now exist on mock data.** Only Phase C (real backend wiring, module by
+module) remains.
+
+- **Confirmed one unified `/portal` route tree**, not three separate ones — the real
+  backend branches every page internally on the signed-in user's role (`TEACHER`/`PARENT`/
+  `STUDENT`), with a STAFF user redirected to `/dashboard` instead. Rebuilt that shape
+  exactly: `src/app/portal/layout.tsx` wraps every page in `PortalProvider` (role +
+  active-child state) and `PortalShell` (its own plainer, friendlier header+tab-nav shell —
+  deliberately not the dashboard's sidebar, since a parent or teacher needs low information
+  density, not an office admin's dense operational views).
+- **Role-based, not permission-based**: confirmed the real backend gates the portal by raw
+  `UserRole` membership, a completely separate auth path from the admin dashboard's granular
+  permission system built everywhere else in this project. Phase B has no real
+  login/session, so a **persona switcher** in the portal header (Teacher/Parent/Student, plus
+  a child switcher when the Parent persona has more than one linked child) stands in for it —
+  explicitly a review-time-only aid, same spirit as the design-system switcher from Phase A,
+  not meant to ship.
+- **Nav differs by role**, confirmed from the real frontend's own static per-role map:
+  Teacher gets Overview/Timetable/Attendance/Homework/Leave (no Results — marks entry stays
+  admin-only); Student gets Overview/Timetable/Attendance/Homework/Results/Report Card (no
+  Fees/Leave/Complaints — those stay Parent-only); Parent gets all of the above plus
+  Fees/Leave/Complaints. Leave's page itself still guards against direct navigation by a
+  Student (shows a plain explanatory message) even though the nav never links there for that
+  role.
+- **Confirmed real interactive actions vs. read-only display, matching the old frontend's
+  actual scope** — not just applying our own judgment: Teacher marks attendance and assigns
+  homework; Parent requests leave for a child, files complaints, and (uniquely) **pays
+  invoices online** — modeled as a small 3-step dialog (confirm → processing spinner →
+  success) mirroring the real backend's own genuinely multi-step initiate→confirm online-
+  payment flow, the one part of Finance actually meant to be customer-facing rather than
+  admin-facing. Everything else (Timetable for all three roles, Results, Report Card,
+  attendance/homework history) is plain read-only.
+- **Demo identities deliberately chosen to reuse real seeded data** rather than inventing a
+  parallel dataset: `src/lib/mock/portal-session.ts` fixes the demo Teacher as `tch_1`
+  (teaches `sec_2`, the section every batch since Academic Operations has used because it
+  actually has students) and the demo Parent (`par_4`, newly added to `parents.ts`) as
+  linked to two of `sec_2`'s real roster students — one with a PUBLISHED result and a
+  generated report card (good for Results/Report Card), the other with an UNPAID invoice
+  (good for the Fees pay-online demo). Added `getSectionForStudent()` to `sections.ts` — the
+  inverse of the existing `getSectionRoster()`, needed since a Student only carries flat
+  className/section/campusId fields, not a sectionId FK. Also added a published `sec_2`
+  timetable (`tt_3`) and one published `sec_2` homework row (`hw_5`) — both had been missing
+  since earlier batches happened to seed `sec_2` data for other purposes only.
+- **Verified all three personas' page logic**, not just the default: typecheck/lint passed
+  for every role branch in the same files, and — since the persona switcher is pure client
+  state with no URL parameter — the Teacher and Student branches were verified by
+  temporarily flipping `portal-context.tsx`'s default role and re-curling every route before
+  reverting to the real default (Parent), rather than left unverified just because a live
+  browser click-through wasn't available in this environment.
+
 ## 2026-09-14 — Operations & Governance complete (Phase B, batch 7) — a genuinely new interaction shape
 
 Leaves, Complaints, Reports (hub + 5 sub-reports), Audit Log, Roles & Permissions, License

@@ -29,6 +29,10 @@ export const mockHomework: Homework[] = [
   { id: "hw_2", subjectId: "sub_english", classId: "cls_1", sectionId: "sec_6", teacherId: "tch_3", title: "Reading comprehension — 'The Lost Kite'", description: "Read the passage and answer the five questions in full sentences.", dueDate: "2026-09-16", status: "PUBLISHED", publishedAt: "2026-09-12T11:00:00", archivedAt: null },
   { id: "hw_3", subjectId: "sub_science", classId: "cls_5", sectionId: "sec_4", teacherId: "tch_2", title: "Diagram: parts of a plant", description: null, dueDate: "2026-09-20", status: "DRAFT", publishedAt: null, archivedAt: null },
   { id: "hw_4", subjectId: "sub_math", classId: "cls_3", sectionId: "sec_2", teacherId: "tch_1", title: "Fractions worksheet", description: "Introductory fractions — for after this week's lesson.", dueDate: "2026-09-19", status: "DRAFT", publishedAt: null, archivedAt: null },
+  // Published — the one sec_2 sees in the Portal batch's Parent/Student
+  // homework view by default (hw_4 above is deliberately still a draft,
+  // so the Teacher portal's own list shows one of each status).
+  { id: "hw_5", subjectId: "sub_math", classId: "cls_3", sectionId: "sec_2", teacherId: "tch_1", title: "Multiplication tables quiz prep", description: "Revise tables 6-8 ahead of Friday's quiz.", dueDate: "2026-09-18", status: "PUBLISHED", publishedAt: "2026-09-13T09:00:00", archivedAt: null },
 ];
 
 export const mockHomeworkAttachments: HomeworkAttachment[] = [

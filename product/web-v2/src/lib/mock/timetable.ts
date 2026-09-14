@@ -27,9 +27,13 @@ export const PERIODS = [1, 2, 3, 4, 5, 6, 7, 8];
 // One timetable per [sectionId, academicYearId] — the real backend's own
 // uniqueness constraint. sec_1 is published (the common case); sec_4 is
 // still a draft with gaps, to demonstrate the empty-cell "add entry" state.
+// sec_2 (published) is the section used across the Portal batch — same
+// "use sec_2, it actually has students" rule as every batch since Academic
+// Operations.
 export const mockTimetables: Timetable[] = [
   { id: "tt_1", sectionId: "sec_1", academicYearId: "ay_2026", status: "PUBLISHED", publishedAt: "2026-08-20T09:00:00" },
   { id: "tt_2", sectionId: "sec_4", academicYearId: "ay_2026", status: "DRAFT", publishedAt: null },
+  { id: "tt_3", sectionId: "sec_2", academicYearId: "ay_2026", status: "PUBLISHED", publishedAt: "2026-08-20T09:00:00" },
 ];
 
 const SUBJECT_TEACHER: [string, string][] = [
@@ -72,4 +76,5 @@ function buildEntries(timetableId: string, filledRatio: number, seed: number): T
 export const mockTimetableEntries: TimetableEntry[] = [
   ...buildEntries("tt_1", 0.92, 5),
   ...buildEntries("tt_2", 0.45, 9),
+  ...buildEntries("tt_3", 0.9, 17),
 ];

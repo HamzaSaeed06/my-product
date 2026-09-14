@@ -41,3 +41,15 @@ export function getSectionRoster(sectionId: string): Student[] {
     (s) => s.campusId === section.campusId && s.className === className && s.section === section.name,
   );
 }
+
+// The inverse lookup — used by the Portal, where a student needs their own
+// section id (for timetable/attendance) but only carries the flat
+// className/section/campusId fields, not a sectionId FK.
+export function getSectionForStudent(studentId: string): Section | undefined {
+  const student = mockStudents.find((s) => s.id === studentId);
+  if (!student) return undefined;
+  return mockSections.find((s) => {
+    const className = mockClasses.find((c) => c.id === s.classId)?.name;
+    return s.campusId === student.campusId && className === student.className && s.name === student.section;
+  });
+}
