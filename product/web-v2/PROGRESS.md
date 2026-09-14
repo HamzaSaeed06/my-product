@@ -1,5 +1,28 @@
 # web-v2 Progress
 
+## 2026-09-14 — Two sidebar reversals per explicit follow-up feedback
+
+- **Uppercase nav-group labels are back.** The earlier round removed
+  `text-transform: uppercase` from `.label-eyebrow` after feedback that it read as
+  "shouty" — the user then explicitly asked for it back ("capitalize kar do"), a direct
+  correction of that correction. Re-added. **Final call, not up for re-interpretation again
+  without a new explicit request** — this exact property has now flipped twice in one
+  session, so don't second-guess it further.
+- **Collapsed (icon-only) sidebar no longer scrolls.** An earlier round made it scrollable
+  (removed a `group-data-[collapsible=icon]:overflow-hidden` override) in response to what
+  was actually just a question ("will it scroll or not, if it will, add a scrollbar") rather
+  than a request to enable scrolling — the user has now clarified directly that collapsed
+  mode should have no scroll at all. Restored the `overflow-hidden` override for the
+  collapsed state specifically (expanded state keeps scrolling normally). Note: with enough
+  nav items, some icons may now be visually clipped in collapsed mode rather than reachable
+  via scroll — that's the accepted tradeoff of this explicit instruction, not an oversight.
+
+**Process note for this session**: two properties got flipped back and forth because an
+earlier message phrased as a question/conditional ("will X happen, if so do Y") was read as
+an imperative ("make X happen"). When a bug report includes a question mark or a
+conditional "agar... to..." construction, treat it as genuinely open rather than assuming
+the answer that requires the most active change.
+
 ## 2026-09-14 — Sidebar header/footer height aligned to the main header; dev server LAN-accessible
 
 Two more items from the same feedback thread:

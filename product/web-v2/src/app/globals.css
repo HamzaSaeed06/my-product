@@ -318,18 +318,18 @@
     box-shadow: var(--shadow-hairline);
   }
 
-  /* The source spec's "Eyebrow Label" component: Geist Mono, wide
-     tracking. Scoped deliberately to sidebar group labels only — not
+  /* The source spec's "Eyebrow Label" component: Geist Mono, uppercase,
+     wide tracking. Scoped deliberately to sidebar group labels only — not
      stamped above every content section, which is the generic-AI tell this
-     project's own design docs warn against. Uppercase was dropped per
-     explicit feedback — it read as shouty for plain nav-group names like
-     "People"/"Finance"; the mono font + tracking still carries the
-     "label" feel on its own. */
+     project's own design docs warn against. Briefly dropped uppercase per
+     feedback that read it as shouty, then explicitly asked back — this is
+     the final call, keep it. */
   .label-eyebrow {
     font-family: var(--font-geist-mono);
     font-size: 11px;
     line-height: 1.5;
     letter-spacing: 0.071em;
+    text-transform: uppercase;
     font-weight: 500;
   }
 }
