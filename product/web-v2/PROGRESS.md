@@ -1,5 +1,56 @@
 # web-v2 Progress
 
+## 2026-09-14 — Finance batch 1: Billing & Setup complete (Phase B, batch 6a)
+
+Finance is the biggest remaining module (12 concepts) — split into two sub-batches on
+purpose rather than one giant one, so review happens at a sane granularity. This first
+sub-batch covers the **billing/setup side**: Fee Categories, Fee Structures, Student Fees,
+Invoices, Discounts, Waivers. The **money-in side** (Payments, Refunds, Cash Closing,
+Payment Gateways, Reconciliation) is sub-batch 6b, not started yet. Online Payment has no
+old-frontend page and no admin-facing management surface of its own in the real backend
+(it's a parent-portal checkout flow) — Payment Gateway config + Reconciliation already cover
+everything an admin actually manages about it, so it does not get its own dashboard page.
+
+**The dependency chain this batch is built around** (confirmed against the real schema):
+`FeeCategory` (a charge type — Tuition, Transport) → `FeeStructure` (a template: category +
+class + optional-campus + amount + frequency, bundled) → `StudentFee` (that template
+assigned to one specific student, with an optional override amount) → `Invoice` (a billing
+document whose line items reference `FeeCategory` **directly**, confirmed NOT linked back to
+StudentFee/FeeStructure — invoices are still manually itemized in the real backend today,
+not auto-generated). `Discount` reduces at the FeeStructure/student level, before an invoice
+exists; `Waiver` reduces at the Invoice level, after one already exists — genuinely
+different targets, not two names for the same idea.
+
+- **Fee Categories** — confirmed no dedicated page or permission namespace in the real
+  backend at all; managed from a small dialog opened off the Fee Structures page
+  (`categories-dialog.tsx`), gated by the same `fee_structure.*` permissions.
+- **Fee Structures** (`/dashboard/fee-structures`) — list + create Sheet + archive/restore.
+  Campus scoping matters: `null` campusId means institute-wide (Office/Super Admin), a real
+  campus id scopes it to that Campus Head's own territory — carried through as a "Select
+  campus / All campuses" Combobox choice.
+- **Student Fees** (`/dashboard/student-fees`) — the assignment step. Uses the established
+  explicit search-button student picker (not Combobox) since Students is the large/paginated
+  dataset this pattern exists for.
+- **Invoices** (`/dashboard/invoices` + `/dashboard/[invoiceId]`) — create dialog has
+  **dynamic add/remove line-item rows** (category + description + amount per row, live
+  total), the first genuinely repeating-rows form pattern built in this project. Void is
+  terminal (confirmed no un-void) and requires a reason via a dedicated dialog, not a plain
+  `ConfirmDialog`, since a note is mandatory here. The detail page shows line items + any
+  approved waiver reduction, explicitly labeled "Balance after waivers" rather than a true
+  remaining balance — it doesn't yet subtract payments, since Payments is sub-batch 6b, and
+  the page says so rather than showing a number that looks more final than it is.
+- **Discounts** (`/dashboard/discounts`) — request dialog has a percentage-vs-fixed-amount
+  mode toggle (confirmed mutually exclusive in the real backend, validated service-side not
+  by the DB) that swaps which input is live. Maker-checker: request → Approve/Reject.
+- **Waivers** (`/dashboard/waivers`) — same maker-checker shape as Discounts, but the
+  request dialog picks an existing Invoice via Combobox (small, fully-loaded list — only a
+  handful of invoices exist, unlike Students) rather than a search button.
+
+**New mock data**: `fee-categories.ts`, `fee-structures.ts`, `student-fees.ts`,
+`discounts.ts`, `invoices.ts`, `waivers.ts` — all roster-dependent seeds target `sec_2`
+(real students), continuing the standing rule from the Academic Operations/Assessment
+batches. All permissions CONFIRMED against `product/api`'s routes.ts.
+
 ## 2026-09-14 — Results: converted to list+detail, matching every other module (correction round)
 
 User feedback right after the Assessment & Results batch: Results was the one list in that

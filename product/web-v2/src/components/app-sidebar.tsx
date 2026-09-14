@@ -35,6 +35,11 @@ import {
   ListChecks,
   FileBadge2,
   ArrowUpRightFromCircle,
+  Receipt,
+  Wallet,
+  FileStack,
+  Percent,
+  BadgePercent,
   type LucideIcon,
 } from "lucide-react";
 import {
@@ -112,6 +117,16 @@ const NAV_GROUPS: { label: string; items: NavItem[] }[] = [
       { href: "/dashboard/results", label: "Results", icon: ListChecks, anyOf: ["result.view"] },
       { href: "/dashboard/report-cards", label: "Report Cards", icon: FileBadge2, anyOf: ["report_card.view"] },
       { href: "/dashboard/promotions", label: "Promotions", icon: ArrowUpRightFromCircle, anyOf: ["promotion.view"] },
+    ],
+  },
+  {
+    label: "Finance",
+    items: [
+      { href: "/dashboard/fee-structures", label: "Fee Structures", icon: Receipt, anyOf: ["fee_structure.view"] },
+      { href: "/dashboard/student-fees", label: "Student Fees", icon: Wallet, anyOf: ["fee_assignment.view"] },
+      { href: "/dashboard/invoices", label: "Invoices", icon: FileStack, anyOf: ["invoice.view"] },
+      { href: "/dashboard/discounts", label: "Discounts", icon: Percent, anyOf: ["discount.view"] },
+      { href: "/dashboard/waivers", label: "Waivers", icon: BadgePercent, anyOf: ["waiver.view"] },
     ],
   },
   {
