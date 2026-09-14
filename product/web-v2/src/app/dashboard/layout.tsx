@@ -16,7 +16,7 @@ export default function DashboardLayout({ children }: LayoutProps<"/dashboard">)
       <AppSidebar viewer={viewer} />
       <SidebarInset>
         <SiteHeader viewer={viewer} />
-        <main className="min-w-0 flex-1 p-4 sm:p-6">{children}</main>
+        <main className="min-h-0 min-w-0 flex-1 overflow-y-auto p-4 sm:p-6">{children}</main>
       </SidebarInset>
     </SidebarProvider>
   );

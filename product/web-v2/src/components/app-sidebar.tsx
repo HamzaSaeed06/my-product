@@ -66,6 +66,7 @@ import {
   SidebarMenuItem,
 } from "@/components/ui/sidebar";
 import type { Viewer } from "@/lib/mock/session";
+import { NavUser } from "@/components/nav-user";
 
 // Visibility is keyed off the SAME permission strings the backend route
 // actually enforces — never a role name. This is the one thing the old
@@ -223,8 +224,8 @@ export function AppSidebar({ viewer }: { viewer: Viewer }) {
           </SidebarGroup>
         ))}
       </SidebarContent>
-      <SidebarFooter className="px-3 py-3 text-xs text-sidebar-foreground/60 group-data-[collapsible=icon]:hidden">
-        Phase B build — see PROGRESS.md
+      <SidebarFooter>
+        <NavUser name={viewer.fullName} subtitle={viewer.email} />
       </SidebarFooter>
     </Sidebar>
   );

@@ -26,7 +26,8 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
 } from "@/components/ui/sidebar";
-import { usePortal } from "./portal-context";
+import { NavUser } from "@/components/nav-user";
+import { usePortal, usePortalIdentity } from "./portal-context";
 import type { PortalRole } from "@/lib/mock/portal-session";
 
 interface NavItem {
@@ -72,6 +73,7 @@ const ROLE_LABEL: Record<PortalRole, string> = { TEACHER: "Teacher", PARENT: "Pa
 
 export function PortalSidebar() {
   const { role } = usePortal();
+  const identity = usePortalIdentity();
   const pathname = usePathname();
   const items = NAV[role];
 
@@ -112,8 +114,8 @@ export function PortalSidebar() {
           </SidebarGroupContent>
         </SidebarGroup>
       </SidebarContent>
-      <SidebarFooter className="px-3 py-3 text-xs text-sidebar-foreground/60 group-data-[collapsible=icon]:hidden">
-        Phase B build — Portal preview
+      <SidebarFooter>
+        <NavUser name={identity.name} subtitle={identity.subtitle} />
       </SidebarFooter>
     </Sidebar>
   );

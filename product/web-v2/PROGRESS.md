@@ -1,5 +1,51 @@
 # web-v2 Progress
 
+## 2026-09-14 — Sidebar UI/UX bugs fixed (correction round, applies to dashboard AND portal)
+
+User feedback after seeing the now-unified dashboard/portal shell: five real bugs/gaps in
+the shared `src/components/ui/sidebar.tsx` primitive (a generated shadcn component, unedited
+until now), all fixed at the source so both `AppSidebar` and `PortalSidebar` inherit the fix
+automatically:
+
+1. **Scrolling over the sidebar scrolled the whole page instead of just the sidebar.** Root
+   cause: `SidebarProvider`'s wrapper div used `min-h-svh` (a floor, not a cap) with no
+   `overflow-hidden` — page content taller than the viewport made `<body>` itself the
+   scrolling element, and the visually-fixed sidebar column had no independent scroll
+   boundary of its own. Fixed: wrapper is now `h-svh overflow-hidden` (a hard cap), and both
+   `dashboard/layout.tsx` and `portal/layout.tsx`'s content `<main>` now carry
+   `min-h-0 overflow-y-auto` so page content scrolls inside its own contained region instead
+   of growing `<body>`.
+2. **Collapsed (icon-only) sidebar couldn't scroll at all** — `SidebarContent` had an
+   explicit `group-data-[collapsible=icon]:overflow-hidden` override that clipped anything
+   past the visible height instead of letting it scroll. Removed; it now scrolls
+   (invisibly, via the existing `no-scrollbar` utility already used for the expanded state —
+   consistent with the rest of the app's own no-visible-scrollbar-but-functional convention)
+   in both states.
+3. **Collapsed sidebar icons were left-aligned in their 32×32 box, not centered** —
+   `sidebarMenuButtonVariants` had no `justify-center` override for the collapsed state, and
+   the (invisible but still layout-occupying) label `<span>` was pushing the icon off-center.
+   Fixed by adding `group-data-[collapsible=icon]:justify-center` AND
+   `group-data-[collapsible=icon]:[&>span:last-child]:hidden` (actually removing the label
+   from layout when collapsed, not just visually clipping it) — the icon alone now centers
+   correctly.
+4. **Nav items were touching each other** (`SidebarMenu` used `gap-0` — literally zero gap),
+   so adjacent items' hover backgrounds touched with no breathing room. Changed to `gap-1`.
+5. **Moved the signed-in identity + Log out from the header into the sidebar footer**,
+   bottom-left, per explicit request — a new shared `src/components/nav-user.tsx`
+   (`NavUser`) renders an avatar+name+chevron `SidebarMenuButton` that opens a dropdown with
+   the full name/email and a destructive-styled Log out item. Wired into both `AppSidebar`
+   and `PortalSidebar`'s `SidebarFooter`. `SiteHeader` and `PortalHeader` are now both a thin
+   context-control bar only (trigger, a left-side context picker, `ThemeSwitcher`) — no
+   account menu, no separate Log out button, matching each other exactly. `NavUser` reuses
+   the exact `DropdownMenuGroup`-wrapping-`DropdownMenuLabel` pattern from the earlier
+   `site-header.tsx` bug fix, so it doesn't repeat that same crash.
+
+Verified via typecheck/lint (clean) and curl'd HTML confirming the exact new class strings
+landed (`gap-1`, `h-svh w-full overflow-hidden`, `min-h-0 ... overflow-y-auto`) on both
+`/dashboard` and `/portal`. The collapsed-icon-mode visuals and the NavUser dropdown's
+open/click behavior could not be verified in this headless environment (no browser
+automation available this session) — worth a manual check.
+
 ## 2026-09-14 — Portal shell rebuilt to match the dashboard exactly (correction round)
 
 User feedback right after the Portals batch: the Portal's own header+tab-nav shell (a
