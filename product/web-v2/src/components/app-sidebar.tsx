@@ -30,6 +30,11 @@ import {
   BookOpen,
   NotebookPen,
   NotebookText,
+  PencilLine,
+  FileCheck2,
+  ListChecks,
+  FileBadge2,
+  ArrowUpRightFromCircle,
   type LucideIcon,
 } from "lucide-react";
 import {
@@ -94,6 +99,19 @@ const NAV_GROUPS: { label: string; items: NavItem[] }[] = [
       { href: "/dashboard/curriculum", label: "Curriculum", icon: BookOpen, anyOf: ["curriculum.view"] },
       { href: "/dashboard/homework", label: "Homework", icon: NotebookPen, anyOf: ["homework.view"] },
       { href: "/dashboard/class-diary", label: "Class Diary", icon: NotebookText, anyOf: ["class_diary.view"] },
+    ],
+  },
+  {
+    label: "Assessments",
+    items: [{ href: "/dashboard/assessments", label: "Assessments", icon: PencilLine, anyOf: ["assessment.view"] }],
+  },
+  {
+    label: "Results & Promotion",
+    items: [
+      { href: "/dashboard/exams", label: "Exams", icon: FileCheck2, anyOf: ["exam.view"] },
+      { href: "/dashboard/results", label: "Results", icon: ListChecks, anyOf: ["result.view"] },
+      { href: "/dashboard/report-cards", label: "Report Cards", icon: FileBadge2, anyOf: ["report_card.view"] },
+      { href: "/dashboard/promotions", label: "Promotions", icon: ArrowUpRightFromCircle, anyOf: ["promotion.view"] },
     ],
   },
   {

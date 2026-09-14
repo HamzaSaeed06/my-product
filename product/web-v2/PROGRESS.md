@@ -1,5 +1,77 @@
 # web-v2 Progress
 
+## 2026-09-14 — Assessment & Results batch complete (Phase B, batch 5) — the first real status pipeline
+
+All 6 concepts built on mock data, typecheck/lint clean, every route (including 6 dynamic
+detail routes) verified 200 with expected content. This batch's headline: **Results is a
+genuine multi-stage pipeline** (Draft → Submitted → Reviewed → Finalized → Published, one
+row per student, confirmed strictly sequential and race-safe in the real backend) — the
+first module in this project where a record's status isn't just a binary draft/published
+flip, and the UI (a per-row "advance to next stage" button whose label changes with the
+current stage) is built around that specifically.
+
+- **Assessments** (`/dashboard/assessments` + `/dashboard/[assessmentId]`) — an internal,
+  teacher-run check (quiz/class test), confirmed as a **separate, independently-locked
+  system from Exams/Results** (Result references Exam directly, never Assessment). List +
+  create Sheet; the detail page is where marks actually get entered — a roster of number+
+  remarks inputs while DRAFT, submitting (`assessment.submit`) locks it, after which a mark
+  is only corrected via an Incharge-approved request (`assessment.correct`) — same shape as
+  Attendance's correction workflow from the prior batch, rebuilt fresh here since the
+  underlying record type differs.
+- **Exams** (`/dashboard/exams` + `/dashboard/[examId]`) — a named series per academic year
+  (Midterm, Final Term). Exam Schedules ("papers") are confirmed to be their **own module
+  and permission set** in the real backend (`exam_schedule.*`, distinct from `exam.*`) even
+  though this UI nests "Add paper" inside the exam detail page rather than a standalone
+  list route — one-to-many with Exam, not 1:1. The add-paper dialog replicates the real
+  backend's overlap rule client-side: a section can't have two papers overlapping in time on
+  the same date, checked across every exam's schedules for that section, not just the
+  current one.
+- **Results** (`/dashboard/results`) — the pipeline described above. Filtered by Exam +
+  Section; if none exist yet, a "Generate results" button bulk-seeds one empty DRAFT result
+  per enrolled student for that exam+section (mirrors Attendance's bulk-mark-a-section
+  pattern) with one `ResultItem` per subject that actually has a scheduled paper for that
+  section in that exam — Results' subjects come from Exam Schedule, not a separate mapping.
+  Marks are editable only in DRAFT (`MarksDialog`); every later stage is reached by the
+  per-row advance button, gated in spirit by `result.review`/`result.finalize`/
+  `result.publish` (all granted to this demo viewer). Seeded with one student at each of the
+  five stages simultaneously so every stage's UI is visible on first load, not just the
+  common case.
+- **Report Cards** (`/dashboard/report-cards` + `/dashboard/[reportCardId]`) — confirmed as
+  a **snapshot taken at generation time**, not live-computed from Results (regenerating
+  overwrites the same row, no version history). Generate/Regenerate is only enabled once
+  the student's Result is Finalized or Published (`RESULT_NOT_LOCKED` is a real backend
+  error otherwise) — this batch's UI just disables the button rather than letting the click
+  happen and fail. The detail page is a plain read-only snapshot table.
+- **Promotions** (`/dashboard/promotions`) — confirmed **not a wizard** despite this batch's
+  own initial assumption going in (Admissions/Convert-Inquiry's multi-step pattern doesn't
+  apply here) — it's a filtered roster with a per-student decision dialog. Promote/Repeat
+  execute immediately; Class Jump requires Campus Head approval first (a reason is
+  required) and only takes effect once approved; Pending marks a student as awaiting a
+  re-exam and never auto-executes. Confirmed: **no algorithmic promote/retain suggestion**
+  in the real backend — this is deliberately a manual decision per student, not something to
+  "improve" with a computed recommendation.
+
+**New mock data**: `assessments.ts`, `exams.ts` (Exam + ExamSchedule together, since the
+real backend's own 1:many relationship makes them awkward to split), `results.ts`,
+`report-cards.ts`, `promotions.ts`. Every permission string in this batch was CONFIRMED
+against `product/api`'s routes.ts during research, continuing the standard the previous
+batch set.
+
+**Applied the previous batch's lesson before it bit twice**: every roster-dependent mock
+seed in this batch (Assessments' marks, Results, Promotions) deliberately targets `sec_2`
+(5 real students by the seeded generator) rather than `sec_1` (0 students by that seed's
+luck) — the exact gotcha caught live in the Academic Operations batch. No repeat of that
+bug this time.
+
+**Known Phase-B-only limitation, not a bug**: Report Cards generated live in the browser
+(via the "Generate" button for a newly-eligible student) exist only in that page's local
+React state — the dynamic `/dashboard/report-cards/[reportCardId]` route reads from the
+static `mockReportCards` array, so a freshly-generated card's "View" link won't resolve
+until Phase C wires this to a real, shared backend. The two pre-seeded report cards (for the
+Finalized and Published demo students) resolve correctly and were what route verification
+checked. This is the same category of limitation as every other page's local-only mock
+state in this project — consistent, not a regression.
+
 ## 2026-09-14 — Academic Operations batch complete (Phase B, batch 4) — grid/matrix patterns, not DataTable
 
 All 8 concepts built on mock data, typecheck/lint clean, all 8 routes verified 200 with the
