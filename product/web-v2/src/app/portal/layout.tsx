@@ -1,15 +1,22 @@
+import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar";
 import { PortalProvider } from "./portal-context";
-import { PortalShell } from "./portal-shell";
+import { PortalSidebar } from "./portal-sidebar";
+import { PortalHeader } from "./portal-header";
 
-// A single unified portal route tree for all three roles, confirmed
-// matching the real backend — not a /teacher, /parent, /student split.
-// Deliberately its own shell (no dashboard sidebar): plainer, friendlier,
-// lower information density, matching what a teacher/parent/student
-// actually needs versus an office admin's dense operational views.
+// Same shell as the dashboard (SidebarProvider/AppSidebar-equivalent/
+// SiteHeader-equivalent/main), not a separate visual language — a
+// Teacher/Parent/Student is still the same product, just a different nav
+// keyed by role instead of permission. See PortalSidebar/PortalHeader.
 export default function PortalLayout({ children }: { children: React.ReactNode }) {
   return (
     <PortalProvider>
-      <PortalShell>{children}</PortalShell>
+      <SidebarProvider>
+        <PortalSidebar />
+        <SidebarInset>
+          <PortalHeader />
+          <main className="min-w-0 flex-1 p-4 sm:p-6">{children}</main>
+        </SidebarInset>
+      </SidebarProvider>
     </PortalProvider>
   );
 }

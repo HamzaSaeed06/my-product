@@ -8,6 +8,7 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import {
   DropdownMenu,
   DropdownMenuContent,
+  DropdownMenuGroup,
   DropdownMenuLabel,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
@@ -48,12 +49,14 @@ export function SiteHeader({ viewer }: { viewer: Viewer }) {
             <span className="hidden text-sm text-foreground sm:inline">{viewer.fullName}</span>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-56">
-            <DropdownMenuLabel className="font-normal">
-              <div className="flex flex-col gap-0.5">
-                <span className="text-sm font-medium text-foreground">{viewer.fullName}</span>
-                <span className="text-xs text-muted-foreground">{viewer.email}</span>
-              </div>
-            </DropdownMenuLabel>
+            <DropdownMenuGroup>
+              <DropdownMenuLabel className="font-normal">
+                <div className="flex flex-col gap-0.5">
+                  <span className="text-sm font-medium text-foreground">{viewer.fullName}</span>
+                  <span className="text-xs text-muted-foreground">{viewer.email}</span>
+                </div>
+              </DropdownMenuLabel>
+            </DropdownMenuGroup>
           </DropdownMenuContent>
         </DropdownMenu>
         <Button variant="ghost" size="sm" className="gap-1.5 text-muted-foreground hover:text-foreground">

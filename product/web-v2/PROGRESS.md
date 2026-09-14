@@ -1,5 +1,45 @@
 # web-v2 Progress
 
+## 2026-09-14 — Portal shell rebuilt to match the dashboard exactly (correction round)
+
+User feedback right after the Portals batch: the Portal's own header+tab-nav shell (a
+distinct "friendlier" design, built on the research pass's recommendation that a
+parent/teacher/student needs lower information density than an office admin) read as
+**visually inconsistent with the rest of the product** — "unprofessional," in the user's
+own words, because it looked like a different product from the Super Admin/Campus Head
+dashboard rather than the same one. Correction: the Portal must use the exact same shell as
+`/dashboard` — same `Sidebar`/`SidebarProvider`/`SidebarInset` primitives, same header
+structure (`SidebarTrigger` → separator → context control on the left; `ThemeSwitcher` →
+separator → account dropdown → Log out on the right), same `main` padding. Only the nav
+*items* differ (role-keyed instead of permission-keyed) — never the visual system itself.
+
+- Deleted `portal-shell.tsx` (the old top-nav-tabs, centered-narrow-column shell).
+- Added `portal-sidebar.tsx` — structurally identical to `AppSidebar`, just driven by the
+  role-keyed `NAV` map instead of `viewer.permissions`.
+- Added `portal-header.tsx` — structurally identical to `SiteHeader`, with the
+  Teacher/Parent/Student persona switcher (and the Parent-only child switcher) sitting in
+  the exact slot `CampusScopePicker` occupies on the dashboard, rather than being a
+  visually distinct widget.
+- `layout.tsx` now composes `SidebarProvider` + `PortalSidebar` + `SidebarInset` +
+  `PortalHeader` + `main`, line-for-line the same shape as `dashboard/layout.tsx`.
+
+**Found and fixed a real, unrelated pre-existing bug while investigating**: the dashboard's
+own account dropdown (`site-header.tsx`) called `DropdownMenuLabel` directly inside
+`DropdownMenuContent` without a `DropdownMenuGroup` wrapper — `base-ui`'s `Menu.GroupLabel`
+requires a `Menu.Group` ancestor, so opening that dropdown threw an uncaught
+`MenuGroupContext is missing` error and rendered nothing. This was a Phase A defect, not
+something this session introduced, caught only because the dev server's own browser-error
+log was checked after the user reported something not showing up. Fixed by wrapping the
+label in `DropdownMenuGroup`. Verified via grep that this was the only place in the codebase
+using `DropdownMenuLabel` without a group — not a systemic pattern elsewhere.
+
+**Takeaway for future work on this project**: "different audience" (an office admin vs. a
+parent) justifies different page *shapes* (already an established, accepted principle —
+tiered dashboard vs. list vs. detail-rail) but never a different visual *system*. Portal
+pages themselves (PageHeader, `surface-ring` cards, `StatusDot`, buttons) already matched
+the dashboard's component vocabulary — only the outer shell had drifted, and that was
+enough to read as a different product.
+
 ## 2026-09-14 — Portals complete (Phase B, batch 8) — Phase B is now fully built
 
 Teacher, Parent, and Student portals — the last Phase B batch. **All ~60+ pages from the
