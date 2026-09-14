@@ -64,6 +64,7 @@ import {
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
+  useSidebar,
 } from "@/components/ui/sidebar";
 import type { Viewer } from "@/lib/mock/session";
 import { NavUser } from "@/components/nav-user";
@@ -178,6 +179,7 @@ const NAV_GROUPS: { label: string; items: NavItem[] }[] = [
 
 export function AppSidebar({ viewer }: { viewer: Viewer }) {
   const pathname = usePathname();
+  const { setOpenMobile } = useSidebar();
   const has = (key: string) => viewer.permissions.includes(key);
 
   const visibleGroups = NAV_GROUPS.map((group) => ({
@@ -211,7 +213,7 @@ export function AppSidebar({ viewer }: { viewer: Viewer }) {
                         isActive={isActive}
                         tooltip={item.label}
                         className="rounded-[var(--nav-radius)]"
-                        render={<Link href={item.href} />}
+                        render={<Link href={item.href} onClick={() => setOpenMobile(false)} />}
                       >
                         <item.icon />
                         <span>{item.label}</span>

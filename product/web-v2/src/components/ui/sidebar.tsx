@@ -516,6 +516,12 @@ function SidebarMenuButton({
     tooltip?: string | React.ComponentProps<typeof TooltipContent>
   } & VariantProps<typeof sidebarMenuButtonVariants>) {
   const { isMobile, state } = useSidebar()
+  // Never wrap in a Tooltip.Trigger on touch/mobile at all — not just hide
+  // the popup content. A tooltip trigger's own touch handling can eat the
+  // first tap (show the tooltip instead of firing the click), which broke
+  // real navigation taps on every sidebar link on mobile, since every nav
+  // item passes a `tooltip` prop for the desktop collapsed-icon case only.
+  const showTooltip = !!tooltip && !isMobile
   const comp = useRender({
     defaultTagName: "button",
     props: mergeProps<"button">(
@@ -524,7 +530,7 @@ function SidebarMenuButton({
       },
       props
     ),
-    render: !tooltip ? render : <TooltipTrigger render={render} />,
+    render: !showTooltip ? render : <TooltipTrigger render={render} />,
     state: {
       slot: "sidebar-menu-button",
       sidebar: "menu-button",
@@ -533,7 +539,7 @@ function SidebarMenuButton({
     },
   })
 
-  if (!tooltip) {
+  if (!showTooltip) {
     return comp
   }
 
@@ -549,7 +555,7 @@ function SidebarMenuButton({
       <TooltipContent
         side="right"
         align="center"
-        hidden={state !== "collapsed" || isMobile}
+        hidden={state !== "collapsed"}
         {...tooltip}
       />
     </Tooltip>

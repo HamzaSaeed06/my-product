@@ -25,6 +25,7 @@ import {
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
+  useSidebar,
 } from "@/components/ui/sidebar";
 import { NavUser } from "@/components/nav-user";
 import { usePortal, usePortalIdentity } from "./portal-context";
@@ -75,6 +76,7 @@ export function PortalSidebar() {
   const { role } = usePortal();
   const identity = usePortalIdentity();
   const pathname = usePathname();
+  const { setOpenMobile } = useSidebar();
   const items = NAV[role];
 
   return (
@@ -102,7 +104,7 @@ export function PortalSidebar() {
                       isActive={isActive}
                       tooltip={item.label}
                       className="rounded-[var(--nav-radius)]"
-                      render={<Link href={item.href} />}
+                      render={<Link href={item.href} onClick={() => setOpenMobile(false)} />}
                     >
                       <item.icon />
                       <span>{item.label}</span>

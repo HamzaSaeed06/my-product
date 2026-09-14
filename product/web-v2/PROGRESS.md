@@ -1,5 +1,35 @@
 # web-v2 Progress
 
+## 2026-09-14 — Two real mobile touch-interaction bugs found and fixed
+
+User reported "kuch click kaam nahi kar raha, interaction nahi ho pa raha" (some clicks
+aren't working, can't interact) on mobile, without being able to name the exact element —
+this environment has no browser automation to reproduce it live, so this was a code-level
+audit for known touch-interaction failure classes in a Sidebar+Tooltip+Sheet setup, not a
+click-by-click repro.
+
+1. **The mobile sidebar drawer never closed after tapping a nav link — the most likely
+   actual cause.** On mobile, the sidebar renders as a full-screen Sheet overlay
+   (`isMobile` branch in `Sidebar`). Tapping a nav `<Link>` navigates client-side, but
+   nothing was calling `setOpenMobile(false)` — the overlay stayed open on top of the newly
+   navigated page, silently intercepting every subsequent tap on that page. This exactly
+   matches "click kaam nahi kar raha" for anything on the page you land on. Fixed by adding
+   `onClick={() => setOpenMobile(false)}` to every nav `<Link>` in both `AppSidebar` and
+   `PortalSidebar` (harmless no-op on desktop, where `openMobile` state is unused).
+2. **Every sidebar nav button was wrapped in a Tooltip.Trigger, even on touch devices** —
+   `SidebarMenuButton`'s `tooltip` prop (passed by every single nav item, for the
+   desktop-collapsed-icon case) wrapped the button in `<TooltipTrigger>` unconditionally;
+   only the tooltip's *visible content* was hidden on mobile, not the trigger wrapping
+   itself. Tooltip triggers are a well-known class of touch-interaction bug — the first tap
+   can register as a "hover" instead of a click, needing a second tap to actually fire.
+   Fixed by skipping the Tooltip wrapping entirely when `isMobile` is true (not just hiding
+   the popup), so mobile nav buttons are never routed through tooltip touch-handling at all.
+
+Both are real, plausible, independently-justified fixes for the reported symptom — verified
+via typecheck/lint (clean) and confirming routes still render, but the actual touch
+behavior fix could not be confirmed by tapping a real screen in this environment. Worth a
+direct re-check on the phone via the LAN URL now that both are in.
+
 ## 2026-09-14 — Mobile-responsive sweep across every Sheet/Dialog form
 
 User asked for the whole build to be genuinely mobile-responsive, not just the shell (ahead
