@@ -82,11 +82,40 @@ export const ALL_PERMISSIONS = [
   "subject.edit",
   "subject.archive",
   "timetable.view",
+  "timetable.create",
+  "timetable.edit",
+  "timetable.publish",
   "attendance.view",
+  "attendance.mark",
+  "attendance.correct",
   "teacher_attendance.view",
+  "teacher_attendance.mark",
+  "teacher_attendance.correct",
+  // Deliberately separate from teacher_attendance — a check-in/verification
+  // record covering all staff (Campus Head/Incharge/Office too, not just
+  // Teachers), confirmed distinct entities in the real backend's own schema
+  // comment. qr_manage is its own permission since the QR token is what
+  // gets displayed/printed at reception — security-sensitive beyond plain view.
+  "staff_attendance.view",
+  "staff_attendance.checkin",
+  "staff_attendance.mark",
+  "staff_attendance.remote_approve",
+  "staff_attendance.qr_manage",
   "substitution.view",
+  "substitution.create",
+  "substitution.cancel",
   "curriculum.view",
+  "curriculum.create",
+  "curriculum.edit",
   "homework.view",
+  "homework.create",
+  "homework.edit",
+  "homework.publish",
+  // class_diary.create is reused for create, update, AND archive in the
+  // real backend (all three routes share this one string) — there is no
+  // separate .edit permission here, confirmed from routes.ts.
+  "class_diary.view",
+  "class_diary.create",
   "assessment.view",
   "exam.view",
   "result.view",

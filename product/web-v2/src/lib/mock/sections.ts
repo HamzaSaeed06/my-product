@@ -1,3 +1,6 @@
+import { mockStudents, type Student } from "./students";
+import { mockClasses } from "./classes";
+
 export interface Section {
   id: string;
   name: string;
@@ -24,3 +27,17 @@ export const mockSections: Section[] = [
   { id: "sec_9", name: "A", classId: "cls_montessori", campusId: "cmp_hilltop", academicYearId: "ay_2026", capacity: 20, archived: false },
   { id: "sec_10", name: "A", classId: "cls_3", campusId: "cmp_main", academicYearId: "ay_2025", capacity: 35, archived: true },
 ];
+
+// The Student model (students.ts) carries flat display fields
+// (className/section/campusId) rather than a sectionId FK — this bridges
+// the two for any page that needs "who's actually in this section"
+// (attendance rosters, curriculum progress) without duplicating a class-
+// name lookup at every call site.
+export function getSectionRoster(sectionId: string): Student[] {
+  const section = mockSections.find((s) => s.id === sectionId);
+  if (!section) return [];
+  const className = mockClasses.find((c) => c.id === section.classId)?.name;
+  return mockStudents.filter(
+    (s) => s.campusId === section.campusId && s.className === className && s.section === section.name,
+  );
+}

@@ -22,6 +22,14 @@ import {
   ClipboardList,
   MessageCircleQuestion,
   ClipboardCheck,
+  CalendarClock,
+  CalendarCheck2,
+  UserCheck,
+  ScanLine,
+  Repeat,
+  BookOpen,
+  NotebookPen,
+  NotebookText,
   type LucideIcon,
 } from "lucide-react";
 import {
@@ -73,6 +81,19 @@ const NAV_GROUPS: { label: string; items: NavItem[] }[] = [
       { href: "/dashboard/admissions", label: "Admissions", icon: ClipboardList, anyOf: ["admission.view"] },
       { href: "/dashboard/admission-inquiries", label: "Admission Inquiries", icon: MessageCircleQuestion, anyOf: ["admission_inquiry.view"] },
       { href: "/dashboard/enrollments", label: "Enrollments", icon: ClipboardCheck, anyOf: ["enrollment.view"] },
+    ],
+  },
+  {
+    label: "Academic Operations",
+    items: [
+      { href: "/dashboard/timetable", label: "Timetable", icon: CalendarClock, anyOf: ["timetable.view"] },
+      { href: "/dashboard/attendance", label: "Attendance", icon: CalendarCheck2, anyOf: ["attendance.view"] },
+      { href: "/dashboard/teacher-attendance", label: "Teacher Attendance", icon: UserCheck, anyOf: ["teacher_attendance.view"] },
+      { href: "/dashboard/staff-attendance", label: "Staff Attendance", icon: ScanLine, anyOf: ["staff_attendance.view"] },
+      { href: "/dashboard/substitutions", label: "Substitutions", icon: Repeat, anyOf: ["substitution.view"] },
+      { href: "/dashboard/curriculum", label: "Curriculum", icon: BookOpen, anyOf: ["curriculum.view"] },
+      { href: "/dashboard/homework", label: "Homework", icon: NotebookPen, anyOf: ["homework.view"] },
+      { href: "/dashboard/class-diary", label: "Class Diary", icon: NotebookText, anyOf: ["class_diary.view"] },
     ],
   },
   {

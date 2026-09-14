@@ -1,5 +1,83 @@
 # web-v2 Progress
 
+## 2026-09-14 — Academic Operations batch complete (Phase B, batch 4) — grid/matrix patterns, not DataTable
+
+All 8 concepts built on mock data, typecheck/lint clean, all 8 routes verified 200 with the
+expected content rendering. This batch's headline: several of these screens are genuinely
+**not list pages** — the research pass into `product/web` and `product/api` called out
+specific non-CRUD interaction shapes by name, and this batch built each one as its own
+component rather than forcing everything through `DataTable`.
+
+- **Timetable** (`/dashboard/timetable`) — a period×day grid (`TimetableGrid`), not a table:
+  rows are periods 1-8, columns Mon-Sat, each cell either shows a subject+teacher chip or an
+  empty "+" affordance that opens `EntryDialog`. Draft → Published is one-way
+  (`timetable.publish`); publishing doesn't lock further edits. Section picker + "create
+  timetable" empty state for sections that don't have one yet.
+- **Attendance** (`/dashboard/attendance`) — the bulk mark-then-lock pattern from the
+  research: if no records exist yet for a section+date, renders the **whole roster as one
+  form** (`AttendanceRosterForm`, default Present per student, one "Submit attendance"
+  button) rather than N per-row saves. Once submitted, flips to a read-only table where a
+  row is corrected only via an approval-request dialog (`attendance.mark` requests,
+  `attendance.correct` decides) — never edited directly. A "Pending corrections" panel with
+  Approve/Reject sits below when there's anything awaiting a decision.
+- **Teacher Attendance** (`/dashboard/teacher-attendance`) — deliberately simpler: no
+  section concept, one row per teacher per day, and — confirmed distinct from student
+  attendance in the real backend — correction here is a **direct edit** via the same inline
+  Select, no approval workflow (`teacher_attendance.correct` gates it, not a request).
+- **Staff Attendance** (`/dashboard/staff-attendance`) — genuinely new page, no old-frontend
+  equivalent to reference. Confirmed as a distinct entity from Teacher Attendance in the real
+  schema (a WHEN/HOW check-in-verification record covering every staff type via User, not a
+  present/absent/leave mark) — modeled that way here, not merged. Ships a "Show QR code"
+  dialog (`staff_attendance.qr_manage`, deliberately separate from `.view` since it's what
+  gets displayed/printed at reception) and a "Mark manually" fallback.
+- **Substitutions** (`/dashboard/substitutions`) — a plain list + "Assign substitute"
+  dialog, closest to a normal CRUD screen in this batch. The class/period picker resolves
+  straight from `TimetableEntry` records so the original teacher is filled in automatically.
+  Cancel keeps the row (no hard delete), same convention as every other terminal-status
+  action in this project.
+- **Curriculum** (`/dashboard/curriculum`) — topic cards with a **row of per-section toggle
+  chips** underneath each, not a table — completion is tracked per [topic, section] pair and
+  toggling a chip is the whole interaction. `curriculum.create` (add a topic) is confirmed
+  separate from `curriculum.edit` (toggle progress, update, archive) in the real backend.
+- **Homework** (`/dashboard/homework`) — the one module that kept the familiar
+  list+Sheet+Publish shape, since it genuinely is that shape (a formal per-section
+  assignment with its own Draft→Published lifecycle, `homework.publish` separate from
+  create/edit). Attachments use a real `<input type="file" multiple>` in the create Sheet.
+- **Class Diary** (`/dashboard/class-diary`) — the other genuinely new page. Deliberately
+  lighter than Homework: no attachments, no draft/publish step, just a one-line note per
+  section+date. `class_diary.create` is confirmed to cover create, update, *and* archive in
+  the real backend — there's no separate `.edit` permission the way every other module here
+  has one, so this Sheet does double duty as both the create and edit form.
+
+**New mock data**: `timetable.ts`, `attendance.ts`, `teacher-attendance.ts`,
+`staff-attendance.ts`, `substitutions.ts`, `curriculum.ts`, `homework.ts`, `class-diary.ts`.
+Added `getSectionRoster(sectionId)` to `sections.ts` — the Student model carries flat
+display fields (`className`/`section`/`campusId`) rather than a `sectionId` FK, so this
+bridges the two for any page that needs an actual section roster (Attendance here;
+Curriculum doesn't need it since progress rows aren't derived from live roster counts).
+All permission strings for this batch were CONFIRMED against `product/api`'s routes.ts
+during research, not inferred — a first for a Phase B batch.
+
+**Two new shared-component patterns**: a keyed inner-form subcomponent
+(`EntryForm`/`DiaryForm`, keyed by the record's own identity) replaces a `useEffect` that
+would otherwise just be syncing form state to whichever row/slot was opened — avoids the
+`react-hooks/set-state-in-effect` lint error and is the pattern to reach for whenever a
+dialog/sheet needs to open pre-filled for different rows (used here in both Timetable's
+`EntryDialog` and Class Diary's `DiarySheet`; the older `useEffect`-based prefill pattern in
+earlier batches' edit sheets still works but this is the cleaner one going forward).
+
+**Bug caught during route verification, not by typecheck/lint**: `getSectionRoster("sec_1")`
+returned zero students, so the Attendance page's default section rendered a false "No
+students found" empty state that grep confirmed but code review wouldn't have caught. Root
+cause: `students.ts`'s seeded generator produces campus/class/section combinations by chance
+(1-in-96 per student, ~2 expected matches per section over 214 students), and `sec_1`'s
+specific combination (Main Campus/Grade 3/A) happened to get zero by that seed's luck — not
+a logic bug in `getSectionRoster` itself. Fixed by pointing the batch's "already submitted"
+demo section at `sec_2` (5 real students) instead. **Takeaway for future batches: any new
+page that filters `mockStudents` down to one specific section/class/campus combination
+should verify the resulting count is non-zero before wiring a default selection to it** —
+the generator's randomness means a specific combo can legitimately be empty.
+
 ## 2026-09-14 — Admissions & Enrollment batch complete (Phase B, batch 3) — first real multi-step flows
 
 All 3 concepts built on mock data, typecheck/lint clean, all 5 routes verified 200. This
