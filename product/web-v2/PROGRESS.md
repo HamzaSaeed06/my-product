@@ -1,5 +1,38 @@
 # web-v2 Progress
 
+## 2026-09-14 — Sidebar polish round 2: width, missing separators, uppercase labels, spacing consistency
+
+Follow-up feedback right after the first sidebar bug-fix round — five more specific issues,
+all in the same shared `src/components/ui/sidebar.tsx` primitive (plus one global CSS
+utility), so both the dashboard and portal inherit every fix identically again:
+
+1. **Sidebar was too wide.** `SIDEBAR_WIDTH` reduced from `16rem` (256px) to `15rem` (240px).
+2. **No separator line under the logo header, or above the user-profile footer** — the logo
+   block and the nav below it, and the nav and the profile above it, ran together with no
+   visual boundary. Added `border-b border-sidebar-border` to `SidebarHeader` and
+   `border-t border-sidebar-border` to `SidebarFooter` (both shared primitives, so
+   `AppSidebar`/`PortalSidebar` and their `NavUser` footers both get the line automatically).
+3. **Nav group labels ("People", "Finance", ...) were shouting in ALL CAPS.** Confirmed this
+   was a deliberate Phase A design choice (the source spec's "Eyebrow Label," documented in
+   `globals.css`), but the user overrode it directly: removed `text-transform: uppercase`
+   from `.label-eyebrow`, keeping the Geist Mono font + wide tracking so it still reads as a
+   label, just not shouty. **When explicit user feedback contradicts an earlier documented
+   design decision, the explicit feedback wins — update the decision, don't defend it.**
+4. **Inconsistent spacing around each nav group** — confirmed a real, precisely diagnosable
+   bug: `SidebarGroup` had uniform `p-2` padding on all sides while `SidebarContent` had
+   `gap-0` between stacked groups, so the gap AFTER a group (double padding: 8px + 8px = 16px)
+   was 4x the gap between a group's own label and its first item (0px, no gap at all between
+   `SidebarGroupLabel` and `SidebarGroupContent`). Fixed by centralizing all vertical rhythm
+   in one place instead of letting it emerge from compounding padding: `SidebarGroup` now
+   uses `gap-1 px-2` (no vertical padding of its own), `SidebarContent` uses `gap-1 py-2`
+   — label-to-item and group-to-group spacing are now the same deliberate 4px value
+   throughout, plus one shared 8px breathing margin at the very top/bottom of the whole nav
+   list (from `SidebarContent`'s own `py-2`, sitting against the new header/footer borders).
+
+Verified via typecheck/lint (clean) and curl'd HTML confirming the new width
+(`--sidebar-width:15rem`), the border classes, the de-capitalized "People" label text, and
+the new `gap-1`/`px-2`/`py-2` class strings — on both `/dashboard` and `/portal`.
+
 ## 2026-09-14 — Sidebar UI/UX bugs fixed (correction round, applies to dashboard AND portal)
 
 User feedback after seeing the now-unified dashboard/portal shell: five real bugs/gaps in
