@@ -61,7 +61,7 @@ export function HomeworkSheet({ open, onOpenChange }: { open: boolean; onOpenCha
             <FieldLabel htmlFor="hw-title">Title</FieldLabel>
             <Input id="hw-title" value={title} onChange={(e) => setTitle(e.target.value)} />
           </Field>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <Field>
               <FieldLabel>Section</FieldLabel>
               <Combobox options={SECTION_OPTIONS} value={sectionId} onChange={setSectionId} placeholder="Select" />

@@ -1,5 +1,36 @@
 # web-v2 Progress
 
+## 2026-09-14 — Mobile-responsive sweep across every Sheet/Dialog form
+
+User asked for the whole build to be genuinely mobile-responsive, not just the shell (ahead
+of reviewing it on their own phone via the new LAN URL). Audited for the highest-leverage
+systemic gap rather than reviewing all ~60+ pages individually:
+
+- **Found and fixed 15 files** using an unqualified `grid-cols-2`/`grid-cols-3` for
+  side-by-side form fields inside a Sheet or Dialog (e.g. Section+Subject, Start+End time,
+  Opening Balance+Collections) — these forced two/three columns even on a 320-375px phone
+  screen. Batch-changed every instance to `grid-cols-1 ... sm:grid-cols-2`/`sm:grid-cols-3`
+  (stacks on phones, side-by-side from the `sm` breakpoint up) across: admission-inquiries,
+  assessments, cash-closing, class-diary, delegations, discounts, exams (schedule-dialog),
+  fee-structures, homework, institute, leaves, payments, promotions (dashboard), and the
+  portal's own leave create-dialog.
+- **Confirmed already sound, no changes needed**: the Sidebar's mobile behavior (a
+  `useIsMobile` hook at the standard 768px breakpoint swaps it for a full off-canvas Sheet
+  drawer, triggered by `SidebarTrigger` — untouched shadcn behavior, already correct),
+  `Sheet` (defaults to `w-3/4` on phones, capped at `sm:max-w-sm` on larger screens) and
+  `Dialog` (`max-w-[calc(100%-2rem)]`, never wider than the viewport minus a 1rem margin)
+  content widths, `StatStrip` (already `grid-cols-2` on mobile widening to 4 at `sm`), the
+  main dashboard Overview's chart+panel layout (already `grid-cols-1 lg:grid-cols-3`), and
+  `PageHeader` (`flex-wrap`). The Timetable grid and the enrollment trend chart intentionally
+  keep a `min-w-[...]` + horizontal scroll on narrow screens — a period×day grid or a dense
+  chart genuinely needs the width, and horizontal-scroll-on-mobile is the standard, accepted
+  pattern for that kind of content rather than trying to compress it illegibly.
+
+Verified via typecheck/lint (clean) and curl'd HTML confirming the new
+`grid-cols-1 ... sm:grid-cols-N` class strings landed. **Not verified**: actual on-device
+rendering/touch behavior — this environment has no browser automation this session; the
+user was given the LAN preview URL specifically to check real-device behavior themselves.
+
 ## 2026-09-14 — Two sidebar reversals per explicit follow-up feedback
 
 - **Uppercase nav-group labels are back.** The earlier round removed

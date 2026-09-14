@@ -85,7 +85,7 @@ export function PromotionDialog({
             </Select>
           </Field>
           {(decision === "PROMOTE" || decision === "CLASS_JUMP") && (
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <Field>
                 <FieldLabel>Target class</FieldLabel>
                 <Combobox options={CLASS_OPTIONS} value={targetClassId} onChange={setTargetClassId} placeholder="Select" />

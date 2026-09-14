@@ -150,7 +150,7 @@ export function CreateLeaveDialog({ open, onOpenChange }: { open: boolean; onOpe
             </>
           )}
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <Field>
               <FieldLabel htmlFor="lv-from">From</FieldLabel>
               <Input id="lv-from" type="date" value={fromDate} onChange={(e) => setFromDate(e.target.value)} />

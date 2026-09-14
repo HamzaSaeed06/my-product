@@ -126,7 +126,7 @@ export function RequestDiscountDialog({ open, onOpenChange }: { open: boolean; o
             </>
           )}
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <Field>
               <FieldLabel>Applies to</FieldLabel>
               <Combobox options={STRUCTURE_OPTIONS} value={structureId} onChange={setStructureId} placeholder="Select" />
@@ -147,7 +147,7 @@ export function RequestDiscountDialog({ open, onOpenChange }: { open: boolean; o
               </Select>
             </Field>
           </div>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <Field>
               <FieldLabel>Discount as</FieldLabel>
               <Select value={mode} onValueChange={(v) => setMode(v as "percentage" | "amount")}>

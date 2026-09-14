@@ -36,7 +36,7 @@ export default function InstitutePage() {
             <FieldLabel htmlFor="inst-address">Address</FieldLabel>
             <Input id="inst-address" value={profile.address ?? ""} onChange={(e) => setProfile({ ...profile, address: e.target.value })} />
           </Field>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <Field>
               <FieldLabel htmlFor="inst-phone">Phone</FieldLabel>
               <Input id="inst-phone" value={profile.phone ?? ""} onChange={(e) => setProfile({ ...profile, phone: e.target.value })} />
@@ -63,7 +63,7 @@ export default function InstitutePage() {
           <CardTitle>Settings</CardTitle>
           <CardDescription>Gated by institute.configure — a separate permission from profile edits.</CardDescription>
         </CardHeader>
-        <CardContent className="grid grid-cols-3 gap-3">
+        <CardContent className="grid grid-cols-1 gap-3 sm:grid-cols-3">
           <Field>
             <FieldLabel htmlFor="inst-tz">Timezone</FieldLabel>
             <Input id="inst-tz" value={settings.timezone} onChange={(e) => setSettings({ ...settings, timezone: e.target.value })} />

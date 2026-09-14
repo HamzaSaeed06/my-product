@@ -144,7 +144,7 @@ export function RecordPaymentSheet({ open, onOpenChange }: { open: boolean; onOp
               />
             </Field>
           )}
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <Field>
               <FieldLabel htmlFor="pay-amount">Amount (Rs)</FieldLabel>
               <Input id="pay-amount" type="number" min={0} value={amount} onChange={(e) => setAmount(e.target.value)} />

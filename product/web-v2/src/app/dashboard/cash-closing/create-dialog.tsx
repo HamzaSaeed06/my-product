@@ -53,7 +53,7 @@ export function CreateClosingDialog({ open, onOpenChange }: { open: boolean; onO
           <DialogDescription>One closing per campus per day — a single record-and-confirm action, not an editable list.</DialogDescription>
         </DialogHeader>
         <div className="flex flex-col gap-4">
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <Field>
               <FieldLabel>Campus</FieldLabel>
               <Combobox options={CAMPUS_OPTIONS} value={campusId} onChange={setCampusId} placeholder="Select" />
@@ -63,7 +63,7 @@ export function CreateClosingDialog({ open, onOpenChange }: { open: boolean; onO
               <Input id="cc-date" type="date" value={date} onChange={(e) => setDate(e.target.value)} />
             </Field>
           </div>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <Field>
               <FieldLabel htmlFor="cc-opening">Opening balance</FieldLabel>
               <Input id="cc-opening" type="number" min={0} value={openingBalance} onChange={(e) => setOpeningBalance(e.target.value)} />
@@ -73,7 +73,7 @@ export function CreateClosingDialog({ open, onOpenChange }: { open: boolean; onO
               <Input id="cc-collections" type="number" min={0} value={collections} onChange={(e) => setCollections(e.target.value)} />
             </Field>
           </div>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <Field>
               <FieldLabel htmlFor="cc-refunds">Refunds paid out</FieldLabel>
               <Input id="cc-refunds" type="number" min={0} value={refundsPaidOut} onChange={(e) => setRefundsPaidOut(e.target.value)} />

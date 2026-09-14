@@ -63,7 +63,7 @@ export function InquirySheet({ open, onOpenChange }: { open: boolean; onOpenChan
             <FieldLabel htmlFor="inq-parent">Parent&apos;s name</FieldLabel>
             <Input id="inq-parent" value={parentName} onChange={(e) => setParentName(e.target.value)} />
           </Field>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <Field>
               <FieldLabel htmlFor="inq-phone">Phone</FieldLabel>
               <Input id="inq-phone" value={parentPhone} onChange={(e) => setParentPhone(e.target.value)} />

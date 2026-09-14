@@ -74,7 +74,7 @@ export function DelegationSheet({ open, onOpenChange }: { open: boolean; onOpenC
             <FieldLabel>Campus</FieldLabel>
             <Combobox options={CAMPUS_OPTIONS} value={campusId} onChange={setCampusId} placeholder="Select a campus" />
           </Field>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <Field>
               <FieldLabel htmlFor="del-from">Valid from</FieldLabel>
               <Input id="del-from" type="date" value={validFrom} onChange={(e) => setValidFrom(e.target.value)} />

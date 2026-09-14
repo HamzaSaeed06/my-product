@@ -49,7 +49,7 @@ export function RequestLeaveDialog({
           <DialogDescription>A request in the past is marked retrospective automatically.</DialogDescription>
         </DialogHeader>
         <div className="flex flex-col gap-4">
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <Field>
               <FieldLabel htmlFor="pl-from">From</FieldLabel>
               <Input id="pl-from" type="date" value={fromDate} onChange={(e) => setFromDate(e.target.value)} />

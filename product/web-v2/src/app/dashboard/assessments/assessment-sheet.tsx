@@ -57,7 +57,7 @@ export function AssessmentSheet({ open, onOpenChange }: { open: boolean; onOpenC
             <FieldLabel htmlFor="as-title">Title</FieldLabel>
             <Input id="as-title" placeholder="e.g. Quiz 1 — Fractions" value={title} onChange={(e) => setTitle(e.target.value)} />
           </Field>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <Field>
               <FieldLabel>Section</FieldLabel>
               <Combobox options={SECTION_OPTIONS} value={sectionId} onChange={setSectionId} placeholder="Select" />
@@ -67,7 +67,7 @@ export function AssessmentSheet({ open, onOpenChange }: { open: boolean; onOpenC
               <Combobox options={SUBJECT_OPTIONS} value={subjectId} onChange={setSubjectId} placeholder="Select" />
             </Field>
           </div>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <Field>
               <FieldLabel htmlFor="as-max">Max marks</FieldLabel>
               <Input id="as-max" type="number" min={1} value={maxMarks} onChange={(e) => setMaxMarks(e.target.value)} />

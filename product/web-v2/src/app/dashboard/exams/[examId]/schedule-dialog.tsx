@@ -92,7 +92,7 @@ export function ScheduleDialog({
           <DialogDescription>One subject, for one section, on one date and time.</DialogDescription>
         </DialogHeader>
         <div className="flex flex-col gap-4">
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <Field>
               <FieldLabel>Section</FieldLabel>
               <Combobox options={SECTION_OPTIONS} value={sectionId} onChange={setSectionId} placeholder="Select" />
@@ -106,7 +106,7 @@ export function ScheduleDialog({
             <FieldLabel htmlFor="sched-date">Date</FieldLabel>
             <Input id="sched-date" type="date" value={date} onChange={(e) => setDate(e.target.value)} />
           </Field>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <Field>
               <FieldLabel htmlFor="sched-start">Start time</FieldLabel>
               <Input id="sched-start" type="time" value={startTime} onChange={(e) => setStartTime(e.target.value)} />

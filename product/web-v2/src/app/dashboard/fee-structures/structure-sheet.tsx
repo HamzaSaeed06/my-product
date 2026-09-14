@@ -64,7 +64,7 @@ export function StructureSheet({ open, onOpenChange }: { open: boolean; onOpenCh
             <FieldLabel htmlFor="fs-name">Name</FieldLabel>
             <Input id="fs-name" placeholder="e.g. Grade 3 Tuition" value={name} onChange={(e) => setName(e.target.value)} />
           </Field>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <Field>
               <FieldLabel>Category</FieldLabel>
               <Combobox options={CATEGORY_OPTIONS} value={categoryId} onChange={setCategoryId} placeholder="Select" />
@@ -78,7 +78,7 @@ export function StructureSheet({ open, onOpenChange }: { open: boolean; onOpenCh
             <FieldLabel>Campus</FieldLabel>
             <Combobox options={CAMPUS_OPTIONS} value={campusId} onChange={setCampusId} placeholder="All campuses" />
           </Field>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <Field>
               <FieldLabel htmlFor="fs-amount">Amount</FieldLabel>
               <Input id="fs-amount" type="number" min={0} value={amount} onChange={(e) => setAmount(e.target.value)} />
