@@ -102,7 +102,10 @@ export function StudentFieldsBuilder({
         </Button>
       </div>
 
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
+      {/* items-start stops CSS Grid's default row-stretch behavior — without
+          it, every card in a row grows to match the tallest one, leaving
+          visible empty space at the bottom of cards with fewer fields. */}
+      <div className="grid grid-cols-1 items-start gap-4 sm:grid-cols-2 xl:grid-cols-3">
         {sortedCategories.map((category) => {
           const categoryFields = fields.filter((f) => f.categoryId === category.id).sort((a, b) => a.order - b.order);
           return (
