@@ -1,15 +1,23 @@
 "use client";
 
 import { useState } from "react";
-import { Plus, Pencil, Trash2 } from "lucide-react";
+import { Plus, Trash2, Pencil, Lock, LockOpen } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ConfirmDialog } from "@/components/confirm-dialog";
-import { FieldRow } from "./field-row";
 import { FieldSheet } from "./field-sheet";
 import { CategoryDialog } from "./category-dialog";
+import { CategorySheet } from "./category-sheet";
 import { CategoryIcon } from "./category-icons";
-import type { CategoryIconKey, FieldCategory, FieldDefinition } from "@/lib/mock/student-fields";
+import type { CategoryIconKey, FieldCategory, FieldDefinition, FieldType } from "@/lib/mock/student-fields";
+
+const TYPE_LABEL: Record<FieldType, string> = {
+  TEXT: "Text",
+  NUMBER: "Number",
+  DATE: "Date",
+  DROPDOWN: "Dropdown",
+  YES_NO: "Yes / No",
+};
 
 // Local-state CRUD (add/edit/delete/reorder), same pattern as Roles &
 // Permissions and Feature Config's campus overrides — a real save happens
@@ -17,6 +25,12 @@ import type { CategoryIconKey, FieldCategory, FieldDefinition } from "@/lib/mock
 // the finished interaction. Reordering is a simple move-up/down rather
 // than drag-and-drop, since this list is always short per category and a
 // new drag library is unwarranted for that.
+//
+// Field management (lock/reorder/edit/delete) lives entirely inside the
+// "Edit category" Sheet, not scattered across this page too — per the
+// user's explicit ask, everything about one category is in one place.
+// This page shows a compact, read-only summary of each category's fields
+// so it's still obvious what's inside without duplicating the controls.
 export function StudentFieldsBuilder({
   initialCategories,
   initialFields,
@@ -27,16 +41,17 @@ export function StudentFieldsBuilder({
   const [categories, setCategories] = useState(initialCategories);
   const [fields, setFields] = useState(initialFields);
 
-  const [categoryDialog, setCategoryDialog] = useState<{ open: boolean; category?: FieldCategory }>({ open: false });
+  const [addCategoryOpen, setAddCategoryOpen] = useState(false);
+  const [editingCategory, setEditingCategory] = useState<FieldCategory | null>(null);
   const [categoryToDelete, setCategoryToDelete] = useState<FieldCategory | null>(null);
   const [fieldSheet, setFieldSheet] = useState<{ open: boolean; field?: FieldDefinition; categoryId?: string }>({ open: false });
 
-  function saveCategory(name: string, icon: CategoryIconKey) {
-    if (categoryDialog.category) {
-      setCategories((prev) => prev.map((c) => (c.id === categoryDialog.category!.id ? { ...c, name, icon } : c)));
-    } else {
-      setCategories((prev) => [...prev, { id: `cat_${Date.now()}`, name, icon, order: prev.length }]);
-    }
+  function addCategory(name: string, icon: CategoryIconKey) {
+    setCategories((prev) => [...prev, { id: `cat_${Date.now()}`, name, icon, order: prev.length }]);
+  }
+
+  function saveCategory(categoryId: string, name: string, icon: CategoryIconKey) {
+    setCategories((prev) => prev.map((c) => (c.id === categoryId ? { ...c, name, icon } : c)));
   }
 
   function deleteCategory(category: FieldCategory) {
@@ -80,7 +95,7 @@ export function StudentFieldsBuilder({
   return (
     <div className="flex flex-col gap-6">
       <div className="flex justify-end">
-        <Button size="sm" onClick={() => setCategoryDialog({ open: true })}>
+        <Button size="sm" onClick={() => setAddCategoryOpen(true)}>
           <Plus className="size-3.5" />
           Add category
         </Button>
@@ -96,7 +111,7 @@ export function StudentFieldsBuilder({
                 {category.name}
               </CardTitle>
               <div className="flex items-center gap-1">
-                <Button variant="ghost" size="icon-sm" onClick={() => setCategoryDialog({ open: true, category })} aria-label="Edit category">
+                <Button variant="ghost" size="icon-sm" onClick={() => setEditingCategory(category)} aria-label="Edit category">
                   <Pencil className="size-3.5" />
                 </Button>
                 <Button variant="ghost" size="icon-sm" onClick={() => setCategoryToDelete(category)} aria-label="Delete category">
@@ -104,42 +119,50 @@ export function StudentFieldsBuilder({
                 </Button>
               </div>
             </CardHeader>
-            <CardContent className="flex flex-col gap-2">
+            <CardContent className="flex flex-col divide-y divide-border">
               {categoryFields.length === 0 ? (
                 <p className="py-2 text-sm text-muted-foreground">No fields in this category yet.</p>
               ) : (
-                categoryFields.map((field, index) => (
-                  <FieldRow
-                    key={field.id}
-                    field={field}
-                    canMoveUp={index > 0}
-                    canMoveDown={index < categoryFields.length - 1}
-                    onMoveUp={() => moveField(field, -1)}
-                    onMoveDown={() => moveField(field, 1)}
-                    onToggleLock={() => toggleLock(field)}
-                    onEdit={() => setFieldSheet({ open: true, field })}
-                    onDelete={() => deleteField(field)}
-                  />
+                categoryFields.map((field) => (
+                  <div key={field.id} className="flex items-center justify-between gap-3 py-2 text-sm">
+                    <div className="flex flex-col gap-0.5">
+                      <span className="font-medium text-foreground">{field.label}</span>
+                      <span className="text-xs text-muted-foreground">
+                        {TYPE_LABEL[field.type]}
+                        {field.required ? " · Required" : ""}
+                      </span>
+                    </div>
+                    {field.locked ? (
+                      <Lock className="size-3.5 shrink-0 text-muted-foreground" aria-label="Locked" />
+                    ) : (
+                      <LockOpen className="size-3.5 shrink-0 text-muted-foreground" aria-label="Campus-editable" />
+                    )}
+                  </div>
                 ))
               )}
-              <div>
-                <Button variant="outline" size="sm" onClick={() => setFieldSheet({ open: true, categoryId: category.id })}>
-                  <Plus className="size-3.5" />
-                  Add field
-                </Button>
-              </div>
             </CardContent>
           </Card>
         );
       })}
 
-      <CategoryDialog
-        key={categoryDialog.category?.id ?? "new"}
-        category={categoryDialog.category}
-        open={categoryDialog.open}
-        onOpenChange={(open) => setCategoryDialog((prev) => ({ ...prev, open }))}
-        onSave={saveCategory}
-      />
+      <CategoryDialog open={addCategoryOpen} onOpenChange={setAddCategoryOpen} onSave={addCategory} />
+
+      {editingCategory ? (
+        <CategorySheet
+          key={editingCategory.id}
+          category={editingCategory}
+          fields={fields.filter((f) => f.categoryId === editingCategory.id)}
+          open={!!editingCategory}
+          onOpenChange={(open) => !open && setEditingCategory(null)}
+          onSaveCategory={(name, icon) => saveCategory(editingCategory.id, name, icon)}
+          onAddField={() => setFieldSheet({ open: true, categoryId: editingCategory.id })}
+          onMoveField={moveField}
+          onToggleLock={toggleLock}
+          onEditField={(field) => setFieldSheet({ open: true, field })}
+          onDeleteField={deleteField}
+        />
+      ) : null}
+
       <FieldSheet
         key={fieldSheet.field?.id ?? "new"}
         field={fieldSheet.field}

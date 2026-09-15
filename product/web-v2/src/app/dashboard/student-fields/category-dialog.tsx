@@ -21,35 +21,36 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import type { CategoryIconKey, FieldCategory } from "@/lib/mock/student-fields";
+import type { CategoryIconKey } from "@/lib/mock/student-fields";
 import { CATEGORY_ICON_OPTIONS, CategoryIcon } from "./category-icons";
 
+// Add-only: a brand new category has no fields yet to manage, so a small
+// Dialog for just name+icon is enough. Editing an existing category
+// (which does have fields) uses the bigger CategorySheet instead, where
+// those fields' lock/order/edit/delete live alongside the name/icon.
 export function CategoryDialog({
-  category,
   open,
   onOpenChange,
   onSave,
 }: {
-  category?: FieldCategory;
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onSave: (name: string, icon: CategoryIconKey) => void;
 }) {
-  const [name, setName] = useState(category?.name ?? "");
-  const [icon, setIcon] = useState<CategoryIconKey>(category?.icon ?? "info");
-  const isEditing = !!category;
+  const [name, setName] = useState("");
+  const [icon, setIcon] = useState<CategoryIconKey>("info");
 
   function handleSave() {
     onSave(name.trim(), icon);
     onOpenChange(false);
-    toast.success(isEditing ? "Category updated." : `"${name.trim()}" category added.`);
+    toast.success(`"${name.trim()}" category added.`);
   }
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>{isEditing ? "Edit category" : "Add category"}</DialogTitle>
+          <DialogTitle>Add category</DialogTitle>
           <DialogDescription>Groups related fields together on the student form.</DialogDescription>
         </DialogHeader>
         <Field>
@@ -90,7 +91,7 @@ export function CategoryDialog({
         <DialogFooter>
           <DialogClose render={<Button variant="outline" />}>Cancel</DialogClose>
           <Button onClick={handleSave} disabled={!name.trim()}>
-            {isEditing ? "Save" : "Add category"}
+            Add category
           </Button>
         </DialogFooter>
       </DialogContent>

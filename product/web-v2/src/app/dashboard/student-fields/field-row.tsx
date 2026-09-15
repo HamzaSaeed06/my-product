@@ -38,7 +38,7 @@ export function FieldRow({
   const [confirmOpen, setConfirmOpen] = useState(false);
 
   return (
-    <div className="flex items-center justify-between gap-3 rounded-[var(--card-radius)] border border-border p-3">
+    <div className="flex flex-col gap-2 rounded-[var(--card-radius)] border border-border p-3">
       <div className="flex min-w-0 flex-col gap-0.5">
         <span className="truncate text-sm font-medium text-foreground">{field.label}</span>
         <span className="text-xs text-muted-foreground">
@@ -46,7 +46,7 @@ export function FieldRow({
           {field.required ? " · Required" : ""}
         </span>
       </div>
-      <div className="flex shrink-0 items-center gap-1">
+      <div className="flex flex-wrap items-center justify-end gap-1">
         <Button variant="ghost" size="icon-sm" onClick={onMoveUp} disabled={!canMoveUp} aria-label="Move up">
           <ArrowUp className="size-3.5" />
         </Button>
