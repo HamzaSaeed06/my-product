@@ -126,7 +126,11 @@ function CalendarDayButton({ className, day, modifiers, ...props }: React.Compon
       data-range-end={modifiers.range_end}
       data-range-middle={modifiers.range_middle}
       className={cn(
-        buttonVariants({ variant: "ghost" }),
+        // size must be explicit here (not left to cva's "default" arm) —
+        // "default" bakes in px-2.5/h-8/gap-1.5, and none of the overrides
+        // below touch padding, so that leftover horizontal padding was
+        // silently widening every day cell past --cell-size.
+        buttonVariants({ variant: "ghost", size: "icon-sm" }),
         "flex aspect-square size-auto w-full min-w-(--cell-size) flex-col gap-1 rounded-[var(--button-radius)] font-normal leading-none",
         "group-data-[focused=true]/day:relative group-data-[focused=true]/day:z-10 group-data-[focused=true]/day:border-ring group-data-[focused=true]/day:ring-3 group-data-[focused=true]/day:ring-ring/50",
         "data-[range-end=true]:rounded-[var(--button-radius)] data-[range-end=true]:bg-primary data-[range-end=true]:text-primary-foreground",
