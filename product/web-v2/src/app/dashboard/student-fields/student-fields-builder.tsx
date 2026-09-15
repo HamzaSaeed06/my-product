@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Plus, Trash2, Pencil, Lock, LockOpen } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { IconActionButton } from "@/components/icon-action-button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { FieldSheet } from "./field-sheet";
@@ -101,49 +102,51 @@ export function StudentFieldsBuilder({
         </Button>
       </div>
 
-      {sortedCategories.map((category) => {
-        const categoryFields = fields.filter((f) => f.categoryId === category.id).sort((a, b) => a.order - b.order);
-        return (
-          <Card key={category.id}>
-            <CardHeader className="flex flex-row items-center justify-between">
-              <CardTitle className="flex items-center gap-2">
-                <CategoryIcon icon={category.icon} className="size-4 text-primary" />
-                {category.name}
-              </CardTitle>
-              <div className="flex items-center gap-1">
-                <Button variant="ghost" size="icon-sm" onClick={() => setEditingCategory(category)} aria-label="Edit category">
-                  <Pencil className="size-3.5" />
-                </Button>
-                <Button variant="ghost" size="icon-sm" onClick={() => setCategoryToDelete(category)} aria-label="Delete category">
-                  <Trash2 className="size-3.5" />
-                </Button>
-              </div>
-            </CardHeader>
-            <CardContent className="flex flex-col divide-y divide-border">
-              {categoryFields.length === 0 ? (
-                <p className="py-2 text-sm text-muted-foreground">No fields in this category yet.</p>
-              ) : (
-                categoryFields.map((field) => (
-                  <div key={field.id} className="flex items-center justify-between gap-3 py-2 text-sm">
-                    <div className="flex flex-col gap-0.5">
-                      <span className="font-medium text-foreground">{field.label}</span>
-                      <span className="text-xs text-muted-foreground">
-                        {TYPE_LABEL[field.type]}
-                        {field.required ? " · Required" : ""}
-                      </span>
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
+        {sortedCategories.map((category) => {
+          const categoryFields = fields.filter((f) => f.categoryId === category.id).sort((a, b) => a.order - b.order);
+          return (
+            <Card key={category.id}>
+              <CardHeader className="flex flex-row items-center justify-between">
+                <CardTitle className="flex items-center gap-2">
+                  <CategoryIcon icon={category.icon} className="size-4 text-primary" />
+                  {category.name}
+                </CardTitle>
+                <div className="flex items-center gap-1">
+                  <IconActionButton label="Edit category" onClick={() => setEditingCategory(category)}>
+                    <Pencil className="size-3.5" />
+                  </IconActionButton>
+                  <IconActionButton label="Delete category" onClick={() => setCategoryToDelete(category)}>
+                    <Trash2 className="size-3.5" />
+                  </IconActionButton>
+                </div>
+              </CardHeader>
+              <CardContent className="flex flex-col divide-y divide-border">
+                {categoryFields.length === 0 ? (
+                  <p className="py-2 text-sm text-muted-foreground">No fields in this category yet.</p>
+                ) : (
+                  categoryFields.map((field) => (
+                    <div key={field.id} className="flex items-center justify-between gap-3 py-2 text-sm">
+                      <div className="flex min-w-0 flex-col gap-0.5">
+                        <span className="truncate font-medium text-foreground">{field.label}</span>
+                        <span className="text-xs text-muted-foreground">
+                          {TYPE_LABEL[field.type]}
+                          {field.required ? " · Required" : ""}
+                        </span>
+                      </div>
+                      {field.locked ? (
+                        <Lock className="size-3.5 shrink-0 text-destructive" aria-label="Locked institute-wide" />
+                      ) : (
+                        <LockOpen className="size-3.5 shrink-0 text-success" aria-label="Campus-editable" />
+                      )}
                     </div>
-                    {field.locked ? (
-                      <Lock className="size-3.5 shrink-0 text-muted-foreground" aria-label="Locked" />
-                    ) : (
-                      <LockOpen className="size-3.5 shrink-0 text-muted-foreground" aria-label="Campus-editable" />
-                    )}
-                  </div>
-                ))
-              )}
-            </CardContent>
-          </Card>
-        );
-      })}
+                  ))
+                )}
+              </CardContent>
+            </Card>
+          );
+        })}
+      </div>
 
       <CategoryDialog open={addCategoryOpen} onOpenChange={setAddCategoryOpen} onSave={addCategory} />
 
