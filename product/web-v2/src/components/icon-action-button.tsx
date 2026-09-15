@@ -14,11 +14,13 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 //    one) rather than the default ghost variant's hover:bg-muted, which
 //    is nearly invisible in this theme (--muted equals --background in
 //    light mode) and never shows at all on touch (no hover state).
-// 3. rounded-[var(--nav-radius)], not the default button radius — the
-//    sidebar's own nav items are deliberately on --nav-radius (2px in
-//    vercel-geist, a full pill in ventriloc), not --button-radius (6px);
-//    matching that is what "looks like the sidebar" actually requires,
-//    a shared 6px button radius doesn't.
+// Radius deliberately stays Button's own default (--button-radius, 6px) —
+// tried matching the sidebar's --nav-radius (2px) first, but per
+// DESIGN_SYSTEM.md's own "Radius & elevation" rule that token is scoped
+// specifically to nav elements ("tighter because nav items are the most
+// 'attached to the page' interactive element"), not action buttons in
+// general content. Confirmed with the user to follow the documented
+// default instead of a one-off exception here.
 export function IconActionButton({
   label,
   size = "icon-sm",
@@ -36,10 +38,7 @@ export function IconActionButton({
             variant="ghost"
             size={size}
             aria-label={label}
-            className={cn(
-              "rounded-[var(--nav-radius)] bg-accent hover:bg-[color-mix(in_oklch,var(--accent),var(--foreground)_8%)]",
-              className
-            )}
+            className={cn("bg-accent hover:bg-[color-mix(in_oklch,var(--accent),var(--foreground)_8%)]", className)}
             {...props}
           />
         }

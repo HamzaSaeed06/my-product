@@ -102,14 +102,19 @@ export function StudentFieldsBuilder({
         </Button>
       </div>
 
-      {/* items-start stops CSS Grid's default row-stretch behavior — without
-          it, every card in a row grows to match the tallest one, leaving
-          visible empty space at the bottom of cards with fewer fields. */}
-      <div className="grid grid-cols-1 items-start gap-4 sm:grid-cols-2 xl:grid-cols-3">
+      {/* CSS columns, not CSS grid: a same-row card still can't be shorter
+          than its tallest neighbor in a strict grid (items-start only stops
+          it from stretching, it doesn't let the row below start earlier) -
+          real gallery/masonry packing, where a short card is immediately
+          followed by the next one instead of waiting out the row, needs
+          columns. break-inside-avoid keeps one card from being split across
+          two columns; mb-4 is the item's own vertical gap since `gap-*` on
+          a columns container only spaces columns apart, not items within one. */}
+      <div className="columns-1 sm:columns-2 xl:columns-3">
         {sortedCategories.map((category) => {
           const categoryFields = fields.filter((f) => f.categoryId === category.id).sort((a, b) => a.order - b.order);
           return (
-            <Card key={category.id}>
+            <Card key={category.id} className="mb-4 break-inside-avoid">
               <CardHeader className="flex flex-row items-center justify-between">
                 <CardTitle className="flex items-center gap-2">
                   <CategoryIcon icon={category.icon} className="size-4 text-primary" />
