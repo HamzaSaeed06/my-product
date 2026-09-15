@@ -50,7 +50,7 @@ export default async function PlansPage() {
                     <Badge variant={p.isActive ? "default" : "secondary"}>{p.isActive ? "Active" : "Inactive"}</Badge>
                   </TableCell>
                   <TableCell className="text-right">
-                    <PlanActiveToggle planId={p.id} isActive={p.isActive} />
+                    <PlanActiveToggle planId={p.id} planName={p.name} isActive={p.isActive} />
                   </TableCell>
                 </TableRow>
               ))}

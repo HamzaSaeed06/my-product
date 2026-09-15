@@ -11,10 +11,14 @@
 // colliding with or querying customer operational data, matching spec
 // exactly rather than approximating it.
 //
-// No roles/permissions system here — spec never describes provider-side
-// RBAC (unlike product/api's ROLE+PERMISSION+SCOPE model for 7 customer
-// roles), just "provider staff." ProviderUser is deliberately flat: any
-// authenticated row can do anything on this platform.
+// Minimal role gate (added post-launch — see docs/PROJECT_STATUS.md):
+// the original "provider staff, deliberately flat" design (any
+// authenticated row can do anything) meant any internal account, including
+// a future read-only support hire, could revoke a paying customer's
+// license or issue new ones. Not the full ROLE+PERMISSION+SCOPE model
+// product/api uses for 7 customer roles — spec still doesn't call for
+// that here — just a flat ADMIN/SUPPORT_READ_ONLY split, mirroring the
+// shape of product/api's authorize() middleware, not its granularity.
 
 // A custom output path is REQUIRED here, not cosmetic: npm workspaces
 // hoist @prisma/client to the repo root, so Prisma's default output
@@ -39,14 +43,20 @@ datasource db {
 // Identity (provider staff — small and flat, not the customer app's model)
 // ─────────────────────────────────────────────────────────────────────────
 
+enum ProviderRole {
+  ADMIN
+  SUPPORT_READ_ONLY
+}
+
 model ProviderUser {
-  id           String   @id @default(uuid())
-  email        String   @unique
+  id           String       @id @default(uuid())
+  email        String       @unique
   passwordHash String
   fullName     String
-  isActive     Boolean  @default(true)
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  role         ProviderRole @default(ADMIN)
+  isActive     Boolean      @default(true)
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
 
   sessions         Session[]
   auditLogsAsActor AuditLog[]      @relation("ProviderAuditActor")

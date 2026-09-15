@@ -5,9 +5,8 @@ import { verifyAccessToken } from "../lib/tokens.js";
 import { prisma } from "../lib/prisma.js";
 import { HttpError } from "./errorHandler.js";
 
-// No roles/permissions here — see schema.prisma's header comment. Any
-// authenticated ProviderUser may use any route; this middleware only
-// answers "is this a real, still-valid session."
+// Answers "is this a real, still-valid session." — the role check (which
+// routes this session may use) is a separate concern, see authorize.ts.
 export async function authenticate(req: Request, _res: Response, next: NextFunction): Promise<void> {
   const token = req.cookies?.[COOKIE_NAMES.accessToken];
 
@@ -40,6 +39,6 @@ export async function authenticate(req: Request, _res: Response, next: NextFunct
     return;
   }
 
-  req.providerUser = { id: providerUser.id, sessionId: session.id };
+  req.providerUser = { id: providerUser.id, sessionId: session.id, role: providerUser.role };
   next();
 }

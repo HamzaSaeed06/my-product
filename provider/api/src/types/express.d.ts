@@ -1,8 +1,9 @@
-import type { Deployment } from "../generated/prisma/index.js";
+import type { Deployment, ProviderRole } from "../generated/prisma/index.js";
 
 export interface AuthenticatedProviderUser {
   id: string;
   sessionId: string;
+  role: ProviderRole;
 }
 
 declare global {
