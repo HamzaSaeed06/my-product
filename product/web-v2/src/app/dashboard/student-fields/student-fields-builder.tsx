@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Plus, Trash2, Pencil, Lock, LockOpen } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { IconActionButton } from "@/components/icon-action-button";
@@ -19,6 +19,31 @@ const TYPE_LABEL: Record<FieldType, string> = {
   DROPDOWN: "Dropdown",
   YES_NO: "Yes / No",
 };
+
+// CSS `columns-*` looked like the right tool for gallery/masonry packing,
+// but its column-balancing algorithm recalculates on every content change
+// and can drop a newly-added card into whichever column it currently
+// estimates as shortest — not necessarily the next one left-to-right,
+// which read as "new cards appear on the right for no reason." Assigning
+// cards to columns ourselves (round-robin by index) makes placement fully
+// predictable: card N always lands in column N % columnCount, so a new
+// card always continues the same left-to-right sequence as before it.
+function useColumnCount() {
+  const [count, setCount] = useState(1);
+  useEffect(() => {
+    const mqSm = window.matchMedia("(min-width: 640px)");
+    const mqXl = window.matchMedia("(min-width: 1280px)");
+    const update = () => setCount(mqXl.matches ? 3 : mqSm.matches ? 2 : 1);
+    update();
+    mqSm.addEventListener("change", update);
+    mqXl.addEventListener("change", update);
+    return () => {
+      mqSm.removeEventListener("change", update);
+      mqXl.removeEventListener("change", update);
+    };
+  }, []);
+  return count;
+}
 
 // Local-state CRUD (add/edit/delete/reorder), same pattern as Roles &
 // Permissions and Feature Config's campus overrides — a real save happens
@@ -92,6 +117,9 @@ export function StudentFieldsBuilder({
   }
 
   const sortedCategories = categories.slice().sort((a, b) => a.order - b.order);
+  const columnCount = useColumnCount();
+  const columns: FieldCategory[][] = Array.from({ length: columnCount }, () => []);
+  sortedCategories.forEach((category, index) => columns[index % columnCount].push(category));
 
   return (
     <div className="flex flex-col gap-6">
@@ -102,58 +130,59 @@ export function StudentFieldsBuilder({
         </Button>
       </div>
 
-      {/* CSS columns, not CSS grid: a same-row card still can't be shorter
-          than its tallest neighbor in a strict grid (items-start only stops
-          it from stretching, it doesn't let the row below start earlier) -
-          real gallery/masonry packing, where a short card is immediately
-          followed by the next one instead of waiting out the row, needs
-          columns. break-inside-avoid keeps one card from being split across
-          two columns; mb-4 is the item's own vertical gap since `gap-*` on
-          a columns container only spaces columns apart, not items within one. */}
-      <div className="columns-1 sm:columns-2 xl:columns-3">
-        {sortedCategories.map((category) => {
-          const categoryFields = fields.filter((f) => f.categoryId === category.id).sort((a, b) => a.order - b.order);
-          return (
-            <Card key={category.id} className="mb-4 break-inside-avoid">
-              <CardHeader className="flex flex-row items-center justify-between">
-                <CardTitle className="flex items-center gap-2">
-                  <CategoryIcon icon={category.icon} className="size-4 text-primary" />
-                  {category.name}
-                </CardTitle>
-                <div className="flex items-center gap-1">
-                  <IconActionButton label="Edit category" onClick={() => setEditingCategory(category)}>
-                    <Pencil className="size-3.5" />
-                  </IconActionButton>
-                  <IconActionButton label="Delete category" onClick={() => setCategoryToDelete(category)}>
-                    <Trash2 className="size-3.5" />
-                  </IconActionButton>
-                </div>
-              </CardHeader>
-              <CardContent className="flex flex-col divide-y divide-border">
-                {categoryFields.length === 0 ? (
-                  <p className="py-2 text-sm text-muted-foreground">No fields in this category yet.</p>
-                ) : (
-                  categoryFields.map((field) => (
-                    <div key={field.id} className="flex items-center justify-between gap-3 py-2 text-sm">
-                      <div className="flex min-w-0 flex-col gap-0.5">
-                        <span className="truncate font-medium text-foreground">{field.label}</span>
-                        <span className="text-xs text-muted-foreground">
-                          {TYPE_LABEL[field.type]}
-                          {field.required ? " · Required" : ""}
-                        </span>
-                      </div>
-                      {field.locked ? (
-                        <Lock className="size-3.5 shrink-0 text-destructive" aria-label="Locked institute-wide" />
-                      ) : (
-                        <LockOpen className="size-3.5 shrink-0 text-success" aria-label="Campus-editable" />
-                      )}
+      {/* Cards are assigned to columns ourselves (round-robin, see
+          useColumnCount above) rather than via CSS `columns-*`, so a new
+          card's placement is always predictable and each column is an
+          independent vertical stack — a short card never leaves visible
+          empty space waiting for a taller neighbor to finish its row. */}
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-start">
+        {columns.map((column, columnIndex) => (
+          <div key={columnIndex} className="flex flex-1 flex-col gap-4">
+            {column.map((category) => {
+              const categoryFields = fields.filter((f) => f.categoryId === category.id).sort((a, b) => a.order - b.order);
+              return (
+                <Card key={category.id}>
+                  <CardHeader className="flex flex-row items-center justify-between">
+                    <CardTitle className="flex items-center gap-2">
+                      <CategoryIcon icon={category.icon} className="size-4 text-primary" />
+                      {category.name}
+                    </CardTitle>
+                    <div className="flex items-center gap-1">
+                      <IconActionButton label="Edit category" onClick={() => setEditingCategory(category)}>
+                        <Pencil className="size-3.5" />
+                      </IconActionButton>
+                      <IconActionButton label="Delete category" onClick={() => setCategoryToDelete(category)}>
+                        <Trash2 className="size-3.5" />
+                      </IconActionButton>
                     </div>
-                  ))
-                )}
-              </CardContent>
-            </Card>
-          );
-        })}
+                  </CardHeader>
+                  <CardContent className="flex flex-col divide-y divide-border">
+                    {categoryFields.length === 0 ? (
+                      <p className="py-2 text-sm text-muted-foreground">No fields in this category yet.</p>
+                    ) : (
+                      categoryFields.map((field) => (
+                        <div key={field.id} className="flex items-center justify-between gap-3 py-2 text-sm">
+                          <div className="flex min-w-0 flex-col gap-0.5">
+                            <span className="truncate font-medium text-foreground">{field.label}</span>
+                            <span className="text-xs text-muted-foreground">
+                              {TYPE_LABEL[field.type]}
+                              {field.required ? " · Required" : ""}
+                            </span>
+                          </div>
+                          {field.locked ? (
+                            <Lock className="size-3.5 shrink-0 text-destructive" aria-label="Locked institute-wide" />
+                          ) : (
+                            <LockOpen className="size-3.5 shrink-0 text-success" aria-label="Campus-editable" />
+                          )}
+                        </div>
+                      ))
+                    )}
+                  </CardContent>
+                </Card>
+              );
+            })}
+          </div>
+        ))}
       </div>
 
       <CategoryDialog open={addCategoryOpen} onOpenChange={setAddCategoryOpen} onSave={addCategory} />
