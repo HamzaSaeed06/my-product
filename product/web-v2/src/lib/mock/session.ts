@@ -205,15 +205,3 @@ export const ALL_PERMISSIONS = [
   // routes.ts.
   "role.assign_permissions",
 ];
-
-// Demo viewer for the design-review phase: Super Admin, full permission set.
-// Phase B will add a role switcher fixture once every page exists, so
-// scoped-role behavior (Incharge/Teacher campus pickers) can be reviewed
-// screen-by-screen too.
-export const mockViewer: Viewer = {
-  id: "usr_demo_super_admin",
-  fullName: "Ayesha Raza",
-  email: "ayesha.raza@risecampus.edu",
-  roles: ["SUPER_ADMIN"],
-  permissions: ALL_PERMISSIONS,
-};
