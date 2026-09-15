@@ -50,6 +50,9 @@ export const ALL_PERMISSIONS = [
   // frontend or documented permission string to check against) — named to
   // match this codebase's own `<resource>.<action>` convention.
   "feature_config.manage",
+  // Same caveat: Student Fields (the custom-field builder) is a brand new
+  // capability agreed with the user, not yet in the real backend at all.
+  "student_field.manage",
   "student.view",
   "student.create",
   "student.edit",

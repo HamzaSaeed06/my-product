@@ -16,6 +16,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty";
 import { CalendarOff, Receipt } from "lucide-react";
 import { getStudentById } from "@/lib/mock/students";
+import { getFieldValuesForStudent } from "@/lib/mock/student-fields";
 
 function initials(name: string) {
   return name
@@ -45,6 +46,7 @@ export default async function StudentDetailPage({ params }: PageProps<"/dashboar
   const { studentId } = await params;
   const student = getStudentById(studentId);
   if (!student) notFound();
+  const fieldGroups = getFieldValuesForStudent(studentId);
 
   return (
     <div className="flex flex-col gap-6">
@@ -114,6 +116,23 @@ export default async function StudentDetailPage({ params }: PageProps<"/dashboar
                   </div>
                 </CardContent>
               </Card>
+
+              {fieldGroups.length > 0 ? (
+                <div className="mt-4 flex flex-col gap-4">
+                  {fieldGroups.map(({ category, fields }) => (
+                    <Card key={category.id}>
+                      <CardHeader>
+                        <CardTitle className="text-sm text-muted-foreground">{category.name}</CardTitle>
+                      </CardHeader>
+                      <CardContent className="flex flex-col divide-y divide-border">
+                        {fields.map(({ field, value }) => (
+                          <Fact key={field.id} label={field.label} value={value} />
+                        ))}
+                      </CardContent>
+                    </Card>
+                  ))}
+                </div>
+              ) : null}
             </TabsContent>
 
             <TabsContent value="attendance">

@@ -51,6 +51,7 @@ import {
   ScrollText,
   KeyRound,
   BadgeCheck,
+  FormInput,
   type LucideIcon,
 } from "lucide-react";
 import {
@@ -173,6 +174,7 @@ const NAV_GROUPS: { label: string; items: NavItem[] }[] = [
       { href: "/dashboard/delegations", label: "Delegations", icon: UserCheck2, anyOf: ["delegation.view"] },
       { href: "/dashboard/terminology", label: "Terminology", icon: Languages, anyOf: ["institute.configure"] },
       { href: "/dashboard/feature-config", label: "Feature Config", icon: SlidersHorizontal, anyOf: ["feature_config.manage"] },
+      { href: "/dashboard/student-fields", label: "Student Fields", icon: FormInput, anyOf: ["student_field.manage"] },
     ],
   },
 ];
