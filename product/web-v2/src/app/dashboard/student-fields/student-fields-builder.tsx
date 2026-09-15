@@ -185,13 +185,19 @@ export function StudentFieldsBuilder({
         ))}
       </div>
 
-      <CategoryDialog open={addCategoryOpen} onOpenChange={setAddCategoryOpen} onSave={addCategory} />
+      <CategoryDialog
+        existingNames={categories.map((c) => c.name)}
+        open={addCategoryOpen}
+        onOpenChange={setAddCategoryOpen}
+        onSave={addCategory}
+      />
 
       {editingCategory ? (
         <CategorySheet
           key={editingCategory.id}
           category={editingCategory}
           fields={fields.filter((f) => f.categoryId === editingCategory.id)}
+          existingNames={categories.filter((c) => c.id !== editingCategory.id).map((c) => c.name)}
           open={!!editingCategory}
           onOpenChange={(open) => !open && setEditingCategory(null)}
           onSaveCategory={(name, icon) => saveCategory(editingCategory.id, name, icon)}
@@ -208,6 +214,7 @@ export function StudentFieldsBuilder({
         field={fieldSheet.field}
         defaultCategoryId={fieldSheet.categoryId}
         categories={sortedCategories}
+        allFields={fields}
         open={fieldSheet.open}
         onOpenChange={(open) => setFieldSheet((prev) => ({ ...prev, open }))}
         onSave={saveField}

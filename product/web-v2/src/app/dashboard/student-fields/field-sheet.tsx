@@ -36,6 +36,7 @@ const TYPE_LABEL: Record<FieldType, string> = {
 export function FieldSheet({
   field,
   categories,
+  allFields,
   defaultCategoryId,
   open,
   onOpenChange,
@@ -43,6 +44,10 @@ export function FieldSheet({
 }: {
   field?: FieldDefinition;
   categories: FieldCategory[];
+  // Every field across every category, not just the current one — needed
+  // to re-check for a duplicate label whenever the user switches which
+  // category this field belongs to.
+  allFields: FieldDefinition[];
   defaultCategoryId?: string;
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -56,11 +61,23 @@ export function FieldSheet({
   const [optionsText, setOptionsText] = useState(field?.options?.join("\n") ?? "");
 
   const isEditing = !!field;
-  const canSave = label.trim().length > 0 && !!categoryId && (type !== "DROPDOWN" || optionsText.trim().length > 0);
+  const trimmedLabel = label.trim();
+  // Scoped to "within the same category" - a "Notes" field in Health and
+  // another "Notes" field in Transport aren't the same conceptual field,
+  // but two "Blood Group" fields in Health would be genuinely confusing
+  // (which one shows on the student form, which one has the data).
+  const isDuplicate =
+    trimmedLabel.length > 0 &&
+    allFields.some(
+      (f) => f.id !== field?.id && f.categoryId === categoryId && f.label.toLowerCase() === trimmedLabel.toLowerCase()
+    );
+  const canSave =
+    trimmedLabel.length > 0 && !isDuplicate && !!categoryId && (type !== "DROPDOWN" || optionsText.trim().length > 0);
 
   function handleSave() {
+    if (!canSave) return;
     onSave({
-      label: label.trim(),
+      label: trimmedLabel,
       categoryId,
       type,
       required,
@@ -68,7 +85,7 @@ export function FieldSheet({
       options: type === "DROPDOWN" ? optionsText.split("\n").map((o) => o.trim()).filter(Boolean) : undefined,
     });
     onOpenChange(false);
-    toast.success(isEditing ? `"${label.trim()}" updated.` : `"${label.trim()}" added.`);
+    toast.success(isEditing ? `"${trimmedLabel}" updated.` : `"${trimmedLabel}" added.`);
   }
 
   return (
@@ -85,7 +102,18 @@ export function FieldSheet({
         <div className="flex flex-col gap-4 overflow-y-auto px-4 py-2">
           <Field>
             <FieldLabel htmlFor="field-label">Label</FieldLabel>
-            <Input id="field-label" value={label} onChange={(e) => setLabel(e.target.value)} placeholder="e.g. Blood Group" />
+            <Input
+              id="field-label"
+              value={label}
+              onChange={(e) => setLabel(e.target.value)}
+              placeholder="e.g. Blood Group"
+              aria-invalid={isDuplicate}
+            />
+            {isDuplicate ? (
+              <p className="text-xs text-destructive">
+                &quot;{trimmedLabel}&quot; already exists in this category.
+              </p>
+            ) : null}
           </Field>
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <Field>
@@ -150,6 +178,7 @@ export function FieldSheet({
           <Button onClick={handleSave} disabled={!canSave}>
             {isEditing ? "Save changes" : "Add field"}
           </Button>
+
         </SheetFooter>
       </SheetContent>
     </Sheet>

@@ -35,6 +35,7 @@ import { FieldRow } from "./field-row";
 export function CategorySheet({
   category,
   fields,
+  existingNames,
   open,
   onOpenChange,
   onSaveCategory,
@@ -46,6 +47,7 @@ export function CategorySheet({
 }: {
   category: FieldCategory;
   fields: FieldDefinition[];
+  existingNames: string[];
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onSaveCategory: (name: string, icon: CategoryIconKey) => void;
@@ -58,8 +60,13 @@ export function CategorySheet({
   const [name, setName] = useState(category.name);
   const [icon, setIcon] = useState<CategoryIconKey>(category.icon);
 
+  const trimmed = name.trim();
+  const isDuplicate = trimmed.length > 0 && existingNames.some((n) => n.toLowerCase() === trimmed.toLowerCase());
+  const canSave = trimmed.length > 0 && !isDuplicate;
+
   function handleSave() {
-    onSaveCategory(name.trim(), icon);
+    if (!canSave) return;
+    onSaveCategory(trimmed, icon);
     onOpenChange(false);
     toast.success("Category updated.");
   }
@@ -77,7 +84,15 @@ export function CategorySheet({
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <Field>
               <FieldLabel htmlFor="category-sheet-name">Name</FieldLabel>
-              <Input id="category-sheet-name" value={name} onChange={(e) => setName(e.target.value)} />
+              <Input
+                id="category-sheet-name"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                aria-invalid={isDuplicate}
+              />
+              {isDuplicate ? (
+                <p className="text-xs text-destructive">A category named &quot;{trimmed}&quot; already exists.</p>
+              ) : null}
             </Field>
             <Field>
               <FieldLabel>Icon</FieldLabel>
@@ -139,7 +154,7 @@ export function CategorySheet({
         </div>
         <SheetFooter className="mt-auto flex-row justify-end gap-2 border-t border-border pt-4">
           <SheetClose render={<Button variant="outline" />}>Close</SheetClose>
-          <Button onClick={handleSave} disabled={!name.trim()}>
+          <Button onClick={handleSave} disabled={!canSave}>
             Save changes
           </Button>
         </SheetFooter>

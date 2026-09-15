@@ -29,10 +29,12 @@ import { CATEGORY_ICON_OPTIONS, CategoryIcon } from "./category-icons";
 // (which does have fields) uses the bigger CategorySheet instead, where
 // those fields' lock/order/edit/delete live alongside the name/icon.
 export function CategoryDialog({
+  existingNames,
   open,
   onOpenChange,
   onSave,
 }: {
+  existingNames: string[];
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onSave: (name: string, icon: CategoryIconKey) => void;
@@ -40,10 +42,15 @@ export function CategoryDialog({
   const [name, setName] = useState("");
   const [icon, setIcon] = useState<CategoryIconKey>("info");
 
+  const trimmed = name.trim();
+  const isDuplicate = trimmed.length > 0 && existingNames.some((n) => n.toLowerCase() === trimmed.toLowerCase());
+  const canSave = trimmed.length > 0 && !isDuplicate;
+
   function handleSave() {
-    onSave(name.trim(), icon);
+    if (!canSave) return;
+    onSave(trimmed, icon);
     onOpenChange(false);
-    toast.success(`"${name.trim()}" category added.`);
+    toast.success(`"${trimmed}" category added.`);
   }
 
   return (
@@ -60,8 +67,12 @@ export function CategoryDialog({
             value={name}
             onChange={(e) => setName(e.target.value)}
             placeholder="e.g. Health"
-            onKeyDown={(e) => e.key === "Enter" && name.trim() && handleSave()}
+            aria-invalid={isDuplicate}
+            onKeyDown={(e) => e.key === "Enter" && canSave && handleSave()}
           />
+          {isDuplicate ? (
+            <p className="text-xs text-destructive">A category named &quot;{trimmed}&quot; already exists.</p>
+          ) : null}
         </Field>
         <Field>
           <FieldLabel>Icon</FieldLabel>
@@ -90,7 +101,7 @@ export function CategoryDialog({
         </Field>
         <DialogFooter>
           <DialogClose render={<Button variant="outline" />}>Cancel</DialogClose>
-          <Button onClick={handleSave} disabled={!name.trim()}>
+          <Button onClick={handleSave} disabled={!canSave}>
             Add category
           </Button>
         </DialogFooter>
