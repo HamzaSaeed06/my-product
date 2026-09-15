@@ -8,6 +8,10 @@ export interface ParentChildLink {
 export interface Parent {
   id: string;
   fullName: string;
+  // Required and unique — the one reliable identity check for adults, so a
+  // second child from the same family gets linked to this same Parent
+  // record instead of a duplicate one being created for each sibling.
+  cnic: string;
   phone: string;
   email: string | null;
   address: string | null;
@@ -21,6 +25,7 @@ export const mockParents: Parent[] = [
   {
     id: "par_1",
     fullName: "Ahmed Khan",
+    cnic: "35202-1234567-1",
     phone: "0300-1112233",
     email: "ahmed.khan@example.com",
     address: "House 12, Model Town, Lahore",
@@ -32,6 +37,7 @@ export const mockParents: Parent[] = [
   {
     id: "par_2",
     fullName: "Nadia Farooq",
+    cnic: "35201-7654321-2",
     phone: "0301-4445566",
     email: "nadia.farooq@example.com",
     address: "Flat 4B, Gulberg, Lahore",
@@ -40,6 +46,7 @@ export const mockParents: Parent[] = [
   {
     id: "par_3",
     fullName: "Imran Sheikh",
+    cnic: "42101-9988776-3",
     phone: "0302-7778899",
     email: null,
     address: null,
@@ -55,6 +62,7 @@ export const mockParents: Parent[] = [
   {
     id: "par_4",
     fullName: "Shahzad Iqbal",
+    cnic: "35202-5544332-4",
     phone: "0303-9988776",
     email: "shahzad.iqbal@example.com",
     address: "House 7, Johar Town, Lahore",
@@ -64,3 +72,13 @@ export const mockParents: Parent[] = [
     ],
   },
 ];
+
+function normalizeCnic(cnic: string): string {
+  return cnic.replace(/[^0-9]/g, "");
+}
+
+export function findParentByCnic(cnic: string): Parent | undefined {
+  const normalized = normalizeCnic(cnic);
+  if (normalized.length < 13) return undefined;
+  return mockParents.find((p) => normalizeCnic(p.cnic) === normalized);
+}

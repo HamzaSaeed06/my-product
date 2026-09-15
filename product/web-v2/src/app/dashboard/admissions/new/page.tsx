@@ -1,27 +1,22 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { Search, Loader2, ChevronLeft, ChevronRight, Check } from "lucide-react";
+import { ChevronLeft, ChevronRight, Check } from "lucide-react";
 import { PageHeader } from "@/components/page-header";
 import { StepIndicator, type Step } from "@/components/step-indicator";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Field, FieldLabel } from "@/components/ui/field";
 import { Combobox } from "@/components/combobox";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { mockStudents, type Student } from "@/lib/mock/students";
+import { StudentPicker, type StudentSelection } from "@/components/student-picker";
+import { ParentPicker, type ParentSelection } from "@/components/parent-picker";
 import { mockCampuses } from "@/lib/mock/campuses";
 import { mockClasses } from "@/lib/mock/classes";
 import { mockAcademicYears } from "@/lib/mock/academic-years";
 
-const STEPS: Step[] = [{ label: "Applicant" }, { label: "Placement" }, { label: "Review" }];
-
-function initials(name: string) {
-  return name.split(" ").map((p) => p[0]).join("").toUpperCase();
-}
+const STEPS: Step[] = [{ label: "Student" }, { label: "Parent" }, { label: "Placement" }, { label: "Review" }];
 
 // A genuinely multi-step flow gets a dedicated route with a real step
 // indicator, not a 4-field dialog crammed into one modal (which is what
@@ -29,14 +24,18 @@ function initials(name: string) {
 // rules call out by name. Steps stay in this one route/URL rather than
 // each having its own URL segment, which would be a reasonable further
 // refinement but isn't required for "not a modal."
+//
+// Same Student + Parent steps as Convert Inquiry, not a simpler "pick an
+// existing student" search — a walk-in family with no prior inquiry is at
+// least as likely to be a brand-new child as an already-known one, so
+// this flow needs the same existing/new choice (and the same duplicate
+// checks) on both, not just on the student.
 export default function NewAdmissionPage() {
   const router = useRouter();
   const [step, setStep] = useState(0);
 
-  const [query, setQuery] = useState("");
-  const [searching, setSearching] = useState(false);
-  const [results, setResults] = useState<Student[] | null>(null);
-  const [student, setStudent] = useState<Student | null>(null);
+  const [studentSelection, setStudentSelection] = useState<StudentSelection | null>(null);
+  const [parentSelection, setParentSelection] = useState<ParentSelection | null>(null);
 
   const [campusId, setCampusId] = useState<string | null>(null);
   const [classId, setClassId] = useState<string | null>(null);
@@ -48,99 +47,31 @@ export default function NewAdmissionPage() {
   const classOptions = mockClasses.filter((c) => !c.archived).map((c) => ({ value: c.id, label: c.name }));
   const yearOptions = mockAcademicYears.filter((y) => y.status === "ACTIVE").map((y) => ({ value: y.id, label: y.name }));
 
-  const campusName = useMemo(() => mockCampuses.find((c) => c.id === campusId)?.name, [campusId]);
-  const className = useMemo(() => mockClasses.find((c) => c.id === classId)?.name, [classId]);
-  const yearName = useMemo(() => mockAcademicYears.find((y) => y.id === academicYearId)?.name, [academicYearId]);
-
-  function runSearch() {
-    const q = query.trim().toLowerCase();
-    if (!q) return;
-    setSearching(true);
-    setTimeout(() => {
-      setResults(
-        mockStudents.filter((s) => s.fullName.toLowerCase().includes(q) || s.admissionNo.includes(query.trim()))
-      );
-      setSearching(false);
-    }, 400);
-  }
+  const canAdvance =
+    step === 0 ? !!studentSelection : step === 1 ? !!parentSelection : step === 2 ? !!campusId && !!classId && !!academicYearId : true;
 
   function handleSubmit() {
-    toast.success(`Admission submitted for ${student?.fullName} — pending decision.`);
+    const studentLabel = studentSelection?.mode === "search" ? studentSelection.student.fullName : studentSelection?.fullName;
+    toast.success(`Admission submitted for ${studentLabel} — pending decision.`);
     router.push("/dashboard/admissions");
   }
 
-  const canAdvance = step === 0 ? !!student : step === 1 ? !!campusId && !!classId && !!academicYearId : true;
-
   return (
     <div className="mx-auto flex max-w-2xl flex-col gap-6">
-      <PageHeader title="New admission" description="A student already needs to exist — this records an application for them." />
+      <PageHeader
+        title="New admission"
+        description="Approving an admission does not create an enrollment — those are separate steps."
+      />
 
       <StepIndicator steps={STEPS} current={step} />
 
       <Card>
         <CardContent className="flex flex-col gap-4 pt-6">
-          {step === 0 ? (
-            <>
-              {student ? (
-                <div className="flex items-center gap-3 rounded-[var(--card-radius)] border border-border p-3">
-                  <Avatar className="size-10 shrink-0">
-                    <AvatarFallback className="bg-secondary text-secondary-foreground">{initials(student.fullName)}</AvatarFallback>
-                  </Avatar>
-                  <div className="flex flex-1 flex-col">
-                    <span className="text-sm font-medium text-foreground">{student.fullName}</span>
-                    <span className="font-mono text-xs text-muted-foreground">{student.admissionNo}</span>
-                    <span className="text-xs text-muted-foreground">
-                      {student.className}-{student.section} · {student.campusName}
-                    </span>
-                  </div>
-                  <Button variant="ghost" size="sm" onClick={() => setStudent(null)}>
-                    Change
-                  </Button>
-                </div>
-              ) : (
-                <>
-                  <Field>
-                    <FieldLabel htmlFor="adm-search">Student</FieldLabel>
-                    <div className="flex gap-2">
-                      <Input
-                        id="adm-search"
-                        placeholder="Search name or admission no."
-                        value={query}
-                        onChange={(e) => setQuery(e.target.value)}
-                        onKeyDown={(e) => e.key === "Enter" && runSearch()}
-                      />
-                      <Button variant="outline" size="icon" onClick={runSearch} disabled={!query.trim() || searching} aria-label="Search">
-                        {searching ? <Loader2 className="size-4 animate-spin" /> : <Search className="size-4" />}
-                      </Button>
-                    </div>
-                  </Field>
-                  {results ? (
-                    results.length ? (
-                      <div className="flex max-h-56 flex-col divide-y divide-border overflow-y-auto rounded-[var(--card-radius)] border border-border">
-                        {results.map((s) => (
-                          <button
-                            key={s.id}
-                            type="button"
-                            className="flex flex-col items-start gap-0.5 px-3 py-2 text-left text-sm hover:bg-accent"
-                            onClick={() => setStudent(s)}
-                          >
-                            <span className="font-medium text-foreground">{s.fullName}</span>
-                            <span className="font-mono text-xs text-muted-foreground">
-                              {s.admissionNo} · {s.className}-{s.section} · {s.campusName}
-                            </span>
-                          </button>
-                        ))}
-                      </div>
-                    ) : (
-                      <p className="text-sm text-muted-foreground">No matching students found.</p>
-                    )
-                  ) : null}
-                </>
-              )}
-            </>
-          ) : null}
+          {step === 0 ? <StudentPicker value={studentSelection} onChange={setStudentSelection} idPrefix="adm" /> : null}
 
-          {step === 1 ? (
+          {step === 1 ? <ParentPicker value={parentSelection} onChange={setParentSelection} idPrefix="adm" /> : null}
+
+          {step === 2 ? (
             <>
               <Field>
                 <FieldLabel>Campus</FieldLabel>
@@ -157,27 +88,35 @@ export default function NewAdmissionPage() {
             </>
           ) : null}
 
-          {step === 2 ? (
+          {step === 3 ? (
             <div className="flex flex-col divide-y divide-border">
               <div className="flex justify-between py-2 text-sm">
-                <span className="text-muted-foreground">Applicant</span>
-                <span className="font-medium text-foreground">{student?.fullName}</span>
+                <span className="text-muted-foreground">Student</span>
+                <span className="font-medium text-foreground">
+                  {studentSelection?.mode === "search" ? studentSelection.student.fullName : `${studentSelection?.fullName} (new)`}
+                </span>
+              </div>
+              <div className="flex justify-between py-2 text-sm">
+                <span className="text-muted-foreground">Parent</span>
+                <span className="font-medium text-foreground">
+                  {parentSelection?.mode === "search" ? parentSelection.parent.fullName : `${parentSelection?.fullName} (new)`}
+                </span>
               </div>
               <div className="flex justify-between py-2 text-sm">
                 <span className="text-muted-foreground">Campus</span>
-                <span className="font-medium text-foreground">{campusName}</span>
+                <span className="font-medium text-foreground">{mockCampuses.find((c) => c.id === campusId)?.name}</span>
               </div>
               <div className="flex justify-between py-2 text-sm">
                 <span className="text-muted-foreground">Class</span>
-                <span className="font-medium text-foreground">{className}</span>
+                <span className="font-medium text-foreground">{mockClasses.find((c) => c.id === classId)?.name}</span>
               </div>
               <div className="flex justify-between py-2 text-sm">
                 <span className="text-muted-foreground">Academic year</span>
-                <span className="font-medium text-foreground">{yearName}</span>
+                <span className="font-medium text-foreground">{mockAcademicYears.find((y) => y.id === academicYearId)?.name}</span>
               </div>
               <p className="pt-3 text-xs text-muted-foreground">
-                Submitting creates a Pending application — a decision (approve/reject) happens afterward from the
-                Admissions list.
+                Submitting creates the student and parent records if new, links them, and creates a Pending
+                application — a decision (approve/reject) happens afterward from the Admissions list.
               </p>
             </div>
           ) : null}
