@@ -71,30 +71,35 @@ export function StudentFieldsBuilder({
   const [editingCategory, setEditingCategory] = useState<FieldCategory | null>(null);
   const [categoryToDelete, setCategoryToDelete] = useState<FieldCategory | null>(null);
   const [fieldSheet, setFieldSheet] = useState<{ open: boolean; field?: FieldDefinition; categoryId?: string }>({ open: false });
-  // Bumped on every "open a form" trigger below and mixed into each form's
-  // `key`, forcing a fresh remount (fresh useState initializers) each time
-  // — without it, e.g. adding a category, then clicking "Add category"
-  // again, or editing the same category twice in a row after cancelling
-  // the first time, left the previous, un-saved input still showing.
-  const [formSeq, setFormSeq] = useState(0);
+  // One counter per dialog/sheet, each bumped only by that one's own open
+  // trigger and mixed into only that one's `key` — forces a fresh remount
+  // (fresh useState initializers) on every open, so reopening after
+  // cancelling, or opening a second one right after the first, never shows
+  // stale unsaved input. Kept separate rather than one shared counter:
+  // CategorySheet stays open underneath while its own "Add field" opens
+  // FieldSheet on top, and a shared counter would have remounted
+  // CategorySheet too, wiping out any name/icon edit still unsaved there.
+  const [addCategorySeq, setAddCategorySeq] = useState(0);
+  const [editCategorySeq, setEditCategorySeq] = useState(0);
+  const [fieldSheetSeq, setFieldSheetSeq] = useState(0);
 
   function openAddCategory() {
-    setFormSeq((s) => s + 1);
+    setAddCategorySeq((s) => s + 1);
     setAddCategoryOpen(true);
   }
 
   function openEditCategory(category: FieldCategory) {
-    setFormSeq((s) => s + 1);
+    setEditCategorySeq((s) => s + 1);
     setEditingCategory(category);
   }
 
   function openAddField(categoryId: string) {
-    setFormSeq((s) => s + 1);
+    setFieldSheetSeq((s) => s + 1);
     setFieldSheet({ open: true, categoryId });
   }
 
   function openEditField(field: FieldDefinition) {
-    setFormSeq((s) => s + 1);
+    setFieldSheetSeq((s) => s + 1);
     setFieldSheet({ open: true, field });
   }
 
@@ -222,7 +227,7 @@ export function StudentFieldsBuilder({
       </div>
 
       <CategoryDialog
-        key={`add-category-${formSeq}`}
+        key={`add-category-${addCategorySeq}`}
         existingNames={categories.map((c) => c.name)}
         open={addCategoryOpen}
         onOpenChange={setAddCategoryOpen}
@@ -231,7 +236,7 @@ export function StudentFieldsBuilder({
 
       {editingCategory ? (
         <CategorySheet
-          key={`edit-category-${formSeq}`}
+          key={`edit-category-${editCategorySeq}`}
           category={editingCategory}
           fields={fields.filter((f) => f.categoryId === editingCategory.id)}
           existingNames={categories.filter((c) => c.id !== editingCategory.id).map((c) => c.name)}
@@ -247,7 +252,7 @@ export function StudentFieldsBuilder({
       ) : null}
 
       <FieldSheet
-        key={`field-${fieldSheet.field?.id ?? "new"}-${formSeq}`}
+        key={`field-${fieldSheet.field?.id ?? "new"}-${fieldSheetSeq}`}
         field={fieldSheet.field}
         defaultCategoryId={fieldSheet.categoryId}
         categories={sortedCategories}
