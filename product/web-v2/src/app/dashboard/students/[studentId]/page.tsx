@@ -17,6 +17,7 @@ import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/
 import { CalendarOff, Receipt } from "lucide-react";
 import { getStudentById } from "@/lib/mock/students";
 import { getFieldValuesForStudent } from "@/lib/mock/student-fields";
+import { CategoryIcon } from "@/app/dashboard/student-fields/category-icons";
 
 function initials(name: string) {
   return name
@@ -31,6 +32,19 @@ function Fact({ label, value }: { label: string; value: React.ReactNode }) {
     <div className="flex items-baseline justify-between gap-3 py-2 text-sm">
       <span className="text-muted-foreground">{label}</span>
       <span className="text-right font-medium text-foreground">{value}</span>
+    </div>
+  );
+}
+
+// Label-above-value, two per row — a form-review look for the
+// institute-defined custom fields specifically, distinct from the rail's
+// label-beside-value Fact rows (which stay as-is; this is only for the
+// Additional Info cards).
+function FormField({ label, value }: { label: string; value: React.ReactNode }) {
+  return (
+    <div className="flex flex-col gap-1">
+      <span className="text-xs text-muted-foreground">{label}</span>
+      <span className="text-sm font-medium text-foreground">{value}</span>
     </div>
   );
 }
@@ -120,18 +134,23 @@ export default async function StudentDetailPage({ params }: PageProps<"/dashboar
               {fieldGroups.length > 0 ? (
                 <div className="mt-6 flex flex-col gap-4">
                   <h2 className="text-sm font-medium text-foreground">Additional Info</h2>
-                  {fieldGroups.map(({ category, fields }) => (
-                    <Card key={category.id}>
-                      <CardHeader>
-                        <CardTitle className="text-sm text-muted-foreground">{category.name}</CardTitle>
-                      </CardHeader>
-                      <CardContent className="flex flex-col divide-y divide-border">
-                        {fields.map(({ field, value }) => (
-                          <Fact key={field.id} label={field.label} value={value} />
-                        ))}
-                      </CardContent>
-                    </Card>
-                  ))}
+                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                    {fieldGroups.map(({ category, fields }) => (
+                      <Card key={category.id}>
+                        <CardHeader>
+                          <CardTitle className="flex items-center gap-2 text-sm">
+                            <CategoryIcon icon={category.icon} className="size-4 text-primary" />
+                            {category.name}
+                          </CardTitle>
+                        </CardHeader>
+                        <CardContent className="grid grid-cols-2 gap-x-4 gap-y-3">
+                          {fields.map(({ field, value }) => (
+                            <FormField key={field.id} label={field.label} value={value} />
+                          ))}
+                        </CardContent>
+                      </Card>
+                    ))}
+                  </div>
                 </div>
               ) : null}
             </TabsContent>

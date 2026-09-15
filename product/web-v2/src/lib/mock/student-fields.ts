@@ -11,9 +11,16 @@
 
 export type FieldType = "TEXT" | "NUMBER" | "DATE" | "DROPDOWN" | "YES_NO";
 
+// Keys into CATEGORY_ICONS (src/app/dashboard/student-fields/category-icons.tsx)
+// — kept as a plain string here rather than a component reference, since
+// this file models data, not presentation; the icon lookup lives in the
+// one place that actually renders it.
+export type CategoryIconKey = "user" | "mail" | "heart-pulse" | "bus" | "home" | "graduation-cap" | "shield" | "info";
+
 export interface FieldCategory {
   id: string;
   name: string;
+  icon: CategoryIconKey;
   order: number;
 }
 
@@ -33,9 +40,9 @@ export interface FieldDefinition {
 }
 
 export const mockFieldCategories: FieldCategory[] = [
-  { id: "cat_personal", name: "Personal Info", order: 0 },
-  { id: "cat_health", name: "Health", order: 1 },
-  { id: "cat_transport", name: "Transport", order: 2 },
+  { id: "cat_personal", name: "Personal Info", icon: "user", order: 0 },
+  { id: "cat_health", name: "Health", icon: "heart-pulse", order: 1 },
+  { id: "cat_transport", name: "Transport", icon: "bus", order: 2 },
 ];
 
 export const mockFieldDefinitions: FieldDefinition[] = [

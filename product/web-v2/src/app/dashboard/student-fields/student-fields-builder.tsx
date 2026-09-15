@@ -8,7 +8,8 @@ import { ConfirmDialog } from "@/components/confirm-dialog";
 import { FieldRow } from "./field-row";
 import { FieldSheet } from "./field-sheet";
 import { CategoryDialog } from "./category-dialog";
-import type { FieldCategory, FieldDefinition } from "@/lib/mock/student-fields";
+import { CategoryIcon } from "./category-icons";
+import type { CategoryIconKey, FieldCategory, FieldDefinition } from "@/lib/mock/student-fields";
 
 // Local-state CRUD (add/edit/delete/reorder), same pattern as Roles &
 // Permissions and Feature Config's campus overrides — a real save happens
@@ -30,11 +31,11 @@ export function StudentFieldsBuilder({
   const [categoryToDelete, setCategoryToDelete] = useState<FieldCategory | null>(null);
   const [fieldSheet, setFieldSheet] = useState<{ open: boolean; field?: FieldDefinition; categoryId?: string }>({ open: false });
 
-  function saveCategory(name: string) {
+  function saveCategory(name: string, icon: CategoryIconKey) {
     if (categoryDialog.category) {
-      setCategories((prev) => prev.map((c) => (c.id === categoryDialog.category!.id ? { ...c, name } : c)));
+      setCategories((prev) => prev.map((c) => (c.id === categoryDialog.category!.id ? { ...c, name, icon } : c)));
     } else {
-      setCategories((prev) => [...prev, { id: `cat_${Date.now()}`, name, order: prev.length }]);
+      setCategories((prev) => [...prev, { id: `cat_${Date.now()}`, name, icon, order: prev.length }]);
     }
   }
 
@@ -90,9 +91,12 @@ export function StudentFieldsBuilder({
         return (
           <Card key={category.id}>
             <CardHeader className="flex flex-row items-center justify-between">
-              <CardTitle>{category.name}</CardTitle>
+              <CardTitle className="flex items-center gap-2">
+                <CategoryIcon icon={category.icon} className="size-4 text-primary" />
+                {category.name}
+              </CardTitle>
               <div className="flex items-center gap-1">
-                <Button variant="ghost" size="icon-sm" onClick={() => setCategoryDialog({ open: true, category })} aria-label="Rename category">
+                <Button variant="ghost" size="icon-sm" onClick={() => setCategoryDialog({ open: true, category })} aria-label="Edit category">
                   <Pencil className="size-3.5" />
                 </Button>
                 <Button variant="ghost" size="icon-sm" onClick={() => setCategoryToDelete(category)} aria-label="Delete category">
