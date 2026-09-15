@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Field, FieldLabel } from "@/components/ui/field";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { DatePicker } from "@/components/date-picker";
 import { mockStudents, findPotentialDuplicateStudents, type Student } from "@/lib/mock/students";
 
 export type StudentSelection =
@@ -158,7 +159,12 @@ export function StudentPicker({
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <Field>
               <FieldLabel htmlFor={`${idPrefix}-student-dob`}>Date of birth</FieldLabel>
-              <Input id={`${idPrefix}-student-dob`} type="date" value={dateOfBirth} onChange={(e) => setDateOfBirth(e.target.value)} />
+              <DatePicker
+                id={`${idPrefix}-student-dob`}
+                value={dateOfBirth}
+                onChange={setDateOfBirth}
+                disableAfter={new Date()}
+              />
             </Field>
             <Field>
               <FieldLabel htmlFor={`${idPrefix}-student-bform`}>B-Form no. (optional)</FieldLabel>
