@@ -71,6 +71,32 @@ export function StudentFieldsBuilder({
   const [editingCategory, setEditingCategory] = useState<FieldCategory | null>(null);
   const [categoryToDelete, setCategoryToDelete] = useState<FieldCategory | null>(null);
   const [fieldSheet, setFieldSheet] = useState<{ open: boolean; field?: FieldDefinition; categoryId?: string }>({ open: false });
+  // Bumped on every "open a form" trigger below and mixed into each form's
+  // `key`, forcing a fresh remount (fresh useState initializers) each time
+  // — without it, e.g. adding a category, then clicking "Add category"
+  // again, or editing the same category twice in a row after cancelling
+  // the first time, left the previous, un-saved input still showing.
+  const [formSeq, setFormSeq] = useState(0);
+
+  function openAddCategory() {
+    setFormSeq((s) => s + 1);
+    setAddCategoryOpen(true);
+  }
+
+  function openEditCategory(category: FieldCategory) {
+    setFormSeq((s) => s + 1);
+    setEditingCategory(category);
+  }
+
+  function openAddField(categoryId: string) {
+    setFormSeq((s) => s + 1);
+    setFieldSheet({ open: true, categoryId });
+  }
+
+  function openEditField(field: FieldDefinition) {
+    setFormSeq((s) => s + 1);
+    setFieldSheet({ open: true, field });
+  }
 
   function addCategory(name: string, icon: CategoryIconKey) {
     setCategories((prev) => [...prev, { id: `cat_${Date.now()}`, name, icon, order: prev.length }]);
@@ -87,7 +113,17 @@ export function StudentFieldsBuilder({
 
   function saveField(input: Omit<FieldDefinition, "id" | "order">) {
     if (fieldSheet.field) {
-      setFields((prev) => prev.map((f) => (f.id === fieldSheet.field!.id ? { ...f, ...input } : f)));
+      const editedField = fieldSheet.field;
+      // Editing can change which category the field belongs to (the
+      // Category select isn't locked while editing) - if it moved, give it
+      // a fresh order at the end of its NEW category's list instead of
+      // keeping its old order, which could collide with a field already
+      // sitting at that same position in the destination category.
+      const movedCategory = editedField.categoryId !== input.categoryId;
+      const order = movedCategory
+        ? fields.filter((f) => f.categoryId === input.categoryId).length
+        : editedField.order;
+      setFields((prev) => prev.map((f) => (f.id === editedField.id ? { ...f, ...input, order } : f)));
     } else {
       const order = fields.filter((f) => f.categoryId === input.categoryId).length;
       setFields((prev) => [...prev, { ...input, id: `fld_${Date.now()}`, order }]);
@@ -124,7 +160,7 @@ export function StudentFieldsBuilder({
   return (
     <div className="flex flex-col gap-6">
       <div className="flex justify-end">
-        <Button size="sm" onClick={() => setAddCategoryOpen(true)}>
+        <Button size="sm" onClick={openAddCategory}>
           <Plus className="size-3.5" />
           Add category
         </Button>
@@ -148,7 +184,7 @@ export function StudentFieldsBuilder({
                       {category.name}
                     </CardTitle>
                     <div className="flex items-center gap-1">
-                      <IconActionButton label="Edit category" onClick={() => setEditingCategory(category)}>
+                      <IconActionButton label="Edit category" onClick={() => openEditCategory(category)}>
                         <Pencil className="size-3.5" />
                       </IconActionButton>
                       <IconActionButton label="Delete category" onClick={() => setCategoryToDelete(category)}>
@@ -186,6 +222,7 @@ export function StudentFieldsBuilder({
       </div>
 
       <CategoryDialog
+        key={`add-category-${formSeq}`}
         existingNames={categories.map((c) => c.name)}
         open={addCategoryOpen}
         onOpenChange={setAddCategoryOpen}
@@ -194,23 +231,23 @@ export function StudentFieldsBuilder({
 
       {editingCategory ? (
         <CategorySheet
-          key={editingCategory.id}
+          key={`edit-category-${formSeq}`}
           category={editingCategory}
           fields={fields.filter((f) => f.categoryId === editingCategory.id)}
           existingNames={categories.filter((c) => c.id !== editingCategory.id).map((c) => c.name)}
           open={!!editingCategory}
           onOpenChange={(open) => !open && setEditingCategory(null)}
           onSaveCategory={(name, icon) => saveCategory(editingCategory.id, name, icon)}
-          onAddField={() => setFieldSheet({ open: true, categoryId: editingCategory.id })}
+          onAddField={() => openAddField(editingCategory.id)}
           onMoveField={moveField}
           onToggleLock={toggleLock}
-          onEditField={(field) => setFieldSheet({ open: true, field })}
+          onEditField={openEditField}
           onDeleteField={deleteField}
         />
       ) : null}
 
       <FieldSheet
-        key={fieldSheet.field?.id ?? "new"}
+        key={`field-${fieldSheet.field?.id ?? "new"}-${formSeq}`}
         field={fieldSheet.field}
         defaultCategoryId={fieldSheet.categoryId}
         categories={sortedCategories}
